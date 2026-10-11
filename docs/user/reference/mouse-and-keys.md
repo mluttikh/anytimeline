@@ -52,6 +52,7 @@ For spans ([`spans`](../how-to/traces.md)) and tasks with sub-tasks (`parent=`):
 | <kbd>+</kbd> <kbd>−</kbd> | zoom in, out |
 | <kbd>←</kbd> <kbd>→</kbd> | move through time |
 | <kbd>↑</kbd> <kbd>↓</kbd> | scroll the lanes |
+| <kbd>d</kbd> | spread overlapping events, or draw them on the lane's line |
 | <kbd>l</kbd> | show or hide the legend |
 | <kbd>f</kbd> | full screen |
 | <kbd>?</kbd> | this list |
@@ -60,4 +61,5 @@ For spans ([`spans`](../how-to/traces.md)) and tasks with sub-tasks (`parent=`):
 ## The toolbar
 
 From left to right: Pan, Zoom, Select · Time, Order · Back, Home · Clear the selection (while
-there is one) · Legend · Text size (Aa) · Save as PNG · Full screen · Mouse and keys (?).
+there is one) · Legend · Display (text size, mark size, spreading) · Save as PNG · Full screen ·
+Mouse and keys (?).

@@ -161,15 +161,15 @@ test("Time and Order are icons; the text size changes all text and reaches Pytho
   await expect(page.locator('.atl-toolbar button[aria-label="Order"]')).toHaveAttribute("aria-pressed", "true");
   const axis = () => view(page).evaluate((root: any) => root.__view.axisH);
   expect(await axis()).toBe(44);
-  await page.locator('.atl-toolbar button[aria-label="Text size"]').click();
+  await page.locator('.atl-toolbar button[aria-label="Display"]').click();
   const larger = page.locator('.atl-popover button[aria-label="Larger text"]');
   for (let i = 0; i < 4; i++) await larger.click();
-  await expect(page.locator(".atl-popover .atl-size")).toHaveText("16 px");
+  await expect(page.locator(".atl-popover .atl-size").first()).toHaveText("16 px");
   expect(await state(page, "font_size")).toBe(16);
   expect(await axis()).toBe(59);
   const titleSize = await page.locator(".atl-title").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   expect(titleSize).toBeCloseTo(16 * 1.08, 1);
-  await page.locator(".atl-popover button", { hasText: "Reset" }).click();
+  await page.locator('.atl-popover button[aria-label="Default text size"]').click();
   expect(await state(page, "font_size")).toBe(12);
   await page.mouse.click(5, 300); // outside: the popover closes
   await expect(page.locator(".atl-popover")).toBeHidden();
@@ -386,4 +386,67 @@ test("Groups compared from their start: the axis counts from 0", async ({ page }
   const time = await view(page).evaluate((root: any) => root.__view.spec.time);
   expect(time.kind).toBe("duration");
   expect(time.extent[0]).toBe(0);
+});
+
+test("Display: mark size and spreading reach the plot and Python; the key d switches spreading", async ({ page }) => {
+  await open(page, "service_time");
+  const marks = () =>
+    view(page).evaluate((root: any) => {
+      const l = root.__view.layers[0];
+      let spread = 0;
+      for (const d of l.draw.dy.data) spread = Math.max(spread, Math.abs(d));
+      return { size: l.data.size[0], spread };
+    });
+  const before = await marks();
+  expect(before.spread).toBeGreaterThan(0);
+  await page.locator('.atl-toolbar button[aria-label="Display"]').click();
+  await page.locator('.atl-popover button[aria-label="Smaller marks"]').click();
+  await expect(page.locator(".atl-popover .atl-size").nth(1)).toHaveText("×0.75");
+  expect(await state(page, "mark_scale")).toBe(0.75);
+  await page.waitForTimeout(100);
+  expect((await marks()).size).toBeCloseTo(before.size * 0.75, 5);
+  // spreading off: every event on its lane's line
+  await page.locator(".atl-popover-check input").uncheck();
+  expect(await state(page, "dodge")).toBe(false);
+  await page.waitForTimeout(100);
+  expect((await marks()).spread).toBe(0);
+  await page.locator('.atl-popover button[aria-label="Default mark size"]').click();
+  expect(await state(page, "mark_scale")).toBe(1);
+  await page.mouse.click(5, 300); // close the panel
+  await view(page).click({ position: { x: 400, y: 200 } });
+  await page.keyboard.press("d");
+  expect(await state(page, "dodge")).toBe(true);
+  await page.waitForTimeout(100);
+  expect((await marks()).spread).toBeGreaterThan(0);
+});
+
+test("Dodging in a tall lane: the rows spread out until marks no longer overlap", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await open(page, "service_time");
+  const stats = await view(page).evaluate((root: any) => {
+    const v = root.__view;
+    v.setHeight(1000);
+    const t = v.spec.time;
+    // the burst of requests
+    v.camera.fit(t.extent[0] + (t.extent[1] - t.extent[0]) * 0.55, t.extent[0] + (t.extent[1] - t.extent[0]) * 0.6, 0);
+    v.renderFrame();
+    const l = v.layers[0];
+    const dy = l.draw.dy.data;
+    const vis = Array.from(l.draw.visible.subarray(0, l.draw.visibleCount)) as number[];
+    let overlapping = 0;
+    for (const i of vis) {
+      for (const j of vis) {
+        if (i !== j && l.data.lane[i] === l.data.lane[j] && Math.abs(l.xs[i] - l.xs[j]) < l.data.size[i] * 0.85 && Math.abs(dy[i] - dy[j]) < l.data.size[i] * 0.85) {
+          overlapping++;
+          break;
+        }
+      }
+    }
+    let spread = 0;
+    for (const i of vis) spread = Math.max(spread, Math.abs(dy[i]));
+    return { laneH: v.laneH, inView: vis.length, overlapping, spread };
+  });
+  expect(stats.inView).toBeGreaterThan(200);
+  expect(stats.overlapping).toBe(0); // was 283 of 312 with rows 0.6 of a mark apart
+  expect(stats.spread).toBeLessThan(stats.laneH / 2); // and the marks stay in their lane
 });

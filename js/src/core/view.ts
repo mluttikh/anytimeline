@@ -8,7 +8,7 @@
 
 import { BarLayer, type BarView, decodeBars } from "./bars";
 import { TimeCamera } from "./camera";
-import { dodge, rowsFor } from "./dodge";
+import { dodge, rowsFor, spacing } from "./dodge";
 import { buildHelp } from "./help";
 import { buildLegend } from "./legend";
 import { FLAG_SELECTED, type FrameDraw, type MarkLayerDraw, type Renderer, type SegmentDraw } from "./renderers/renderer";
@@ -75,6 +75,10 @@ export interface ViewCallbacks {
   onLegend?: (on: boolean) => void;
   /** The user changed the text size (px). */
   onFontSize?: (px: number) => void;
+  /** The user changed the mark size (a factor of the layers' own). */
+  onMarkScale?: (factor: number) => void;
+  /** The user switched spreading overlapping events on or off. */
+  onDodge?: (on: boolean) => void;
 }
 
 interface Layer {
@@ -84,6 +88,8 @@ interface Layer {
   xs: Float64Array;
   /** The range in x units that dodging covered, and at which scale. */
   dodged: { left: number; right: number; scale: number; laneH: number } | null;
+  /** The marks' sizes as the layer gives them (data.size holds them × the mark scale). */
+  baseSize: Float32Array;
 }
 
 interface Theme {
@@ -203,6 +209,14 @@ export class TimelineView {
         this.setFontSize(px ?? FONT_SIZES.default);
         this.callbacks.onFontSize?.(this.fs);
       },
+      markScale: (factor) => {
+        this.setMarkScale(factor ?? 1);
+        this.callbacks.onMarkScale?.(this.markScale);
+      },
+      dodge: (on) => {
+        this.setDodge(on);
+        this.callbacks.onDodge?.(this.dodgeOn);
+      },
     });
     this.header.append(this.titleEl, this.info, this.toolbar.hint, this.toolbar.element);
     this.stage = div("atl-stage");
@@ -312,6 +326,41 @@ export class TimelineView {
     this.layout();
     this.updateToolbar();
   }
+
+  /** The size of event marks, as a factor of the sizes the layers give them (0.25 to 4). */
+  setMarkScale(factor: number): void {
+    const s = Math.max(0.25, Math.min(4, Number(factor) || 1));
+    if (s === this.markScale) return;
+    this.markScale = s;
+    for (const l of this.layers) this.scaleMarks(l);
+    this.requestRender();
+    this.updateToolbar();
+  }
+
+  private markScale = 1;
+
+  private scaleMarks(l: Layer): void {
+    const size = l.data.size;
+    for (let i = 0; i < size.length; i++) size[i] = l.baseSize[i] * this.markScale;
+    l.draw.size.version++;
+    l.dodged = null;
+  }
+
+  /** Spread events that would overlap over sub-rows (dodging), or draw them all on the
+   * lane's line (layers with overlap="overlay" never spread). */
+  setDodge(on: boolean): void {
+    if (on === this.dodgeOn) return;
+    this.dodgeOn = on;
+    for (const l of this.layers) {
+      l.draw.dy.data.fill(0);
+      l.draw.dy.version++;
+      l.dodged = null;
+    }
+    this.requestRender();
+    this.updateToolbar();
+  }
+
+  private dodgeOn = true;
 
   /** The canvas font, `delta` px from the text size. */
   private font(delta = 0): string {
@@ -434,7 +483,8 @@ export class TimelineView {
       visible: new Uint32Array(n),
       visibleCount: 0,
     };
-    const layer: Layer = { data, draw, xs: new Float64Array(n), dodged: null };
+    const layer: Layer = { data, draw, xs: new Float64Array(n), dodged: null, baseSize: Float32Array.from(data.size) };
+    if (this.markScale !== 1) this.scaleMarks(layer);
     this.applyMarks(layer);
     return layer;
   }
@@ -1038,7 +1088,7 @@ export class TimelineView {
     for (const l of this.layers) {
       this.cull(l, l0, l1, plot.w);
       inView += l.draw.visibleCount;
-      if (l.data.spec.overlap === "dodge") this.dodgeLayer(l, l0, l1);
+      if (l.data.spec.overlap === "dodge" && this.dodgeOn) this.dodgeLayer(l, l0, l1);
       const d = l.draw;
       d.offset = this.camera.left - this.base;
       d.scale = this.camera.scale;
@@ -1128,9 +1178,15 @@ export class TimelineView {
       }
       order.push(i0, i1);
     }
-    const step = Math.max(2.5, maxSize * 0.6);
-    const rows = rowsFor(this.laneH, maxSize, step);
-    for (let k = 0; k < order.length; k += 2) dodge(l.xs, order[k], order[k + 1], maxSize * 0.85, rows, step, dy);
+    // the most sub-rows the lanes hold (at the closest spacing); dodge in sub-rows, then space
+    // the rows the events needed as far apart as the lanes allow (one spacing for all lanes,
+    // so a column's height still compares between lanes)
+    const rows = rowsFor(this.laneH, maxSize, spacing(this.laneH, maxSize, Infinity));
+    for (let k = 0; k < order.length; k += 2) dodge(l.xs, order[k], order[k + 1], maxSize * 0.85, rows, 1, dy);
+    let pairs = 0;
+    for (let k = 0; k < order.length; k += 2) for (let i = order[k]; i < order[k + 1]; i++) pairs = Math.max(pairs, Math.abs(dy[i]));
+    const step = spacing(this.laneH, maxSize, pairs);
+    for (let k = 0; k < order.length; k += 2) for (let i = order[k]; i < order[k + 1]; i++) dy[i] *= step;
     l.draw.dy.version++;
     l.dodged = { left: a, right: b, scale: cam.scale, laneH: this.laneH };
   }
@@ -1795,6 +1851,9 @@ export class TimelineView {
       fullscreen: this.isFullscreen(),
       fullscreenAvailable: !!document.fullscreenEnabled,
       fontSize: this.fs,
+      markScale: this.markScale,
+      dodge: this.dodgeOn,
+      dodges: this.layers.some((l) => l.data.spec.overlap === "dodge"),
     });
   }
 
@@ -2239,6 +2298,11 @@ export class TimelineView {
         break;
       case "ArrowDown":
         this.scrollY += this.laneH * 3;
+        break;
+      case "d":
+        if (!this.layers.some((l) => l.data.spec.overlap === "dodge")) return;
+        this.setDodge(!this.dodgeOn);
+        this.callbacks.onDodge?.(this.dodgeOn);
         break;
       case "l":
         if (this.legendEl) this.toggleLegend();

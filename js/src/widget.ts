@@ -148,6 +148,14 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
       model.set("font_size", px);
       model.save_changes();
     },
+    onMarkScale: (factor: number) => {
+      model.set("mark_scale", factor);
+      model.save_changes();
+    },
+    onDodge: (on: boolean) => {
+      model.set("dodge", on);
+      model.save_changes();
+    },
     renderer: (model.get("renderer") ?? "auto") as RendererPreference,
   });
   s.views.add(view);
@@ -166,6 +174,8 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
   const onMode = () => view.setSelectionMode(String(model.get("selection_mode")));
   const onTool = () => view.setTool((model.get("tool") ?? "pan") as Tool);
   const onFontSize = () => view.setFontSize(Number(model.get("font_size") ?? 12));
+  const onMarkScale = () => view.setMarkScale(Number(model.get("mark_scale") ?? 1));
+  const onDodge = () => view.setDodge(model.get("dodge") !== false);
   const onLink = () => {
     const l = model.get("_link") as { group?: string; align?: string } | null;
     view.setLink(l?.group ? { group: l.group, align: l.align === "start" ? "start" : "time" } : null);
@@ -190,6 +200,8 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
     ["change:selection_mode", onMode],
     ["change:tool", onTool],
     ["change:font_size", onFontSize],
+    ["change:mark_scale", onMarkScale],
+    ["change:dodge", onDodge],
     ["change:_zoom", onZoom],
     ["change:_link", onLink],
   ];
@@ -201,6 +213,8 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
   onMode();
   onTool();
   onFontSize();
+  onMarkScale();
+  onDodge();
   onMarks();
   onXScale();
   onLink();

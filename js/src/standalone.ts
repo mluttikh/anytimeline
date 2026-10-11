@@ -19,6 +19,8 @@ interface Payload {
   legend: boolean;
   hover: boolean;
   font_size: number;
+  mark_scale?: number;
+  dodge?: boolean;
   /** The last zoom_to (ticks), or null. */
   zoom: [number, number] | null;
   /** The selection made in Python: layer → base64 int32 event indices. */
@@ -62,6 +64,8 @@ async function show(host: HTMLElement, payload: Payload): Promise<TimelineView> 
     window.addEventListener("resize", fit);
   } else view.setHeight(payload.height ?? 0);
   view.setFontSize(payload.font_size ?? 12);
+  view.setMarkScale(payload.mark_scale ?? 1);
+  view.setDodge(payload.dodge !== false);
   view.setHover(payload.hover !== false);
   view.setLegend(payload.legend !== false);
   view.setSelectionMode("none");

@@ -172,8 +172,9 @@ body.vscode-high-contrast:not(.vscode-high-contrast-light) .atl-root,
   right: 0;
   z-index: 6;
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   padding: 6px 8px;
   border-radius: 6px;
   background: var(--atl-bg);
@@ -185,9 +186,27 @@ body.vscode-high-contrast:not(.vscode-high-contrast-light) .atl-root,
 .atl-popover[hidden] {
   display: none;
 }
+.atl-popover-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.atl-popover-row[hidden] {
+  display: none;
+}
 .atl-popover-label {
   color: var(--atl-muted);
   margin-right: 4px;
+  min-width: 64px;
+}
+.atl-popover-check {
+  gap: 6px;
+  cursor: pointer;
+}
+.atl-popover-check input {
+  margin: 0;
+  accent-color: var(--atl-accent);
 }
 .atl-small-button {
   min-width: 24px;

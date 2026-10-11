@@ -15,6 +15,8 @@ export const ICONS = {
   time: svg('<path d="M1.75 13.25h12.5"/><path d="M2.75 3v7.5M4.75 3v7.5M8 3v7.5M13.25 3v7.5"/>'),
   /** Order: events on an axis, evenly spaced. */
   order: svg('<path d="M1.75 13.25h12.5"/><path d="M2.75 3v7.5M6.25 3v7.5M9.75 3v7.5M13.25 3v7.5"/>'),
+  /** Display (text size, mark size, spreading): three sliders. */
+  display: svg('<path d="M2 4h12M2 8h12M2 12h12"/><g fill="currentColor"><circle cx="5" cy="4" r="1.6"/><circle cx="10.5" cy="8" r="1.6"/><circle cx="7" cy="12" r="1.6"/></g>'),
   /** Text size: a large and a small A. */
   text: svg('<path d="M1.5 13.5 5.25 3l3.75 10.5M2.9 9.75h4.7"/><path d="m10 13.5 2.25-6 2.25 6M10.85 11.35h2.8"/>'),
   /** Home: the whole timeline. */

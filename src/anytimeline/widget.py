@@ -89,6 +89,9 @@ class Timeline(anywidget.AnyWidget):
         renderer: ``"auto"`` (WebGPU, then WebGL2, then Canvas 2D), or one of them.
         tool: The tool the plot starts with: ``"pan"``, ``"zoom"`` or ``"select"``.
         font_size: The size of the plot's text in pixels (8 to 24).
+        mark_scale: The size of event marks, as a factor of the layers' own (0.25 to 4).
+        dodge: Spread events that would overlap over the lane's height (default), or draw
+            them on the lane's line.
     """
 
     _esm = _STATIC / "widget.js"
@@ -112,7 +115,14 @@ class Timeline(anywidget.AnyWidget):
     ``"none"``: no selection (the Select tool is not offered)."""
     font_size = traitlets.Int(12).tag(sync=True)
     """The size of the plot's text in pixels (8 to 24): lane names, the time axis, labels,
-    legend, tooltips. Also the text-size button (Aa) in the toolbar."""
+    legend, tooltips. Also in the toolbar's Display panel."""
+    mark_scale = traitlets.Float(1.0).tag(sync=True)
+    """The size of event marks, as a factor of the sizes the layers give them (0.25 to 4):
+    smaller marks overlap less in dense data. Also in the toolbar's Display panel."""
+    dodge = traitlets.Bool(True).tag(sync=True)
+    """Spread events that would overlap over the lane's height (sub-rows), so ties and bursts
+    stay countable; False draws every event on its lane's line. Layers with
+    ``overlap="overlay"`` never spread. Also in the Display panel, and the key ``d``."""
     tool = traitlets.Enum(TOOLS, default_value="pan").tag(sync=True)
     """The plot's tool: ``"pan"`` (drag pans; Shift-drag zooms to a range; a plain click does
     nothing), ``"zoom"`` (drag zooms to a time range; click zooms in, Alt-click out) or
@@ -143,6 +153,8 @@ class Timeline(anywidget.AnyWidget):
         renderer: Literal["auto", "webgpu", "webgl2", "canvas2d"] = "auto",
         tool: Literal["pan", "zoom", "select"] = "pan",
         font_size: int = 12,
+        mark_scale: float = 1.0,
+        dodge: bool = True,
         **kwargs: Any,
     ) -> None:
         if sort is not None and sort not in LANE_SORTS:
@@ -173,6 +185,8 @@ class Timeline(anywidget.AnyWidget):
             renderer=renderer,
             tool=tool,
             font_size=font_size,
+            mark_scale=mark_scale,
+            dodge=dodge,
             **kwargs,
         )
         self.on_msg(self._on_frontend_msg)
@@ -964,6 +978,8 @@ class Timeline(anywidget.AnyWidget):
             "legend": self.legend,
             "hover": self.hover,
             "font_size": self.font_size,
+            "mark_scale": self.mark_scale,
+            "dodge": self.dodge,
             "zoom": self._zoom.get("range"),
             "marks": {k: base64.b64encode(v).decode("ascii") for k, v in self._marks.items()},
             "tooltips": self._tooltip_tables(),
@@ -1061,6 +1077,13 @@ class Timeline(anywidget.AnyWidget):
         lo, hi = FONT_SIZES
         if not lo <= value <= hi:
             raise traitlets.TraitError(f"font_size must be {lo} to {hi} pixels, got {value}")
+        return value
+
+    @traitlets.validate("mark_scale")
+    def _check_mark_scale(self, proposal: dict[str, Any]) -> float:
+        value = float(proposal["value"])
+        if not 0.25 <= value <= 4:
+            raise traitlets.TraitError(f"mark_scale must be 0.25 to 4, got {value}")
         return value
 
     @traitlets.validate("selection")

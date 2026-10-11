@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TimeCamera } from "../src/core/camera";
-import { dodge, rowOffset, rowsFor } from "../src/core/dodge";
+import { dodge, MIN_STEP, rowOffset, rowsFor, spacing } from "../src/core/dodge";
 import { lowerBound, upperBound } from "../src/core/scene";
 import { TimeAxis, formatDuration, localToUtc, niceStep, offsetMs } from "../src/core/time";
 import type { TimeSpec } from "../src/core/types";
@@ -132,7 +132,8 @@ describe("dodge", () => {
   it("fits the rows to the lane", () => {
     expect(rowsFor(30, 8, 5)).toBe(5); // offsets up to ±10 px: marks stay in the lane
     expect(rowsFor(12, 8, 5)).toBe(1);
-    expect(rowsFor(400, 8, 5)).toBe(31); // a full-screen lane: up to 31 sub-rows
+    expect(rowsFor(400, 8, 5)).toBe(79); // a full-screen lane: many sub-rows
+    expect(rowsFor(2000, 8, 5)).toBe(101); // at most MAX_ROWS
   });
 });
 
@@ -176,5 +177,18 @@ describe("linked plots: times between time bases", () => {
     expect(compatible(t, { ...t, kind: "duration" }, "time")).toBe(false);
     expect(compatible(t, { ...t, kind: "duration" }, "start")).toBe(true);
     expect(convert(5, n, { ...n, origin: 12 }, "time")).toBe(3);
+  });
+});
+
+describe("dodging: the spacing of sub-rows", () => {
+  it("is a mark and a pixel apart when there is room (marks do not overlap)", () => {
+    expect(spacing(184, 8, 6)).toBe(9);
+    expect(spacing(184, 8, 0)).toBe(9);
+  });
+  it("closes up to fit the rows the events need, down to MIN_STEP of a mark", () => {
+    expect(spacing(184, 8, 12)).toBeCloseTo((92 - 4 - 18.4) / 12, 6); // 5.8 px: fills the lane
+    expect(spacing(30, 8, 2)).toBe(8 * MIN_STEP); // a normal lane: as before
+    expect(spacing(30, 8, 40)).toBe(8 * MIN_STEP);
+    expect(spacing(30, 2, 1)).toBe(3); // a tiny mark: at least 2.5 px, at most a mark + 1
   });
 });

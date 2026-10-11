@@ -61,7 +61,8 @@ Timeline().spans(tr.spans, color="service").events(tr.events, time="time", lane=
 
 The toolbar has three tools: **Pan** (drag moves through time and lanes), **Zoom** (drag a
 time range to show it) and **Select** (drag a box, or click an event; the selection is rows of
-your table in `tl.selection`). Time and Order switch the scale; Aa sets the text size (also `Timeline(font_size=14)`).
+your table in `tl.selection`). Time and Order switch the scale; the Display panel sets the text size, the mark
+size and whether overlapping events spread (also `Timeline(font_size=14, mark_scale=0.75)`).
 Press `?` in the plot for every mouse gesture and key; `f` or
 the button shows it full screen, where lanes fill the screen and overlapping events spread
 out.

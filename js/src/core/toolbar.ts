@@ -21,6 +21,10 @@ export interface ToolbarActions {
   help(): void;
   /** Text size in px, or null to go back to the default. */
   fontSize(px: number | null): void;
+  /** Mark size as a factor of the layers' own, or null for 1. */
+  markScale(factor: number | null): void;
+  /** Spread overlapping events over sub-rows (dodging), or draw them on the lane's line. */
+  dodge(on: boolean): void;
 }
 
 export interface ToolbarState {
@@ -40,9 +44,15 @@ export interface ToolbarState {
   fullscreen: boolean;
   fullscreenAvailable: boolean;
   fontSize: number;
+  markScale: number;
+  dodge: boolean;
+  /** Whether any layer spreads its events (the switch shows only then). */
+  dodges: boolean;
 }
 
 export const FONT_SIZES = { min: 8, max: 24, default: 12 };
+/** The mark sizes the Display panel steps through (factors of the layers' own sizes). */
+export const MARK_SCALES = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 const TOOL_TIPS: Record<Tool, string> = {
   pan: "Pan: drag to move through time and lanes · key p",
@@ -99,7 +109,11 @@ export class Toolbar {
   private readonly textButton: HTMLButtonElement;
   private readonly popover: HTMLDivElement;
   private readonly sizeLabel: HTMLSpanElement;
+  private readonly markLabel: HTMLSpanElement;
+  private readonly dodgeBox: HTMLInputElement;
+  private readonly dodgeRow: HTMLLabelElement;
   private fontSize = FONT_SIZES.default;
+  private markScale = 1;
 
   private closePopover = (e: Event): void => {
     if (!this.popover.hidden && !this.popover.parentElement?.contains(e.target as Node)) this.togglePopover(false);
@@ -148,25 +162,45 @@ export class Toolbar {
     const help = button(ICONS.help, "Mouse and keys", "Mouse and keys · key ?", actions.help);
     const image = button(ICONS.image, "Save as PNG", "Save the plot as a PNG image", actions.image);
 
-    // text size: a button that opens − size + and Reset
+    // Display: a button that opens text size, mark size (− value + Reset) and spreading
     const text = document.createElement("div");
     text.className = "atl-popover-anchor";
-    this.textButton = button(ICONS.text, "Text size", "Text size", () => this.togglePopover());
+    this.textButton = button(ICONS.display, "Display", "Display: text size, mark size, spreading", () => this.togglePopover());
     this.popover = document.createElement("div");
     this.popover.className = "atl-popover";
     this.popover.hidden = true;
     this.popover.setAttribute("role", "group");
-    this.popover.setAttribute("aria-label", "Text size");
+    this.popover.setAttribute("aria-label", "Display");
+    const row = (title: string, ...items: HTMLElement[]) => {
+      const label = document.createElement("span");
+      label.className = "atl-popover-label";
+      label.textContent = title;
+      const r = document.createElement("div");
+      r.className = "atl-popover-row";
+      r.append(label, ...items);
+      return r;
+    };
     const step = (delta: number) => () => actions.fontSize(Math.max(FONT_SIZES.min, Math.min(FONT_SIZES.max, this.fontSize + delta)));
-    const smaller = textButton("−", "Smaller text", step(-1));
-    const larger = textButton("+", "Larger text", step(1));
     this.sizeLabel = document.createElement("span");
     this.sizeLabel.className = "atl-size";
-    const reset = textButton("Reset", "Default text size", () => actions.fontSize(null));
-    const label = document.createElement("span");
-    label.className = "atl-popover-label";
-    label.textContent = "Text size";
-    this.popover.append(label, smaller, this.sizeLabel, larger, reset);
+    const markStep = (delta: number) => () => {
+      const i = MARK_SCALES.reduce((best, s, k) => (Math.abs(s - this.markScale) < Math.abs(MARK_SCALES[best] - this.markScale) ? k : best), 0);
+      actions.markScale(MARK_SCALES[Math.max(0, Math.min(MARK_SCALES.length - 1, i + delta))]);
+    };
+    this.markLabel = document.createElement("span");
+    this.markLabel.className = "atl-size";
+    this.dodgeBox = document.createElement("input");
+    this.dodgeBox.type = "checkbox";
+    this.dodgeBox.addEventListener("change", () => actions.dodge(this.dodgeBox.checked));
+    this.dodgeRow = document.createElement("label");
+    this.dodgeRow.className = "atl-popover-row atl-popover-check";
+    this.dodgeRow.title = "Spread events that would overlap over the lane's height · key d";
+    this.dodgeRow.append(this.dodgeBox, document.createTextNode("Spread overlapping events"));
+    this.popover.append(
+      row("Text size", textButton("−", "Smaller text", step(-1)), this.sizeLabel, textButton("+", "Larger text", step(1)), textButton("Reset", "Default text size", () => actions.fontSize(null))),
+      row("Mark size", textButton("−", "Smaller marks", markStep(-1)), this.markLabel, textButton("+", "Larger marks", markStep(1)), textButton("Reset", "Default mark size", () => actions.markScale(null))),
+      this.dodgeRow,
+    );
     this.popover.addEventListener("pointerdown", (e) => e.stopPropagation());
     text.append(this.textButton, this.popover);
     document.addEventListener("pointerdown", this.closePopover, true);
@@ -200,6 +234,10 @@ export class Toolbar {
     this.hint.textContent = HINTS[s.tool];
     this.fontSize = s.fontSize;
     this.sizeLabel.textContent = `${s.fontSize} px`;
-    this.textButton.title = `Text size: ${s.fontSize} px`;
+    this.markScale = s.markScale;
+    this.markLabel.textContent = `×${Number(s.markScale.toFixed(2))}`;
+    this.dodgeBox.checked = s.dodge;
+    this.dodgeRow.hidden = !s.dodges;
+    this.textButton.title = `Display: text ${s.fontSize} px, marks ×${Number(s.markScale.toFixed(2))}${s.dodges ? `, spreading ${s.dodge ? "on" : "off"}` : ""}`;
   }
 }

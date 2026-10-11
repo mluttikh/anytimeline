@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import traitlets
 
 from anytimeline import Timeline
 from anytimeline.synthetic import service_log
@@ -165,3 +166,20 @@ def test_save_png_writes_what_the_browser_sends(tmp_path, monkeypatch):
     # a second view answering the same request changes nothing
     plot._on_frontend_msg(plot, {"type": "image", "request": "1"}, [memoryview(b"other")])
     assert (tmp_path / "plot.png").read_bytes() == png
+
+
+def test_mark_scale_and_dodge_settings(tmp_path):
+    import json
+    import re
+
+    plot = Timeline(mark_scale=0.75, dodge=False)
+    assert (plot.mark_scale, plot.dodge) == (0.75, False)
+    plot.mark_scale = 2
+    with pytest.raises(traitlets.TraitError, match="mark_scale"):
+        plot.mark_scale = 5
+    plot.events({"time": [1.0, 2.0], "lane": ["a", "a"]}, lane="lane")
+    page = plot.save_html(tmp_path / "plot.html").read_text(encoding="utf-8")
+    data = re.search(r'<script type="application/json">(.*?)</script>', page, re.DOTALL)
+    assert data is not None
+    payload = json.loads(data.group(1))
+    assert (payload["mark_scale"], payload["dodge"]) == (2.0, False)

@@ -1,10 +1,30 @@
-// Dodging: events of one lane that would overlap are spread over sub-rows (a narrow
-// beeswarm), so ties and near-ties stay countable. Greedy from left to right: each event goes
-// to the first sub-row (centre, above, below, two above, ...) whose last event is far enough
-// left; when none is, to the sub-row that has been free longest.
+// Dodging: events of one lane that would overlap are spread over sub-rows (a beeswarm), so
+// ties and near-ties stay countable. Greedy from left to right: each event goes to the first
+// sub-row (centre, above, below, two above, ...) whose last event is far enough left; when
+// none is, to the sub-row that has been free longest.
+//
+// The sub-rows are as far apart as the lane allows (spacing): a mark and a pixel apart when
+// there is room, so marks do not overlap; closer, down to 0.6 of a mark (neighbours overlap),
+// when the rows the events need do not fit otherwise.
 
 /** The most sub-rows a lane gets: a tall lane (full screen) spreads ties out this far. */
-export const MAX_ROWS = 31;
+export const MAX_ROWS = 101;
+
+/** The closest sub-rows get, as a fraction of the mark size. */
+export const MIN_STEP = 0.6;
+
+/** The distance between sub-rows (px) for marks of `size` in a lane of `laneHeight`, when
+ * the events need `pairs` sub-rows on each side of the centre: as far apart as fits, from
+ * MIN_STEP × size up to a mark and a pixel, keeping a margin at the lane's edges (a tenth
+ * of the lane, at least 3 px) so the columns of neighbouring lanes stay apart. */
+export function spacing(laneHeight: number, size: number, pairs: number): number {
+  const min = Math.max(2.5, size * MIN_STEP);
+  const max = size + 1;
+  if (pairs <= 0) return max;
+  const margin = Math.max(3, laneHeight * 0.1);
+  const room = (laneHeight / 2 - size / 2 - margin) / pairs;
+  return Math.max(min, Math.min(max, room));
+}
 
 /** Offset of sub-row `r`, in steps: 0, −1, +1, −2, +2, ... */
 export function rowOffset(r: number): number {

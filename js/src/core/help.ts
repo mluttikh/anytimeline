@@ -67,6 +67,7 @@ export function helpSections(tools: Tool[], fullscreen: boolean, tree = false): 
       ["+ · −", "zoom in · out"],
       ["← → ↑ ↓", "pan time · scroll lanes"],
       ["Esc", fullscreen ? "leave full screen (the browser's)" : "cancel a box, then clear the selection"],
+      ["d", "spread overlapping events, or not"],
       ["l · f · ?", "legend · full screen · this help"],
     ],
   ]);

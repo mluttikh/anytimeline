@@ -26,7 +26,7 @@ Recipes for a task. They assume you know the basics from the
 **In the plot**
 
 - [Zoom from Python](zoom.md)
-- [Text size, height and full screen](size.md)
+- [Text and mark size, height and full screen](size.md)
 - [Plot many events](large.md)
 
 **Notebooks**
