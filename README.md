@@ -36,6 +36,9 @@ tl.events(
 tl  # click it, then scroll to zoom time; drag to pan; the toolbar has Zoom and Select
 ```
 
+A story timeline (each event's text in a box on a stem, never overlapping) for an incident or
+a release history: `story(events, "{time:%H:%M}\n{title}", color="kind")`.
+
 A Gantt chart from a table with a row per task:
 
 ```python
@@ -80,7 +83,8 @@ interactive; the toolbar saves it as a PNG, and so does `plot.save_png("plot.png
 Documentation online: <https://mluttikh.github.io/anytimeline/>; or build it with
 `uv run python scripts/build_docs.py` and open `site/index.html`. Example notebooks in
 [`examples/`](examples/): [event charts](examples/event_charts.ipynb),
-[Gantt charts](examples/gantt_charts.ipynb), [traces](examples/traces.ipynb),
+[Gantt charts](examples/gantt_charts.ipynb), [story timelines](examples/story_timelines.ipynb),
+[traces](examples/traces.ipynb),
 [states and values](examples/states_and_values.ipynb),
 [groups and linked plots](examples/groups_and_linked_plots.ipynb) and
 [sharing](examples/sharing.ipynb). How the plot is drawn:

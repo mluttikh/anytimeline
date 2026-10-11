@@ -4,6 +4,18 @@ All notable changes to anytimeline. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Story timelines**: `story(data, text)` and `events(..., labels="stems")` put each event's
+  text in a box above or below its lane's line, joined by a stem; the boxes take as many
+  levels as they need so none overlap, at every zoom (the more important first). For an
+  incident, a release history, a project's history.
+- `Timeline(lane_names=False)`: a plot without the column of lane names.
+- `synthetic.incident()`: the timeline of an incident, for examples.
+- Text templates format datetime columns: `"{time:%H:%M}"`.
+
 ## [0.2.0] - 2026-10-11
 
 ### Changed

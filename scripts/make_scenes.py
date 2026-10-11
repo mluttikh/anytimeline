@@ -16,8 +16,15 @@ from pathlib import Path
 
 import numpy as np
 
-from anytimeline import Route, Timeline, gantt, save_html
-from anytimeline.synthetic import instants, service_health, service_log, service_metrics, traces
+from anytimeline import Route, Timeline, gantt, save_html, story
+from anytimeline.synthetic import (
+    incident,
+    instants,
+    service_health,
+    service_log,
+    service_metrics,
+    traces,
+)
 
 OUT = Path(__file__).resolve().parent.parent / "js" / "test" / "visual" / "scenes"
 
@@ -313,6 +320,42 @@ def main() -> None:
     top.zoom_to(np.datetime64("2026-10-12T08:20"), np.datetime64("2026-10-12T08:50"))
     bottom.zoom_to(np.datetime64("2026-10-12T08:20"), np.datetime64("2026-10-12T08:50"))
     save_html(OUT / "saved_linked.html", top, bottom)
+
+    # story timelines: boxes on stems above and below the line
+    inc = incident()
+    kinds = {
+        "deploy": "#4c78a8",
+        "alert": "#e45756",
+        "page": "#f58518",
+        "action": "#54a24b",
+        "status": "#9d755d",
+    }
+    write(
+        "story_incident",
+        story(
+            inc,
+            "{time:%H:%M}\n{title}",
+            color="kind",
+            palette=kinds,
+            importance="importance",
+            tooltip=["team"],
+            title="Checkout incident",
+            height=460,
+        ),
+    )
+    write(
+        "story_teams",
+        story(
+            inc,
+            "{time:%H:%M}\n{title}",
+            lane="team",
+            color="kind",
+            palette=kinds,
+            importance="importance",
+            title="Checkout incident by team",
+            height=640,
+        ),
+    )
 
     # a page of its own (save_html), for the test that opens it from disk
     saved = Timeline(title="Saved traces")

@@ -12,3 +12,5 @@ data.
 ::: anytimeline.synthetic.service_metrics
 
 ::: anytimeline.synthetic.service_health
+
+::: anytimeline.synthetic.incident

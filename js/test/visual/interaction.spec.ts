@@ -450,3 +450,73 @@ test("Dodging in a tall lane: the rows spread out until marks no longer overlap"
   expect(stats.overlapping).toBe(0); // was 283 of 312 with rows 0.6 of a mark apart
   expect(stats.spread).toBeLessThan(stats.laneH / 2); // and the marks stay in their lane
 });
+
+/** The stem boxes drawn in the last frame, and whether any two overlap or leave their lane. */
+const stemCheck = (page: Page) =>
+  view(page).evaluate((root: any) => {
+    const v = root.__view;
+    v.renderFrame();
+    const boxes = v.stemHits;
+    let overlap = false;
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i];
+        const b = boxes[j];
+        if (a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1) overlap = true;
+      }
+    }
+    const plot = v.plot();
+    const inLane = boxes.every((b: any) => {
+      const row = Math.floor((b.y0 + b.y1) / 2 - (plot.y - v.scrollY)) / v.laneH;
+      const lane = Math.floor(row);
+      const top = plot.y - v.scrollY + lane * v.laneH;
+      return b.y0 >= top - 0.5 && b.y1 <= top + v.laneH + 0.5;
+    });
+    const above = boxes.filter((b: any) => (b.y0 + b.y1) / 2 < plot.y - v.scrollY + v.laneH / 2).length;
+    return { count: boxes.length, overlap, inLane, above, below: boxes.length - above };
+  });
+
+test("Story: boxes never overlap and stay in the lane, at every zoom and on Order; a box is its event", async ({ page }) => {
+  await open(page, "story_incident");
+  let s = await stemCheck(page);
+  expect(s.count).toBe(20); // every event has its box
+  expect(s.overlap).toBe(false);
+  expect(s.inLane).toBe(true);
+  // zoomed in on the first minutes: still both sides of the line, not one row
+  await view(page).evaluate((root: any) => {
+    const v = root.__view;
+    const t = v.spec.time.extent;
+    v.camera.fit(t[0], t[0] + (t[1] - t[0]) * 0.15, 0);
+  });
+  s = await stemCheck(page);
+  expect(s.overlap).toBe(false);
+  expect(s.above).toBeGreaterThan(0);
+  expect(s.below).toBeGreaterThan(0);
+  // zoomed far out: the less important may go, none overlap
+  await view(page).evaluate((root: any) => {
+    const v = root.__view;
+    const t = v.spec.time.extent;
+    v.camera.fit(t[0] - (t[1] - t[0]) * 10, t[1] + (t[1] - t[0]) * 10, 0);
+  });
+  s = await stemCheck(page);
+  expect(s.overlap).toBe(false);
+  expect(s.inLane).toBe(true);
+  await page.locator('.atl-toolbar button[aria-label="Order"]').click();
+  await page.keyboard.press("0");
+  s = await stemCheck(page);
+  expect(s.overlap).toBe(false);
+  expect(s.count).toBe(20);
+  // hovering a box shows its event
+  const box = await view(page).evaluate((root: any) => root.__view.stemHits.find((b: any) => b.index === 9));
+  const stage = await stageBox(page);
+  await page.mouse.move(stage.x + (box.x0 + box.x1) / 2, stage.y + (box.y0 + box.y1) / 2);
+  await expect(page.locator(".atl-tooltip.atl-show")).toContainText("Rollback started");
+  await page.locator("#plot").screenshot({ path: "test-results/shots/story_incident-order.png" });
+});
+
+test("Story: the Display panel has no spreading switch, the plot no column of lane names", async ({ page }) => {
+  await open(page, "story_incident");
+  await page.locator('.atl-toolbar button[aria-label="Display"]').click();
+  await expect(page.locator(".atl-popover-check")).toBeHidden();
+  expect(await view(page).evaluate((root: any) => root.__view.gutter)).toBe(12);
+});

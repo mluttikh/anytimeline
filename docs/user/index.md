@@ -39,6 +39,9 @@ print(plot._embed_html())
   user or process ([tutorial](tutorials/order.md), [how to](how-to/routes.md)).
 - **Any time**: datetimes in any time zone and century, durations from nanoseconds up, plain
   numbers, or only an order ([how to](how-to/time.md)).
+- **Story timelines**: a few dozen events, each with its text in a box on a stem, above
+  and below the line, never overlapping (an incident, a release history:
+  [tell a story](how-to/story.md)).
 - **Traces**: spans under spans as a waterfall that folds, with the critical path; read
   from OpenTelemetry ([plot traces](how-to/traces.md)).
 - **Groups and linked plots**: hosts, days or runs as groups of lanes in one plot, or
@@ -58,7 +61,8 @@ It reads Polars, pandas, PyArrow and DuckDB tables, and works in JupyterLab, VS 
 marimo.
 
 **Example notebooks** to run yourself: [event charts](https://github.com/mluttikh/anytimeline/blob/main/examples/event_charts.ipynb),
-[Gantt charts](https://github.com/mluttikh/anytimeline/blob/main/examples/gantt_charts.ipynb), [traces](https://github.com/mluttikh/anytimeline/blob/main/examples/traces.ipynb),
+[Gantt charts](https://github.com/mluttikh/anytimeline/blob/main/examples/gantt_charts.ipynb),
+[story timelines](https://github.com/mluttikh/anytimeline/blob/main/examples/story_timelines.ipynb), [traces](https://github.com/mluttikh/anytimeline/blob/main/examples/traces.ipynb),
 [states and values](https://github.com/mluttikh/anytimeline/blob/main/examples/states_and_values.ipynb),
 [groups and linked plots](https://github.com/mluttikh/anytimeline/blob/main/examples/groups_and_linked_plots.ipynb) and
 [sharing](https://github.com/mluttikh/anytimeline/blob/main/examples/sharing.ipynb).

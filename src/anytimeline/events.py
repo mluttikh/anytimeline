@@ -19,6 +19,8 @@ from anytimeline.codec import Encoded, encode, encode_strings
 from anytimeline.timebase import TimeBase, Times, times
 
 Overlap = Literal["dodge", "overlay"]
+Labels = Literal["beside", "stems"]
+LABELS = ("beside", "stems")
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,7 @@ class EventsRecord:
     groups: np.ndarray | None
     overlap: Overlap
     importance: np.ndarray | None
+    labels: Labels
     hover: bool
     select: bool
     dropped: int
@@ -98,6 +101,7 @@ def build(
     tooltip: Sequence[str] | None,
     route: Route | str | None,
     overlap: Overlap,
+    labels: Labels = "beside",
     importance: str | None,
     time_unit: str | None,
     hover: bool,
@@ -108,6 +112,10 @@ def build(
         raise ValueError("pass time= (a column of datetimes, durations or numbers) or order=")
     if overlap not in ("dodge", "overlay"):
         raise ValueError(f"overlap must be 'dodge' or 'overlay', got {overlap!r}")
+    if labels not in LABELS:
+        raise ValueError(f"labels must be one of {LABELS}, got {labels!r}")
+    if labels == "stems" and text is None:
+        raise ValueError('labels="stems" places the events\' text: pass text= as well')
     table = tables.frame(data)
     names = tables.column_names(table)
     route_ = Route.of(route)
@@ -202,6 +210,7 @@ def build(
         route=route_,
         groups=groups,
         overlap=overlap,
+        labels=labels,
         importance=_numbers(imp, importance or "") if imp is not None else None,
         hover=hover,
         select=select,
@@ -234,6 +243,9 @@ def _texts(table: Any, template: str, rows: np.ndarray) -> list[str]:
             f"'{{{names[0] if names else 'column'}}}'; columns: {names}"
         )
     cols = {n: tables.column(table, n)[rows] for n in used}
+    for n, col in cols.items():
+        if col.dtype.kind == "M":  # datetimes: Python's, so "{time:%H:%M}" formats them
+            cols[n] = col.astype("datetime64[us]").astype(object)
     out = []
     for i in range(len(rows)):
         values = {n: ("–" if cols[n][i] is None else cols[n][i]) for n in used}
@@ -279,6 +291,7 @@ def layout(rec: EventsRecord, base: TimeBase | None, lane_index: Mapping[Any, in
         "lane": put(encode(lane_s, "uint32")),
         "lane_starts": put(encode(starts, "uint32")),
         "overlap": rec.overlap,
+        "labels": rec.labels,
         "hover": rec.hover,
         "select": rec.select,
         "dropped": rec.dropped,

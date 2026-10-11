@@ -15,6 +15,7 @@ import { FLAG_SELECTED, type FrameDraw, type MarkLayerDraw, type Renderer, type 
 import { createRenderer } from "./renderers/select";
 import { type Align, compatible, convert, frameOf, join, leave, type LinkFrame, type LinkPeer, type LinkSpec, others } from "./link";
 import { download, fileName, legendPainter } from "./snapshot";
+import { levelOffset, levelsFor, placeStems, type StemItem, type StemPlaced } from "./stems";
 import { decodeValues, ValueLayer, type ValueView } from "./values";
 import { decodeEvents, type EventsData, fillSolid, lowerBound, parseHex, specBufferIds, upperBound } from "./scene";
 import { TimeAxis, UNIT_NS, fmtNumber } from "./time";
@@ -832,6 +833,7 @@ export class TimelineView {
   }
 
   private measureGutter(): number {
+    if (this.spec?.lanes.show_names === false) return 12;
     const names = this.spec?.lanes.names ?? [];
     const tree = this.spec?.lanes.tree;
     const ctx = this.front.getContext("2d")!;
@@ -1053,6 +1055,13 @@ export class TimelineView {
       backCtx.lineTo(x, plot.y + plot.h);
     }
     backCtx.stroke();
+    if (this.layers.some(isStems)) {
+      // a story's line through the middle of each lane
+      backCtx.fillStyle = this.theme.muted;
+      backCtx.globalAlpha = 0.5;
+      for (let r = l0; r <= l1; r++) backCtx.fillRect(plot.x, Math.round(laneTop + (r + 0.5) * this.laneH) - 1, plot.w, 2);
+      backCtx.globalAlpha = 1;
+    }
     if (this.values.length) {
       const vv = this.valueView(plot);
       for (const v of this.values) v.draw(backCtx, vv, l0, l1);
@@ -1088,7 +1097,7 @@ export class TimelineView {
     for (const l of this.layers) {
       this.cull(l, l0, l1, plot.w);
       inView += l.draw.visibleCount;
-      if (l.data.spec.overlap === "dodge" && this.dodgeOn) this.dodgeLayer(l, l0, l1);
+      if (l.data.spec.overlap === "dodge" && this.dodgeOn && !isStems(l)) this.dodgeLayer(l, l0, l1);
       const d = l.draw;
       d.offset = this.camera.left - this.base;
       d.scale = this.camera.scale;
@@ -1105,6 +1114,7 @@ export class TimelineView {
     this.drawAxis(frontCtx, plot, ticks);
     this.drawLanes(frontCtx, plot, laneTop, l0, l1);
     this.drawBarText(frontCtx, bv, l0, l1, inView <= LABEL_BUDGET);
+    this.drawStems(frontCtx, plot, laneTop, l0, l1);
     if (inView <= LABEL_BUDGET) this.drawLabels(frontCtx, plot, laneTop);
     this.drawMarkers(frontCtx, plot);
     this.drawValueScales(frontCtx, plot, l0, l1);
@@ -1289,6 +1299,7 @@ export class TimelineView {
   }
 
   private drawLanes(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, laneTop: number, l0: number, l1: number): void {
+    if (this.spec!.lanes.show_names === false) return;
     const names = this.spec!.lanes.names;
     ctx.save();
     ctx.beginPath();
@@ -1380,6 +1391,7 @@ export class TimelineView {
     ctx.lineWidth = 3;
     ctx.lineJoin = "round";
     for (const l of this.layers) {
+      if (isStems(l) && this.stemsFit.get(l) !== false) continue; // in boxes on stems
       const text = l.data.text;
       if (!text) continue;
       const vis = l.draw.visible;
@@ -1501,6 +1513,125 @@ export class TimelineView {
       }
     }
     ctx.restore();
+  }
+
+  /** Boxes of stem labels as drawn in the last frame (for picking). */
+  private stemHits: { layer: number; index: number; x0: number; y0: number; x1: number; y1: number }[] = [];
+  /** Per stems layer: whether its lanes have room for a level of boxes (else its text goes
+   * beside the marks). */
+  private stemsFit = new WeakMap<Layer, boolean>();
+  /** Per stems layer: the boxes laid out for a view (kept while only panning). */
+  private stemCache = new WeakMap<Layer, { key: string; left: number; a: number; b: number; boxH: number; placed: Map<number, StemPlaced[]> }>();
+
+  /** The text of stems layers in boxes above and below their lanes' lines, joined to the
+   * events by stems; laid out again when the zoom, lane height or text changes, over three
+   * view widths so panning keeps the boxes where they are. */
+  private drawStems(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, laneTop: number, l0: number, l1: number): void {
+    this.stemHits = [];
+    const cam = this.camera;
+    this.layers.forEach((l, li) => {
+      if (!isStems(l) || !l.data.text) return;
+      const text = l.data.text;
+      const lineH = Math.round(this.fs * 1.25);
+      const lines = (i: number) => (text[i] ?? "").split("\n");
+      // a box's height: its lines; one height for all, so levels are rows
+      let most = 1;
+      for (let i = 0; i < l.data.count; i++) most = Math.max(most, lines(i).length);
+      const boxH = most * lineH + 6;
+      const gap = 6;
+      let markR = 2;
+      for (let i = 0; i < Math.min(l.data.count, 1000); i++) markR = Math.max(markR, l.data.size[i] / 2);
+      const start = markR + 10;
+      const levels = levelsFor(this.laneH, boxH, gap, start);
+      this.stemsFit.set(l, levels > 0);
+      if (levels === 0) return; // too little room: the text goes beside the marks
+      const src = this.xsrc(l);
+      const key = [cam.scale, this.laneH, this.fs, this.xscale, levels, this.laneAt.length, l0, l1].join(":");
+      let cache = this.stemCache.get(l);
+      if (!cache || cache.key !== key || cam.left < cache.a || cam.right > cache.b) {
+        const span = cam.span;
+        const a = cam.left - span;
+        const b = cam.right + span;
+        ctx.font = this.font(-1);
+        const placed = new Map<number, StemPlaced[]>();
+        const starts = l.data.laneStarts;
+        for (let r = Math.max(0, l0 - 1); r <= l1 + 1 && r < this.laneAt.length; r++) {
+          const lane = this.laneAt[r];
+          if (lane + 1 >= starts.length) continue;
+          const i0 = lowerBound(src, a, starts[lane], starts[lane + 1]);
+          const i1 = upperBound(src, b, i0, starts[lane + 1]);
+          const items: StemItem[] = [];
+          for (let i = i0; i < i1; i++) {
+            if (!text[i]) continue;
+            const w = Math.max(...lines(i).map((s) => ctx.measureText(s).width)) + 14;
+            items.push({ index: i, x: (src[i] - cam.left) * cam.scale, w, importance: l.data.importance?.[i] ?? 0 });
+          }
+          // boxes may reach past the view (they are laid out wider than it), not past the data
+          const ext = this.xscale === "sequence" ? [-0.5, (this.seqTimes?.length ?? 1) - 0.5] : this.spec!.time.extent;
+          const left = (Math.max(a, ext[0]) - cam.left) * cam.scale;
+          const right = Math.max(left, (Math.min(b, ext[1]) - cam.left) * cam.scale);
+          placed.set(r, placeStems(items, { levels, gap, inset: 8, left, right }));
+        }
+        cache = { key, left: cam.left, a, b, boxH, placed };
+        this.stemCache.set(l, cache);
+      }
+      const shift = (cache.left - cam.left) * cam.scale;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(plot.x, plot.y, plot.w, plot.h);
+      ctx.clip();
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "left";
+      const sf = l.draw.sf.data;
+      const color = l.data.color;
+      const shown: { p: StemPlaced; cy: number; x0: number; top: number }[] = [];
+      for (const [r, boxes] of cache.placed) {
+        if (r < l0 || r > l1) continue;
+        const cy = laneTop + (r + 0.5) * this.laneH;
+        for (const p of boxes) {
+          const x0 = plot.x + p.x0 + shift;
+          if (x0 > plot.x + plot.w || x0 + p.w < plot.x) continue;
+          shown.push({ p, cy, x0, top: cy + levelOffset(p.level, boxH, gap, start) - boxH / 2 });
+        }
+      }
+      // the stems first, from each event to its box: boxes go over the stems they cross
+      ctx.strokeStyle = this.theme.muted;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (const { p, cy, top } of shown) {
+        const x = Math.round(plot.x + p.x + shift) + 0.5;
+        ctx.moveTo(x, cy + (p.level > 0 ? -markR - 1 : markR + 1));
+        ctx.lineTo(x, p.level > 0 ? top + boxH : top);
+      }
+      ctx.stroke();
+      for (const { p, x0, top } of shown) {
+        {
+          const i = p.index;
+          // the box, with the event's colour along its left side
+          const selected = (sf[4 * i + 1] & FLAG_SELECTED) !== 0;
+          const hovered = this.hovered && !this.hovered.bar && !this.hovered.val && this.hovered.layer === li && this.hovered.index === i;
+          ctx.fillStyle = this.theme.bg;
+          ctx.strokeStyle = selected ? this.theme.select : hovered ? this.theme.text : this.theme.grid;
+          ctx.lineWidth = selected || hovered ? 1.5 : 1;
+          ctx.beginPath();
+          if (ctx.roundRect) ctx.roundRect(x0 + 0.5, top + 0.5, p.w, boxH, 3);
+          else ctx.rect(x0 + 0.5, top + 0.5, p.w, boxH);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = `rgba(${color[4 * i]},${color[4 * i + 1]},${color[4 * i + 2]},${(color[4 * i + 3] || 255) / 255})`;
+          ctx.fillRect(x0 + 1, top + 1, 3, boxH - 1);
+          const ls = lines(i);
+          ls.forEach((line, k) => {
+            const first = k === 0 && ls.length > 1;
+            ctx.font = first ? this.font(-2) : this.font(-1);
+            ctx.fillStyle = first ? this.theme.muted : this.theme.text;
+            ctx.fillText(line, x0 + 8, top + 3 + lineH * (k + 0.5));
+          });
+          this.stemHits.push({ layer: li, index: i, x0, y0: top, x1: x0 + p.w, y1: top + boxH });
+        }
+      }
+      ctx.restore();
+    });
   }
 
   /** What the values layers need of the frame. */
@@ -1683,6 +1814,11 @@ export class TimelineView {
     if (!this.spec) return null;
     const plot = this.plot();
     if (px < plot.x || px > plot.x + plot.w || py < plot.y || py > plot.y + plot.h) return null;
+    // a story's box stands for its event
+    for (let k = this.stemHits.length - 1; k >= 0; k--) {
+      const b = this.stemHits[k];
+      if (px >= b.x0 && px <= b.x1 && py >= b.y0 && py <= b.y1) return { layer: b.layer, index: b.index };
+    }
     const laneTop = plot.y - this.scrollY;
     const at = Math.floor((py - laneTop) / this.laneH);
     let best: { layer: number; index: number } | null = null;
@@ -1779,7 +1915,7 @@ export class TimelineView {
       if (d.text?.[i]) rows.push(["text", d.text[i]]);
     } else {
       const l = this.layers[h.layer];
-      rows.push([this.spec.lanes.title || "lane", this.spec.lanes.names[l.data.lane[h.index]] ?? ""]);
+      if (this.spec.lanes.show_names !== false) rows.push([this.spec.lanes.title || "lane", this.spec.lanes.names[l.data.lane[h.index]] ?? ""]);
       if (l.data.spec.has_time) rows.push(["time", this.axis.formatFull(l.data.time[h.index])]);
       rows.push(["order", `#${fmtNumber(l.data.rank[h.index] + 1)}`]);
       if (l.data.text?.[h.index]) rows.push(["text", l.data.text[h.index]]);
@@ -1853,7 +1989,7 @@ export class TimelineView {
       fontSize: this.fs,
       markScale: this.markScale,
       dodge: this.dodgeOn,
-      dodges: this.layers.some((l) => l.data.spec.overlap === "dodge"),
+      dodges: this.layers.some((l) => l.data.spec.overlap === "dodge" && !isStems(l)),
     });
   }
 
@@ -2539,4 +2675,9 @@ function rowsOf(lane: Uint32Array, slot: Int32Array): Float32Array {
 function treeKey(spec: SceneSpec): string {
   const t = spec.lanes.tree;
   return t ? `${spec.lanes.names.length}:${t.depth.length}:${spec.lanes.names.slice(0, 50).join("\u0001")}` : "";
+}
+
+/** Whether an events layer puts its text in boxes on stems (a story timeline). */
+function isStems(l: Layer): boolean {
+  return l.data.spec.labels === "stems";
 }

@@ -55,6 +55,8 @@ export interface EventsLayerSpec {
   rank: BufferRef;
   has_time: boolean;
   overlap: "dodge" | "overlay";
+  /** Where the text goes: beside each mark, or in boxes on stems above and below the line. */
+  labels?: "beside" | "stems";
   hover: boolean;
   select: boolean;
   dropped: number;
@@ -155,7 +157,8 @@ export interface LaneTree {
 export interface SceneSpec {
   version: number;
   time: TimeSpec;
-  lanes: { names: string[]; title: string; tree?: LaneTree | null };
+  /** show_names false: no column of lane names (a story of one lane). */
+  lanes: { names: string[]; title: string; tree?: LaneTree | null; show_names?: boolean };
   layers: LayerSpec[];
   sequence: { times: BufferRef; count: number } | null;
   markers?: MarkerSpec[];

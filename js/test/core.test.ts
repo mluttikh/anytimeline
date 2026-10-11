@@ -6,6 +6,7 @@ import { TimeAxis, formatDuration, localToUtc, niceStep, offsetMs } from "../src
 import type { TimeSpec } from "../src/core/types";
 import { findGaps } from "../src/core/view";
 import { compatible, convert, type LinkFrame } from "../src/core/link";
+import { levelOffset, levelOrder, levelsFor, placeStems, type StemPlaced } from "../src/core/stems";
 
 const NS = 1_000_000_000n;
 
@@ -190,5 +191,40 @@ describe("dodging: the spacing of sub-rows", () => {
     expect(spacing(30, 8, 2)).toBe(8 * MIN_STEP); // a normal lane: as before
     expect(spacing(30, 8, 40)).toBe(8 * MIN_STEP);
     expect(spacing(30, 2, 1)).toBe(3); // a tiny mark: at least 2.5 px, at most a mark + 1
+  });
+});
+
+describe("story timelines: stem labels", () => {
+  const space = { levels: 2, gap: 6, inset: 8, left: 0, right: 1000 };
+  const overlaps = (p: StemPlaced[]) =>
+    p.some((a, i) => p.some((b, j) => i < j && a.level === b.level && a.x0 < b.x0 + b.w + 6 && b.x0 < a.x0 + a.w + 6));
+
+  it("alternates levels above and below, and never overlaps boxes of a level", () => {
+    expect(levelOrder(2)).toEqual([1, -1, 2, -2]);
+    const items = [0, 20, 40, 60, 80].map((x, index) => ({ index, x, w: 100, importance: 0 }));
+    const placed = placeStems(items, space);
+    expect(placed.map((p) => p.level)).toEqual([1, -1, 2, -2]); // the fifth fits nowhere
+    expect(overlaps(placed)).toBe(false);
+  });
+
+  it("places the important first; spread out, all on level 1", () => {
+    const crowded = [0, 10, 20].map((x, index) => ({ index, x, w: 80, importance: index === 2 ? 3 : 1 }));
+    const placed = placeStems(crowded, { ...space, levels: 1 });
+    expect(placed.find((p) => p.index === 2)?.level).toBe(1); // the important one gets the first
+    const apart = [0, 200, 400].map((x, index) => ({ index, x, w: 80, importance: 0 }));
+    expect(placeStems(apart, space).map((p) => p.level)).toEqual([1, 1, 1]);
+  });
+
+  it("keeps boxes within the bounds, the stem still at the event", () => {
+    const [p] = placeStems([{ index: 0, x: 990, w: 120, importance: 0 }], space);
+    expect(p.x0 + p.w).toBeLessThanOrEqual(1000);
+    expect(p.x).toBe(990);
+  });
+
+  it("fits as many levels as the lane holds", () => {
+    expect(levelsFor(460, 38, 6, 14)).toBe(4); // (230 − 3 − 14 + 6) / 44
+    expect(levelsFor(40, 38, 6, 14)).toBe(0);
+    expect(levelOffset(1, 38, 6, 14)).toBe(-33); // above: 14 + 19
+    expect(levelOffset(-2, 38, 6, 14)).toBe(77); // below, second level
   });
 });

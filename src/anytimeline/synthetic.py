@@ -395,3 +395,43 @@ def service_health(
         "state": np.array([r[2] for r in rows], dtype=object),
         "reason": np.array([r[3] for r in rows], dtype=object),
     }
+
+
+def incident(*, start: str = "2026-10-12T14:00:00") -> dict[str, np.ndarray]:
+    """What happened during an incident, as a postmortem's timeline lists it: a bad deploy, the
+    alerts, the people paged, the rollback and the recovery, about two hours of events.
+
+    Returns:
+        Columns ``time`` (datetime64[s]), ``title``, ``kind`` (``"deploy"``, ``"alert"``,
+        ``"page"``, ``"action"``, ``"status"``), ``team`` and ``importance`` (1 to 3).
+    """
+    rows = [
+        (0, "Deploy checkout 4.12", "deploy", "payments", 2),
+        (6, "Error rate above 2%", "alert", "monitoring", 3),
+        (7, "On-call paged", "page", "payments", 2),
+        (9, "Latency p99 above 2 s", "alert", "monitoring", 2),
+        (11, "Incident declared (SEV-2)", "status", "payments", 3),
+        (14, "Status page: investigating", "status", "support", 1),
+        (17, "Database CPU at 95%", "alert", "monitoring", 2),
+        (19, "DB team paged", "page", "databases", 1),
+        (24, "Slow query found in 4.12", "action", "databases", 3),
+        (27, "Rollback started", "action", "payments", 3),
+        (34, "Rollback finished", "deploy", "payments", 2),
+        (36, "Error rate back below 1%", "alert", "monitoring", 2),
+        (41, "Status page: monitoring", "status", "support", 1),
+        (48, "Queue of failed payments retried", "action", "payments", 2),
+        (63, "Retries done: 1,842 payments", "action", "payments", 2),
+        (75, "Fix for the query reviewed", "action", "databases", 1),
+        (92, "Deploy checkout 4.12.1", "deploy", "payments", 2),
+        (101, "Incident resolved", "status", "payments", 3),
+        (104, "Status page: resolved", "status", "support", 1),
+        (118, "Postmortem scheduled", "action", "payments", 1),
+    ]
+    t0 = np.datetime64(start, "s")
+    return {
+        "time": t0 + np.array([r[0] * 60 for r in rows], dtype="timedelta64[s]"),
+        "title": np.array([r[1] for r in rows], dtype=object),
+        "kind": np.array([r[2] for r in rows], dtype=object),
+        "team": np.array([r[3] for r in rows], dtype=object),
+        "importance": np.array([r[4] for r in rows], dtype=np.int64),
+    }
