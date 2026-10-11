@@ -5,6 +5,10 @@
 [project]
 site_name = "anytimeline"
 site_description = "Interactive timeline and event charts for notebooks, drawn on the GPU."
+site_url = "https://mluttikh.github.io/anytimeline/"
+repo_url = "https://github.com/mluttikh/anytimeline"
+repo_name = "mluttikh/anytimeline"
+copyright = "Copyright &copy; 2026 mluttikh · MIT licence"
 docs_dir = "docs/user"
 site_dir = "site"
 # links to page.html, not page/: the built site also works opened from disk (file://)

@@ -1,4 +1,4 @@
-# Checks on every push and pull request: Python (lint, types, tests) on the supported Pythons;
+# Checks on every push and pull request: Python (lint, types, tests) on Python 3.12 to 3.14;
 # the JavaScript and the browser tests (Playwright: scenes, interactions, docs, marimo,
 # JupyterLab) with the docs built; and the wheel, installed into a clean environment.
 #
@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.12", "3.13"]
+        python: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -85,8 +85,12 @@ jobs:
           retention-days: 7
 
   wheel:
-    name: Wheel, installed clean
+    name: Wheel, installed clean (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -97,12 +101,10 @@ jobs:
         run: uv build
       - name: Install the wheel alone and draw a plot of each kind
         run: |
-          uv venv --python 3.12 /tmp/clean
+          uv venv --python ${{ matrix.python }} /tmp/clean
           uv pip install --python /tmp/clean/bin/python dist/*.whl
           /tmp/clean/bin/python -I scripts/smoke.py
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
+      - name: Check the distributions' metadata
+        run: uvx twine check --strict dist/*

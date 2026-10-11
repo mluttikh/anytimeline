@@ -21,7 +21,7 @@ NumPy arrays works without any of them.
 ## From the source
 
 ```bash
-git clone <the repository> && cd anytimeline
+git clone https://github.com/mluttikh/anytimeline && cd anytimeline
 (cd js && npm ci && npm run build)   # the JavaScript bundle (needs Node.js 20+)
 uv sync
 ```

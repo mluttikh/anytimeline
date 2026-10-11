@@ -3,6 +3,13 @@
 Interactive timeline and event charts for Jupyter and marimo notebooks, drawn on the GPU
 (WebGPU, WebGL2, or Canvas 2D on machines without a usable GPU).
 
+```bash
+pip install anytimeline
+```
+
+Documentation: <https://mluttikh.github.io/anytimeline/> · Changelog:
+[CHANGELOG.md](CHANGELOG.md) · Licence: MIT.
+
 Status: version 0.1. It draws **event charts**: one mark per event at the moment it
 happened, on lanes, so the order of what happened is easy to see. Time can be datetimes (any
 time zone, any century), durations from nanoseconds up, or plain numbers; a Time | Order switch
@@ -69,8 +76,8 @@ number over time, as a line, area or steps) go on the same lanes, behind the eve
 `plot.save_html("plot.html")` writes the plot to one file that opens in any browser, still
 interactive; the toolbar saves it as a PNG, and so does `plot.save_png("plot.png")`.
 
-Documentation: build it with `uv run python scripts/build_docs.py` and open
-`site/index.html`. Example notebook: [`examples/event_charts.ipynb`](examples/event_charts.ipynb). How the code
+Documentation online: <https://mluttikh.github.io/anytimeline/>; or build it with
+`uv run python scripts/build_docs.py` and open `site/index.html`. Example notebook: [`examples/event_charts.ipynb`](examples/event_charts.ipynb). How the code
 is built: [`docs/architecture.md`](docs/architecture.md).
 
 ## Development

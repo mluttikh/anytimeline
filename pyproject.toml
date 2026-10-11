@@ -4,6 +4,28 @@ version = "0.1.0"
 description = "GPU-accelerated timeline and event charts for notebooks"
 readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "mluttikh", email = "mluttikhof@gmail.com" }]
+keywords = [
+    "timeline", "event chart", "gantt", "traces", "opentelemetry", "visualization",
+    "jupyter", "marimo", "anywidget", "webgpu",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: Jupyter",
+    "Framework :: Jupyter :: JupyterLab",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: System :: Monitoring",
+]
 dependencies = [
     "numpy>=1.24",
     "anywidget>=0.9.13",
@@ -11,6 +33,13 @@ dependencies = [
     "traitlets>=5.9",
     "narwhals>=1.30",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mluttikh/anytimeline"
+Documentation = "https://mluttikh.github.io/anytimeline/"
+Repository = "https://github.com/mluttikh/anytimeline"
+Issues = "https://github.com/mluttikh/anytimeline/issues"
+Changelog = "https://github.com/mluttikh/anytimeline/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
@@ -29,7 +58,8 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling", "hatch-jupyter-builder>=0.9"]
+# hatchling 1.30+ writes Metadata-Version 2.5, which PyPI and twine 6 do not accept yet
+requires = ["hatchling>=1.27,<1.30", "hatch-jupyter-builder>=0.9"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build]
@@ -40,7 +70,7 @@ artifacts = ["src/anytimeline/static/*"]
 packages = ["src/anytimeline"]
 
 [tool.hatch.build.targets.sdist]
-only-include = ["src", "js", "tests", "pyproject.toml", "README.md"]
+only-include = ["src", "js", "tests", "pyproject.toml", "README.md", "LICENSE", "CHANGELOG.md"]
 exclude = ["js/node_modules", "js/test/visual", "js/test-results"]
 
 # Builds js/ into src/anytimeline/static during wheel builds (needs Node.js; end users get the
