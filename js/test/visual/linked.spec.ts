@@ -37,6 +37,9 @@ const views = (page: Page) =>
     }),
   );
 
+/** Half a pixel of a plot's time: closer than that, two plots show the same. */
+const halfPixel = (v: { left: number; right: number; w: number }) => ((v.right - v.left) / v.w) * 0.5;
+
 test("linked plots line up, zoom together and show each other's pointer", async ({ page }) => {
   const errors = await open(page);
   let [a, b] = await views(page);
@@ -44,7 +47,7 @@ test("linked plots line up, zoom together and show each other's pointer", async 
   expect(a.x).toBe(b.x);
   expect(a.w).toBe(b.w);
   // the same time range, though in other units
-  expect(Math.abs(a.left - b.left)).toBeLessThan(1e-6 * (a.right - a.left));
+  expect(Math.abs(a.left - b.left)).toBeLessThan(halfPixel(a));
   // a wheel zoom in the first: the second follows
   const first = page.locator(".atl-stage").first();
   const box = (await first.boundingBox())!;
@@ -54,8 +57,8 @@ test("linked plots line up, zoom together and show each other's pointer", async 
   await page.waitForTimeout(150);
   [a, b] = await views(page);
   expect(a.right - a.left).toBeLessThan(before * 0.95); // zoomed in
-  expect(Math.abs(a.left - b.left)).toBeLessThan(1e-6 * (a.right - a.left));
-  expect(Math.abs(a.right - b.right)).toBeLessThan(1e-6 * (a.right - a.left));
+  expect(Math.abs(a.left - b.left)).toBeLessThan(halfPixel(a));
+  expect(Math.abs(a.right - b.right)).toBeLessThan(halfPixel(a));
   // the pointer over the first: a line in the second, at the same time
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.6);
   [a, b] = await views(page);

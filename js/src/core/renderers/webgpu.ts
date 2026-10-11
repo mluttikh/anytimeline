@@ -212,7 +212,8 @@ export class WebGPURenderer implements Renderer {
       return null;
     }
     const format = navigator.gpu.getPreferredCanvasFormat();
-    context.configure({ device, format, alphaMode: "premultiplied" });
+    // COPY_SRC: snapshots read the frame back (captureNext)
+    context.configure({ device, format, alphaMode: "premultiplied", usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
     const name = info ? [info.vendor, info.architecture, info.description].filter(Boolean).join(" ") : "";
     return new WebGPURenderer(canvas, device, context, format, name || "WebGPU");
   }
@@ -221,7 +222,7 @@ export class WebGPURenderer implements Renderer {
     readonly canvas: HTMLCanvasElement,
     private readonly device: GPUDevice,
     private readonly context: GPUCanvasContext,
-    format: GPUTextureFormat,
+    private readonly format: GPUTextureFormat,
     description: string,
   ) {
     this.description = description;
@@ -331,11 +332,20 @@ export class WebGPURenderer implements Renderer {
     return u.group;
   }
 
+  private capture: { resolve: (img: ImageData) => void; reject: (err: unknown) => void } | null = null;
+
+  captureNext(): Promise<ImageData> {
+    return new Promise((resolve, reject) => {
+      this.capture = { resolve, reject };
+    });
+  }
+
   render(frame: FrameDraw): void {
     if (this.failed) return;
     const encoder = this.device.createCommandEncoder();
+    const texture = this.context.getCurrentTexture();
     const pass = encoder.beginRenderPass({
-      colorAttachments: [{ view: this.context.getCurrentTexture().createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+      colorAttachments: [{ view: texture.createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
     });
     const W = this.canvas.width;
     const H = this.canvas.height;
@@ -348,7 +358,44 @@ export class WebGPURenderer implements Renderer {
     frame.segments.forEach((s, i) => this.drawSegments(pass, s, i));
     for (const layer of frame.layers) this.drawMarks(pass, layer, frame);
     pass.end();
+    const capture = this.capture;
+    this.capture = null;
+    if (!capture) {
+      this.device.queue.submit([encoder.finish()]);
+      return;
+    }
+    // a snapshot: copy the frame to a buffer and read it back
+    const bytesPerRow = Math.ceil((W * 4) / 256) * 256;
+    const buffer = this.device.createBuffer({ size: bytesPerRow * H, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    encoder.copyTextureToBuffer({ texture }, { buffer, bytesPerRow }, { width: W, height: H });
     this.device.queue.submit([encoder.finish()]);
+    const bgra = this.format === "bgra8unorm";
+    buffer
+      .mapAsync(GPUMapMode.READ)
+      .then(() => {
+        const src = new Uint8Array(buffer.getMappedRange());
+        const out = new Uint8ClampedArray(W * H * 4);
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            const i = y * bytesPerRow + x * 4;
+            const o = (y * W + x) * 4;
+            const a = src[i + 3];
+            // premultiplied in the canvas, straight in ImageData
+            const k = a ? 255 / a : 0;
+            out[o] = (bgra ? src[i + 2] : src[i]) * k;
+            out[o + 1] = src[i + 1] * k;
+            out[o + 2] = (bgra ? src[i] : src[i + 2]) * k;
+            out[o + 3] = a;
+          }
+        }
+        buffer.unmap();
+        buffer.destroy();
+        capture.resolve(new ImageData(out, W, H));
+      })
+      .catch((err) => {
+        buffer.destroy();
+        capture.reject(err);
+      });
   }
 
   private segmentVersion = 0;

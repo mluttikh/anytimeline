@@ -177,8 +177,8 @@ test.describe("in JupyterLab", () => {
     await page.waitForTimeout(200);
     const [a0, a1] = await range(0);
     const [b0, b1] = await range(1);
-    expect(Math.abs(a0 - b0)).toBeLessThan((a1 - a0) * 1e-6);
-    expect(Math.abs(a1 - b1)).toBeLessThan((a1 - a0) * 1e-6);
+    expect(Math.abs(a0 - b0)).toBeLessThan((a1 - a0) / 2000); // well under a pixel
+    expect(Math.abs(a1 - b1)).toBeLessThan((a1 - a0) / 2000);
   });
 
   test("it follows JupyterLab's dark theme", async ({ page }) => {

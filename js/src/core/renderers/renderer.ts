@@ -111,6 +111,11 @@ export interface Renderer {
   render(frame: FrameDraw): void;
   /** Resolves when the GPU has finished the frames submitted so far. */
   finish(): Promise<void>;
+  /**
+   * The pixels of the next frame drawn (a snapshot), for backends whose canvas cannot be
+   * copied into another canvas everywhere (WebGPU); others leave it out and are copied.
+   */
+  captureNext?(): Promise<ImageData>;
   /** Forget cached data whose key is not in `keys`. */
   retain(keys: Set<string>): void;
   destroy(): void;

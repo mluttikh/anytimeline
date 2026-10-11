@@ -2083,12 +2083,31 @@ export class TimelineView {
     this.hovered = null;
     const sharp = this.dpr < scale;
     if (sharp) this.layout(scale);
+    // WebGPU hands the frame's pixels back itself (its canvas cannot be copied everywhere)
+    const pixels = this.renderer?.captureNext?.() ?? null;
     this.renderFrame();
     ctx.drawImage(this.back, 0, titleH, this.width, this.height);
-    if (this.renderer) ctx.drawImage(this.renderer.canvas, 0, titleH, this.width, this.height);
-    ctx.drawImage(this.front, 0, titleH, this.width, this.height);
+    let front: HTMLCanvasElement = this.front;
+    if (pixels) {
+      // keep the front canvas as drawn, to go on top once the pixels are back
+      front = document.createElement("canvas");
+      front.width = this.front.width;
+      front.height = this.front.height;
+      front.getContext("2d")!.drawImage(this.front, 0, 0);
+    } else if (this.renderer) {
+      ctx.drawImage(this.renderer.canvas, 0, titleH, this.width, this.height);
+    }
     this.hovered = hovered;
     if (sharp) this.layout();
+    if (pixels) {
+      const img = await pixels;
+      const gpu = document.createElement("canvas");
+      gpu.width = img.width;
+      gpu.height = img.height;
+      gpu.getContext("2d")!.putImageData(img, 0, 0);
+      ctx.drawImage(gpu, 0, titleH, this.width, this.height);
+    }
+    ctx.drawImage(front, 0, titleH, this.width, this.height);
     legend?.(ctx, titleH);
     this.requestRender();
     return new Promise((resolve, reject) => out.toBlob((b) => (b ? resolve(b) : reject(new Error("no image"))), "image/png"));
