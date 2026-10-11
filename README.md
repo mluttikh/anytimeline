@@ -77,8 +77,12 @@ number over time, as a line, area or steps) go on the same lanes, behind the eve
 interactive; the toolbar saves it as a PNG, and so does `plot.save_png("plot.png")`.
 
 Documentation online: <https://mluttikh.github.io/anytimeline/>; or build it with
-`uv run python scripts/build_docs.py` and open `site/index.html`. Example notebook:
-[`examples/event_charts.ipynb`](examples/event_charts.ipynb). How the plot is drawn:
+`uv run python scripts/build_docs.py` and open `site/index.html`. Example notebooks in
+[`examples/`](examples/): [event charts](examples/event_charts.ipynb),
+[Gantt charts](examples/gantt_charts.ipynb), [traces](examples/traces.ipynb),
+[states and values](examples/states_and_values.ipynb),
+[groups and linked plots](examples/groups_and_linked_plots.ipynb) and
+[sharing](examples/sharing.ipynb). How the plot is drawn:
 [the explanation in the docs](https://mluttikh.github.io/anytimeline/explanation/drawing.html).
 
 ## Development

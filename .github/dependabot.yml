@@ -1,0 +1,31 @@
+# Weekly pull requests to update dependencies, grouped so each ecosystem gives one PR: the
+# GitHub Actions in the workflows, the JavaScript build and test tools (js/), and the Python
+# dependencies (pyproject.toml, uv.lock). CI checks each PR.
+#
+# hatchling stays below 1.30 (pyproject.toml's build-system) until PyPI and twine accept the
+# Metadata-Version 2.5 it writes: decline a PR that raises it before then.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /js
+    schedule:
+      interval: weekly
+    groups:
+      js:
+        patterns: ["*"]
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python:
+        patterns: ["*"]

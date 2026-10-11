@@ -57,6 +57,12 @@ print(plot._embed_html())
 It reads Polars, pandas, PyArrow and DuckDB tables, and works in JupyterLab, VS Code and
 marimo.
 
+**Example notebooks** to run yourself: [event charts](https://github.com/mluttikh/anytimeline/blob/main/examples/event_charts.ipynb),
+[Gantt charts](https://github.com/mluttikh/anytimeline/blob/main/examples/gantt_charts.ipynb), [traces](https://github.com/mluttikh/anytimeline/blob/main/examples/traces.ipynb),
+[states and values](https://github.com/mluttikh/anytimeline/blob/main/examples/states_and_values.ipynb),
+[groups and linked plots](https://github.com/mluttikh/anytimeline/blob/main/examples/groups_and_linked_plots.ipynb) and
+[sharing](https://github.com/mluttikh/anytimeline/blob/main/examples/sharing.ipynb).
+
 ## Where to start
 
 <div class="grid cards" markdown>
