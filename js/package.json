@@ -1,0 +1,23 @@
+{
+  "name": "@anytimeline/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Framework-agnostic GPU timeline renderer; the anywidget entry is one consumer.",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/widget.ts src/widget.css --bundle --format=esm --target=es2022 --minify --outdir=../src/anytimeline/static && esbuild src/standalone.ts --bundle --format=iife --target=es2022 --minify --outfile=../src/anytimeline/static/standalone.js",
+    "dev": "esbuild src/widget.ts src/widget.css --bundle --format=esm --target=es2022 --sourcemap=inline --outdir=../src/anytimeline/static --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:visual": "playwright test",
+    "test:visual:update": "playwright test --update-snapshots"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.3",
+    "@webgpu/types": "^0.1.74",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}

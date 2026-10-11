@@ -1,0 +1,390 @@
+.atl-root {
+  --atl-bg: #ffffff;
+  --atl-text: #1b2430;
+  --atl-muted: #5e6875;
+  --atl-grid: #e6e9ed;
+  --atl-band: #f7f8fa;
+  --atl-panel: rgba(255, 255, 255, 0.9);
+  --atl-select: #e8590c;
+  --atl-accent: #1f77b4;
+  --atl-border: #dde1e6;
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  background: var(--atl-bg);
+  color: var(--atl-text);
+  font: var(--atl-font-size, 12px) / 1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  border-radius: 4px;
+  user-select: none;
+  outline: none;
+  touch-action: manipulation;
+}
+.atl-root:focus-within {
+  box-shadow: 0 0 0 1px var(--atl-border);
+  touch-action: none;
+}
+
+/* JupyterLab dark theme, marimo / other dark hosts, or OS dark mode outside JupyterLab */
+body[data-jp-theme-light="false"] .atl-root,
+body.vscode-dark .atl-root,
+body.vscode-high-contrast:not(.vscode-high-contrast-light) .atl-root,
+.dark .atl-root,
+[data-theme="dark"] .atl-root,
+[data-md-color-scheme="slate"] .atl-root {
+  --atl-bg: #12171d;
+  --atl-text: #e5e9ed;
+  --atl-muted: #98a3af;
+  --atl-grid: #252d37;
+  --atl-band: #161c23;
+  --atl-panel: rgba(18, 23, 29, 0.9);
+  --atl-select: #ff922b;
+  --atl-accent: #4dabf7;
+  --atl-border: #2b3440;
+}
+@media (prefers-color-scheme: dark) {
+  body:not([data-jp-theme-light]):not(.light):not(.vscode-light):not(.vscode-high-contrast-light):not([data-theme="light"]):not([data-md-color-scheme="default"]) .atl-root {
+    --atl-bg: #12171d;
+    --atl-text: #e5e9ed;
+    --atl-muted: #98a3af;
+    --atl-grid: #252d37;
+    --atl-band: #161c23;
+    --atl-panel: rgba(18, 23, 29, 0.9);
+    --atl-select: #ff922b;
+    --atl-accent: #4dabf7;
+    --atl-border: #2b3440;
+  }
+}
+
+.atl-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 30px;
+  padding: 2px 8px;
+  box-sizing: border-box;
+}
+.atl-title {
+  font-weight: 600;
+  font-size: 1.08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.atl-info {
+  color: var(--atl-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+/* the hint gives way first: it shrinks (with an ellipsis) before the toolbar wraps */
+.atl-hint {
+  color: var(--atl-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 0;
+}
+.atl-toolbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap; /* a narrow plot: a second row rather than buttons off the edge */
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px 6px;
+  margin-left: auto;
+}
+.atl-group {
+  display: inline-flex;
+}
+.atl-group > .atl-button {
+  border-radius: 0;
+  margin-left: -1px;
+}
+.atl-group > .atl-button:first-child {
+  border-radius: 4px 0 0 4px;
+  margin-left: 0;
+}
+.atl-group > .atl-button:last-child,
+.atl-group > .atl-button.atl-last {
+  border-radius: 0 4px 4px 0;
+}
+/* buttons: 24 px high at least (WCAG 2.2 target size), icons in squares */
+.atl-button {
+  box-sizing: border-box;
+  height: 24px;
+  font: inherit;
+  color: var(--atl-text);
+  background: var(--atl-bg);
+  border: 1px solid var(--atl-border);
+  border-radius: 4px;
+  padding: 0 9px;
+  cursor: pointer;
+}
+.atl-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+  line-height: 0;
+}
+.atl-button[hidden] {
+  display: none;
+}
+.atl-button:hover:not(:disabled) {
+  border-color: var(--atl-muted);
+}
+.atl-button:focus-visible {
+  outline: 2px solid var(--atl-accent);
+  outline-offset: 1px;
+  position: relative;
+}
+.atl-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.atl-button[aria-pressed="true"] {
+  background: var(--atl-text);
+  color: var(--atl-bg);
+  border-color: var(--atl-text);
+  position: relative;
+}
+.atl-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+.atl-clear {
+  color: var(--atl-select);
+}
+/* the text-size popover, under its button */
+.atl-popover-anchor {
+  position: relative;
+  display: inline-flex;
+}
+.atl-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--atl-bg);
+  border: 1px solid var(--atl-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+  white-space: nowrap;
+  font-size: 12px; /* the control itself keeps one size */
+}
+.atl-popover[hidden] {
+  display: none;
+}
+.atl-popover-label {
+  color: var(--atl-muted);
+  margin-right: 4px;
+}
+.atl-small-button {
+  min-width: 24px;
+  padding: 0 6px;
+}
+.atl-size {
+  min-width: 40px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.atl-stage {
+  position: relative;
+  overflow: hidden;
+  cursor: default;
+}
+.atl-stage[data-tool="zoom"] {
+  cursor: zoom-in;
+}
+.atl-stage[data-tool="select"] {
+  cursor: crosshair;
+}
+.atl-root.atl-space .atl-stage {
+  cursor: grab;
+}
+.atl-stage.atl-panning,
+.atl-root.atl-space .atl-stage.atl-panning {
+  cursor: grabbing;
+}
+/* over the name of a lane that folds (a tree of spans or tasks) */
+.atl-stage.atl-foldable:not(.atl-panning) {
+  cursor: pointer;
+}
+
+/* full screen: the plot fills the screen, on the theme's background */
+.atl-root:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  border-radius: 0;
+  box-shadow: none;
+  touch-action: none;
+  overflow: hidden;
+}
+.atl-root::backdrop {
+  background: var(--atl-bg);
+}
+
+/* the Mouse and keys panel */
+.atl-help {
+  position: absolute;
+  left: 50%;
+  top: 40px;
+  transform: translateX(-50%);
+  z-index: 5;
+  width: min(760px, calc(100% - 32px));
+  max-height: calc(100% - 56px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 10px 14px 12px;
+  border-radius: 6px;
+  background: var(--atl-bg);
+  color: var(--atl-text);
+  border: 1px solid var(--atl-border);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  outline: none;
+}
+.atl-help-title {
+  font-weight: 600;
+  font-size: 1.08em;
+  margin-bottom: 6px;
+}
+.atl-help-close {
+  float: right;
+}
+.atl-help-columns {
+  columns: 220px;
+  column-gap: 24px;
+}
+.atl-help section {
+  break-inside: avoid;
+  margin-bottom: 10px;
+}
+.atl-help h4 {
+  margin: 0 0 4px;
+  font-size: 1em;
+  color: var(--atl-muted);
+  font-weight: 600;
+}
+.atl-help-row {
+  display: flex;
+  gap: 8px;
+  line-height: 18px;
+}
+.atl-help kbd {
+  font: inherit;
+  min-width: 112px;
+  color: var(--atl-text);
+  font-weight: 500;
+}
+.atl-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+}
+.atl-tooltip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  pointer-events: none;
+  display: none;
+  max-width: 420px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--atl-panel);
+  border: 1px solid var(--atl-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+}
+.atl-tooltip.atl-show {
+  display: block;
+}
+.atl-tip-row {
+  display: flex;
+  gap: 10px;
+}
+.atl-tip-key {
+  color: var(--atl-muted);
+  min-width: 48px;
+}
+.atl-notice {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: var(--atl-panel);
+  border: 1px solid var(--atl-border);
+  color: var(--atl-text);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  max-width: 80%;
+  text-align: center;
+}
+.atl-notice.atl-show {
+  opacity: 1;
+}
+.atl-legend {
+  position: absolute;
+  right: 14px;
+  top: 50px;
+  z-index: 2;
+  max-height: calc(100% - 64px);
+  overflow: auto;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--atl-panel);
+  border: 1px solid var(--atl-border);
+  pointer-events: auto;
+}
+.atl-legend.atl-legend-column {
+  right: 8px;
+  background: transparent;
+  border-color: transparent;
+  max-height: calc(100% - 52px);
+}
+.atl-legend-layer {
+  font-weight: 600;
+  margin-top: 4px;
+}
+.atl-legend-block + .atl-legend-block {
+  margin-top: 6px;
+}
+.atl-legend-title {
+  color: var(--atl-muted);
+  margin-bottom: 2px;
+}
+.atl-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.35;
+}
+.atl-legend-more {
+  color: var(--atl-muted);
+}
+.atl-legend-bar {
+  width: 120px;
+  height: 8px;
+  border-radius: 2px;
+}
+.atl-legend-ends {
+  display: flex;
+  justify-content: space-between;
+  color: var(--atl-muted);
+}

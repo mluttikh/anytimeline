@@ -1,0 +1,34 @@
+/* plots in the pages: room around them, and a height while they load */
+.anytimeline-embed {
+  margin: 1em 0 1.5em;
+  min-height: 160px;
+}
+.anytimeline-embed > script {
+  display: none;
+}
+
+/* the theme styles every button, kbd, heading and list in a page: not inside a plot */
+.md-typeset .atl-root {
+  font-size: var(--atl-font-size, 12px);
+  line-height: 1.35;
+}
+.md-typeset .atl-root button {
+  font-size: inherit;
+}
+.md-typeset .atl-root kbd {
+  font-size: inherit;
+  padding: 0;
+  box-shadow: none;
+  background: none;
+  border: 0;
+  color: inherit;
+  word-break: normal;
+}
+.md-typeset .atl-root h4 {
+  margin: 0 0 4px;
+  font-size: 1em;
+  letter-spacing: 0;
+}
+.md-typeset .atl-root section {
+  margin: 0 0 10px;
+}

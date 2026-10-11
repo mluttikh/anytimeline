@@ -1,0 +1,389 @@
+import { expect, test, type Page } from "@playwright/test";
+
+// Tools, gestures, keys and full screen: what reaches the model (the harness logs what the
+// plot sets and sends) and what the view shows.
+
+async function open(page: Page, scene: string): Promise<void> {
+  await page.goto(`/test/visual/harness.html?scene=${scene}&renderer=webgl2`);
+  await page.waitForFunction(() => (window as any).__perf?.frame_ms !== undefined, null, { timeout: 15_000 });
+}
+
+const view = (page: Page) => page.locator(".atl-root");
+
+async function stageBox(page: Page) {
+  return (await page.locator(".atl-stage").boundingBox())!;
+}
+
+async function eventAt(page: Page, layer: number, index: number): Promise<{ x: number; y: number }> {
+  const p = await view(page).evaluate((root: any, [l, i]) => root.__view.eventPosition(l, i), [layer, index]);
+  const box = await stageBox(page);
+  return { x: box.x + p.x, y: box.y + p.y };
+}
+
+const picks = (page: Page) => page.evaluate(() => (window as any).__log.filter((m: any) => m.set === "_pick").map((m: any) => m.value));
+const views = (page: Page) => page.evaluate(() => (window as any).__log.filter((m: any) => m.type === "view").map((m: any) => m.range));
+const state = (page: Page, key: string) => page.evaluate((k) => (window as any).__model.state[k], key);
+
+test("Pan: a plain click selects nothing; a Shift-click adds the event", async ({ page }) => {
+  await open(page, "order_only");
+  const p = await eventAt(page, 0, 2);
+  await page.mouse.move(p.x, p.y);
+  await expect(page.locator(".atl-tooltip.atl-show")).toContainText("order");
+  await page.mouse.click(p.x, p.y);
+  expect(await picks(page)).toEqual([]);
+  await page.keyboard.down("Shift");
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.up("Shift");
+  expect(await picks(page)).toEqual([expect.objectContaining({ kind: "click", index: 2, mode: "toggle" })]);
+});
+
+test("Select: a click selects an event, a drag selects a box", async ({ page }) => {
+  await open(page, "order_only");
+  await page.locator('.atl-toolbar button[aria-label="Select"]').click();
+  expect(await state(page, "tool")).toBe("select");
+  await expect(page.locator(".atl-hint")).toContainText("select a box");
+  const p = await eventAt(page, 0, 3);
+  await page.mouse.click(p.x, p.y);
+  const a = await eventAt(page, 0, 0);
+  const b = await eventAt(page, 0, 5);
+  await page.mouse.move(a.x - 10, a.y - 10);
+  await page.mouse.down();
+  await page.mouse.move(b.x + 10, b.y + 10, { steps: 4 });
+  await page.mouse.up();
+  const sent = await picks(page);
+  expect(sent[0]).toMatchObject({ kind: "click", index: 3, mode: "replace" });
+  expect(sent[1]).toMatchObject({ kind: "box", lanes: [0, 2], mode: "replace", xscale: "sequence" });
+});
+
+test("Zoom: a drag zooms to that time range, Back returns, the key z switches", async ({ page }) => {
+  await open(page, "service_time");
+  await view(page).click({ position: { x: 4, y: 4 } });
+  await page.keyboard.press("z");
+  expect(await state(page, "tool")).toBe("zoom");
+  const box = await stageBox(page);
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + 300, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 400, y, { steps: 4 });
+  await page.mouse.up();
+  await page.waitForTimeout(350);
+  const [a, b] = (await views(page)).at(-1);
+  const whole = 3_598_661_460; // the scene's extent in µs ticks
+  expect(b - a).toBeLessThan(whole / 4);
+  expect(b - a).toBeGreaterThan(whole / 20);
+  await expect(page.locator('.atl-toolbar button[aria-label="Previous view"]')).toBeEnabled();
+  await page.keyboard.press("Backspace");
+  await page.waitForTimeout(350);
+  const [c, d] = (await views(page)).at(-1);
+  expect(d - c).toBeGreaterThan(whole);
+  await expect(page.locator('.atl-toolbar button[aria-label="Whole timeline"]')).toBeDisabled();
+});
+
+test("Pan: a drag on the time axis or a Shift-drag zooms to a range", async ({ page }) => {
+  await open(page, "service_time");
+  const box = await stageBox(page);
+  await page.mouse.move(box.x + 300, box.y + 20); // the axis
+  await page.mouse.down();
+  await page.mouse.move(box.x + 500, box.y + 20, { steps: 4 });
+  await page.mouse.up();
+  await page.waitForTimeout(350);
+  const [a, b] = (await views(page)).at(-1);
+  expect(b - a).toBeLessThan(3_598_661_460 / 2);
+  await page.keyboard.down("Shift");
+  await page.mouse.move(box.x + 300, box.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 340, box.y + 200, { steps: 4 });
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+  await page.waitForTimeout(350);
+  const [c, d] = (await views(page)).at(-1);
+  expect(d - c).toBeLessThan((b - a) / 4);
+  expect(await picks(page)).toEqual([]);
+});
+
+test("Clear, Esc, the legend switch and help", async ({ page }) => {
+  await open(page, "service_routes"); // has a selection
+  const clear = page.locator('.atl-toolbar button[aria-label="Clear the selection"]');
+  await expect(clear).toBeVisible();
+  await clear.click();
+  expect((await picks(page)).at(-1)).toEqual(expect.objectContaining({ kind: "clear" }));
+  await view(page).click({ position: { x: 4, y: 4 } });
+  await page.keyboard.press("Escape");
+  expect((await picks(page)).filter((p: any) => p.kind === "clear").length).toBe(2);
+  await page.locator('.atl-toolbar button[aria-label="Legend"]').click();
+  expect(await state(page, "legend")).toBe(false);
+  await expect(page.locator(".atl-legend")).toBeHidden();
+  await page.keyboard.press("?");
+  await expect(page.locator(".atl-help")).toContainText("Mouse and keys");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".atl-help")).toHaveCount(0);
+});
+
+test("a tool set from Python shows in the toolbar", async ({ page }) => {
+  await open(page, "service_time");
+  await page.evaluate(() => {
+    (window as any).__model.state.tool = "zoom";
+    (window as any).__model.emit("change:tool");
+  });
+  await expect(page.locator('.atl-toolbar button[aria-label="Zoom"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".atl-stage")).toHaveAttribute("data-tool", "zoom");
+});
+
+test("full screen: the plot fills the screen, lanes fill its height, the time range stays", async ({ page }) => {
+  await open(page, "service_time");
+  await page.waitForTimeout(300);
+  const before = await view(page).evaluate((root: any) => ({ span: root.__view.camera.span, laneH: root.__view.laneH }));
+  await page.locator('.atl-toolbar button[aria-label="Full screen"]').click();
+  await expect.poll(() => view(page).evaluate((root) => root.matches(":fullscreen"))).toBe(true);
+  await page.waitForTimeout(300);
+  const viewport = page.viewportSize()!;
+  const stage = await stageBox(page);
+  expect(stage.height).toBeGreaterThan(viewport.height - 80);
+  const inside = await view(page).evaluate((root: any) => {
+    const v = root.__view;
+    return { laneH: v.laneH, lanes: v.spec.lanes.names.length, plotH: v.plot().h, span: v.camera.span, left: v.camera.left };
+  });
+  expect(inside.laneH * inside.lanes).toBeCloseTo(inside.plotH, 0); // lanes fill the height
+  expect(inside.laneH).toBeGreaterThan(before.laneH * 2);
+  expect(inside.span).toBeCloseTo(before.span, -2); // the same time range
+  await page.locator(".atl-root").screenshot({ path: "test-results/shots/service_time-fullscreen.png" });
+  await page.locator('.atl-toolbar button[aria-label="Leave full screen"]').click();
+  await expect.poll(() => view(page).evaluate((root) => root.matches(":fullscreen"))).toBe(false);
+  await page.waitForTimeout(300);
+  const after = await view(page).evaluate((root: any) => root.__view.laneH);
+  expect(after).toBeCloseTo(before.laneH, 3); // back as it was
+});
+
+test("Time and Order are icons; the text size changes all text and reaches Python", async ({ page }) => {
+  await open(page, "service_time");
+  await page.locator('.atl-toolbar button[aria-label="Order"]').click();
+  expect(await state(page, "xscale")).toBe("sequence");
+  await expect(page.locator('.atl-toolbar button[aria-label="Order"]')).toHaveAttribute("aria-pressed", "true");
+  const axis = () => view(page).evaluate((root: any) => root.__view.axisH);
+  expect(await axis()).toBe(44);
+  await page.locator('.atl-toolbar button[aria-label="Text size"]').click();
+  const larger = page.locator('.atl-popover button[aria-label="Larger text"]');
+  for (let i = 0; i < 4; i++) await larger.click();
+  await expect(page.locator(".atl-popover .atl-size")).toHaveText("16 px");
+  expect(await state(page, "font_size")).toBe(16);
+  expect(await axis()).toBe(59);
+  const titleSize = await page.locator(".atl-title").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  expect(titleSize).toBeCloseTo(16 * 1.08, 1);
+  await page.locator(".atl-popover button", { hasText: "Reset" }).click();
+  expect(await state(page, "font_size")).toBe(12);
+  await page.mouse.click(5, 300); // outside: the popover closes
+  await expect(page.locator(".atl-popover")).toBeHidden();
+});
+
+test("larger text: screenshot", async ({ page }) => {
+  await page.goto("/test/visual/harness.html?scene=service_time&renderer=webgl2&font_size=16");
+  await page.waitForFunction(() => (window as any).__perf?.frame_ms !== undefined, null, { timeout: 15_000 });
+  await page.waitForTimeout(400);
+  await expect(page.locator("#plot")).toHaveScreenshot("service_time-font16-webgl2.png", { maxDiffPixelRatio: 0.01 });
+});
+
+async function barAt(page: Page, layer: number, index: number): Promise<{ x: number; y: number }> {
+  const p = await view(page).evaluate((root: any, [l, i]) => root.__view.barPosition(l, i), [layer, index]);
+  const box = await stageBox(page);
+  return { x: box.x + p.x, y: box.y + p.y };
+}
+
+test("Gantt: hovering a task shows its dates, a Select click selects it, Order keeps the bars", async ({ page }) => {
+  await open(page, "gantt_plan");
+  const p = await barAt(page, 0, 4); // Build backend
+  await page.mouse.move(p.x, p.y);
+  const tip = page.locator(".atl-tooltip.atl-show");
+  await expect(tip).toContainText("Build backend");
+  await expect(tip).toContainText("duration");
+  await expect(tip).toContainText("18 d");
+  await expect(tip).toContainText("60%");
+  const m = await barAt(page, 0, 3); // Review: a milestone
+  await page.mouse.move(m.x, m.y);
+  await expect(tip).toContainText("milestone");
+  await page.keyboard.press("s").catch(() => {});
+  await page.locator('.atl-toolbar button[aria-label="Select"]').click();
+  await page.mouse.click(p.x, p.y);
+  expect((await picks(page)).at(-1)).toMatchObject({ kind: "click", layer: "tasks", index: 4, mode: "replace" });
+  await page.locator('.atl-toolbar button[aria-label="Order"]').click();
+  const q = await barAt(page, 0, 4);
+  expect(q.x).toBeGreaterThan(0);
+  await page.mouse.move(q.x, q.y);
+  await expect(tip).toContainText("Build backend");
+  await page.locator("#plot").screenshot({ path: "test-results/shots/gantt_plan-order.png" });
+});
+
+test("packed bars: each job is found where it is drawn", async ({ page }) => {
+  await open(page, "schedule");
+  for (const i of [0, 40, 80, 120]) {
+    const p = await barAt(page, 0, i);
+    const hit = await view(page).evaluate((root: any, [x, y]) => {
+      const v = root.__view;
+      const r = root.querySelector(".atl-stage").getBoundingClientRect();
+      return v.pick(x - r.left, y - r.top);
+    }, [p.x, p.y]);
+    expect(hit).toEqual({ layer: 0, index: i, bar: true });
+  }
+});
+
+/** The middle of the name of the lane on row `row` (page px). */
+async function laneName(page: Page, row: number): Promise<{ x: number; y: number }> {
+  const p = await view(page).evaluate((root: any, r) => {
+    const v = root.__view;
+    const plot = v.plot();
+    return { x: plot.x / 2, y: plot.y - v.scrollY + (r + 0.5) * v.laneH };
+  }, row);
+  const box = await stageBox(page);
+  return { x: box.x + p.x, y: box.y + p.y };
+}
+
+const rows = (page: Page) => view(page).evaluate((root: any) => Array.from(root.__view.laneAt as Int32Array));
+
+test("Spans: a click on a name folds and unfolds; keys fold all; a double-click zooms to it", async ({ page }) => {
+  await open(page, "trace_list");
+  const tree = await view(page).evaluate((root: any) => root.__view.spec.lanes.tree);
+  const roots = tree.depth.map((d: number, i: number) => (d === 0 ? i : -1)).filter((i: number) => i >= 0);
+  expect(await rows(page)).toEqual(roots); // expand=1: the roots only
+  const first = await laneName(page, 0);
+  await page.mouse.click(first.x, first.y);
+  const open1 = await rows(page);
+  // the first trace's own spans show under it (they stay folded themselves)
+  const under = open1.slice(1, open1.indexOf(roots[1]));
+  expect(under.length).toBeGreaterThan(0);
+  expect(under.every((l: number) => tree.depth[l] === 1)).toBe(true);
+  expect(open1.length).toBe(roots.length + under.length);
+  await page.waitForTimeout(400);
+  await page.mouse.click(first.x, first.y); // fold it again
+  expect(await rows(page)).toEqual(roots);
+  await page.keyboard.press("]");
+  expect((await rows(page)).length).toBe(tree.depth.length);
+  await page.keyboard.press("[");
+  expect(await rows(page)).toEqual(roots);
+
+  // a double-click on the third trace: its time range, its spans unchanged (folded)
+  const third = await laneName(page, 2);
+  await page.mouse.dblclick(third.x, third.y);
+  expect(await rows(page)).toEqual(roots);
+  const [a, b] = await view(page).evaluate((root: any) => [root.__view.camera.left, root.__view.camera.right]);
+  const span = await view(page).evaluate((root: any, lane) => {
+    const bars = root.__view.bars[0].data;
+    const size = root.__view.spec.lanes.tree.size[lane];
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = 0; i < bars.count; i++) {
+      if (bars.lane[i] >= lane && bars.lane[i] < lane + size) {
+        lo = Math.min(lo, bars.start[i]);
+        hi = Math.max(hi, bars.end[i]);
+      }
+    }
+    return [lo, hi];
+  }, roots[2]);
+  expect(a).toBeLessThanOrEqual(span[0]);
+  expect(b).toBeGreaterThanOrEqual(span[1]);
+  expect(b - a).toBeLessThan((span[1] - span[0]) * 1.2);
+});
+
+test("Spans: a box over folded lanes selects only the lanes that show", async ({ page }) => {
+  await open(page, "trace_list");
+  await page.locator('.atl-toolbar button[aria-label="Select"]').click();
+  const box = await stageBox(page);
+  const top = await laneName(page, 0);
+  const bottom = await laneName(page, 2);
+  await page.mouse.move(box.x + box.width * 0.3, top.y - 5);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.5, bottom.y + 5, { steps: 5 });
+  await page.mouse.up();
+  const roots = await rows(page);
+  expect((await picks(page)).at(-1)).toMatchObject({ kind: "box", shown: roots.slice(0, 3) });
+});
+
+test("Spans: the bar under the pointer of a deeper lane, after unfolding", async ({ page }) => {
+  await open(page, "trace_waterfall");
+  const n = await view(page).evaluate((root: any) => root.__view.bars[0].data.count);
+  for (const i of [0, Math.floor(n / 2), n - 1]) {
+    const p = await barAt(page, 0, i);
+    const hit = await view(page).evaluate((root: any, [x, y]) => {
+      const v = root.__view;
+      const r = root.querySelector(".atl-stage").getBoundingClientRect();
+      return v.pick(x - r.left, y - r.top);
+    }, [p.x, p.y]);
+    expect(hit).toEqual({ layer: 0, index: i, bar: true });
+  }
+  const p = await barAt(page, 0, 0);
+  await page.mouse.move(p.x, p.y);
+  await expect(page.locator(".atl-tooltip.atl-show")).toContainText("GET /orders");
+});
+
+test("States and values: a sample's value and a state's reason on hover; Order keeps the lines", async ({ page }) => {
+  await open(page, "service_health");
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  // the CPU sample in the middle of the gateway lane's view
+  const p = await view(page).evaluate((root: any) => {
+    const v = root.__view;
+    const layer = v.values[0];
+    const vv = v.valueView();
+    const xs = layer.xs(vv);
+    const mid = (v.camera.left + v.camera.right) / 2;
+    let i = 0;
+    while (i + 1 < layer.data.runStarts[1] && xs[i] < mid) i++;
+    return layer.position(i, vv);
+  });
+  const box = await stageBox(page);
+  await page.mouse.move(box.x + p.x, box.y + p.y);
+  const tip = page.locator(".atl-tooltip.atl-show");
+  await expect(tip).toContainText("value");
+  await expect(tip).toContainText("cpu %");
+  // the cache's "down" state
+  const down = await view(page).evaluate((root: any) => {
+    const v = root.__view;
+    const bars = v.bars[0];
+    const i = bars.data.text.indexOf("down");
+    return v.barPosition(0, i);
+  });
+  await page.mouse.move(box.x + down.x, box.y + down.y - 12);
+  await expect(tip).toContainText("down"); // (its tooltip columns come from Python: tested there)
+  await page.locator('.atl-toolbar button[aria-label="Order"]').click();
+  await page.waitForTimeout(200);
+  expect(errors).toEqual([]);
+  await page.locator("#plot").screenshot({ path: "test-results/shots/service_health-order.png" });
+});
+
+test("Values only: Order is off", async ({ page }) => {
+  await open(page, "latency_series");
+  await expect(page.locator('.atl-toolbar button[aria-label="Order"]')).toBeDisabled();
+  await page.keyboard.press("t");
+  expect(await view(page).evaluate((root: any) => root.__view.xscale)).toBe("time");
+});
+
+test("Groups: a header folds its lanes, a box selects across groups, the plot is one", async ({ page }) => {
+  await open(page, "host_groups");
+  await expect(page.locator(".atl-root")).toHaveCount(1);
+  const tree = await view(page).evaluate((root: any) => root.__view.spec.lanes.tree);
+  expect(tree.header).toEqual([0, 6]);
+  const all = await rows(page);
+  expect(all.length).toBe(12);
+  // fold web-1: its five lanes go, web-2 moves up
+  const header = await laneName(page, 0);
+  await page.mouse.click(header.x, header.y);
+  expect(await rows(page)).toEqual([0, 6, 7, 8, 9, 10, 11]);
+  await page.waitForTimeout(400);
+  await page.mouse.click(header.x, header.y);
+  expect((await rows(page)).length).toBe(12);
+  // a box from web-1's db to web-2's gateway: lanes of both groups
+  await page.locator('.atl-toolbar button[aria-label="Select"]').click();
+  const box = await stageBox(page);
+  const a = await laneName(page, 5);
+  const b = await laneName(page, 7);
+  await page.mouse.move(box.x + box.width * 0.3, a.y - 4);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.5, b.y + 4, { steps: 5 });
+  await page.mouse.up();
+  expect((await picks(page)).at(-1)).toMatchObject({ kind: "box", lanes: [5, 7] });
+});
+
+test("Groups compared from their start: the axis counts from 0", async ({ page }) => {
+  await open(page, "trace_compare");
+  const time = await view(page).evaluate((root: any) => root.__view.spec.time);
+  expect(time.kind).toBe("duration");
+  expect(time.extent[0]).toBe(0);
+});

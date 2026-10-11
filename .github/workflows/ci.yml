@@ -1,0 +1,108 @@
+# Checks on every push and pull request: Python (lint, types, tests) on the supported Pythons;
+# the JavaScript and the browser tests (Playwright: scenes, interactions, docs, marimo,
+# JupyterLab) with the docs built; and the wheel, installed into a clean environment.
+#
+# Screenshot comparisons run on macOS only (the baselines are macOS renderings); on Linux the
+# browser tests run everything else, with WebGPU skipped where the runner has none.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+      - name: Build the JavaScript bundle
+        run: npm ci && npm run build
+        working-directory: js
+      - run: uv sync --python ${{ matrix.python }}
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run ty check
+      - run: uv run pytest
+
+  browser:
+    name: JavaScript, browser tests and docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+      - run: npm ci
+        working-directory: js
+      - run: npm run typecheck
+        working-directory: js
+      - run: npm test
+        working-directory: js
+      - run: npm run build
+        working-directory: js
+      - run: uv sync
+      - name: Scenes for the visual tests
+        run: uv run python scripts/make_scenes.py
+      - name: Build the docs (strict)
+        run: uv run python scripts/build_docs.py
+      - run: npx playwright install --with-deps chromium
+        working-directory: js
+      - name: Browser tests
+        run: npx playwright test
+        working-directory: js
+        env:
+          CI: "1"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: js/test-results/
+          retention-days: 7
+
+  wheel:
+    name: Wheel, installed clean
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build the sdist and the wheel (the JavaScript is built from the sdist)
+        run: uv build
+      - name: Install the wheel alone and draw a plot of each kind
+        run: |
+          uv venv --python 3.12 /tmp/clean
+          uv pip install --python /tmp/clean/bin/python dist/*.whl
+          /tmp/clean/bin/python -I scripts/smoke.py
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

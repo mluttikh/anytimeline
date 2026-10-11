@@ -1,0 +1,129 @@
+# User documentation (https://zensical.org). Build with: uv run python scripts/build_docs.py
+# The pages are in docs/user/, organized as tutorials, how-to guides, reference and
+# explanation (https://docs.divio.com/documentation-system/). Examples run while building.
+
+[project]
+site_name = "anytimeline"
+site_description = "Interactive timeline and event charts for notebooks, drawn on the GPU."
+docs_dir = "docs/user"
+site_dir = "site"
+# links to page.html, not page/: the built site also works opened from disk (file://)
+use_directory_urls = false
+extra_css = ["assets/anytimeline/widget.css", "stylesheets/extra.css"]
+extra_javascript = ["assets/anytimeline/standalone.js"]
+nav = [
+  { "Home" = "index.md" },
+  { "Tutorials" = [
+    "tutorials/index.md",
+    { "Your first event chart" = "tutorials/first-chart.md" },
+    { "Follow the order of events" = "tutorials/order.md" },
+    { "Select events and use them in Python" = "tutorials/select.md" },
+  ] },
+  { "How-to guides" = [
+    "how-to/index.md",
+    { "Install anytimeline" = "how-to/install.md" },
+    { "Plot your own tables" = "how-to/tables.md" },
+    { "Use your time column" = "how-to/time.md" },
+    { "Arrange the lanes" = "how-to/lanes.md" },
+    { "Colors, symbols and sizes" = "how-to/encodings.md" },
+    { "Labels and tooltips" = "how-to/labels.md" },
+    { "Join events into routes" = "how-to/routes.md" },
+    { "Draw a Gantt chart" = "how-to/gantt.md" },
+    { "Schedules and spans" = "how-to/intervals.md" },
+    { "Plot traces" = "how-to/traces.md" },
+    { "States and values" = "how-to/states-values.md" },
+    { "Several layers in one plot" = "how-to/layers.md" },
+    { "Zoom from Python" = "how-to/zoom.md" },
+    { "Groups and linked plots" = "how-to/groups.md" },
+    { "Share a plot" = "how-to/share.md" },
+    { "Text size, height and full screen" = "how-to/size.md" },
+    { "Plot many events" = "how-to/large.md" },
+    { "Use anytimeline in marimo" = "how-to/marimo.md" },
+    { "Fix a plot that doesn't show" = "how-to/troubleshooting.md" },
+  ] },
+  { "Reference" = [
+    "reference/index.md",
+    { "Mouse and keys" = "reference/mouse-and-keys.md" },
+    { "Timeline" = "reference/timeline.md" },
+    { "gantt" = "reference/gantt.md" },
+    { "save_html" = "reference/save-html.md" },
+    { "OpenTelemetry" = "reference/otel.md" },
+    { "Route and symbols" = "reference/styling.md" },
+    { "Example data" = "reference/synthetic.md" },
+  ] },
+  { "Explanation" = [
+    "explanation/index.md",
+    { "What an event chart is for" = "explanation/event-charts.md" },
+    { "Time from nanoseconds to centuries" = "explanation/time.md" },
+    { "Why overlapping events move" = "explanation/dodging.md" },
+    { "Why the tools work the way they do" = "explanation/tools.md" },
+    { "How the plot is drawn" = "explanation/drawing.md" },
+  ] },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.code.copy",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.tabs",
+  "navigation.top",
+  "search.highlight",
+  "toc.follow",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.tables]
+[project.markdown_extensions.toc]
+permalink = true
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.highlight]
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.keys]
+[project.markdown_extensions.pymdownx.superfences]
+# ```python exec="on" blocks run while building (markdown-exec): examples are real code
+[[project.markdown_extensions.pymdownx.superfences.custom_fences]]
+name = "python"
+class = "python"
+validator = "markdown_exec.validator"
+format = "markdown_exec.formatter"
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["src"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "google"
+docstring_section_style = "list"
+filters = "public"
+heading_level = 2
+merge_init_into_class = true
+members_order = "source"
+separate_signature = true
+show_root_heading = true
+show_root_full_path = false
+show_signature_annotations = true
+show_source = false
+show_symbol_type_heading = true
+signature_crossrefs = true

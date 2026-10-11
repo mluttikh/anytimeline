@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+node_modules/
+.DS_Store
+.ipynb_checkpoints/
+__marimo__/
+
+# built JavaScript bundle (npm run build in js/)
+src/anytimeline/static/
+
+# visual tests (Playwright)
+js/test/visual/dist/
+js/test/visual/scenes/
+js/test-results/
+js/playwright-report/
+
+# personal experiments (notebooks, scripts); not part of the project
+_scratch/
+
+# user documentation: the built site, and the plot bundle copied in by scripts/build_docs.py
+site/
+docs/user/assets/anytimeline/
