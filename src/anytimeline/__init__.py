@@ -7,6 +7,6 @@ from anytimeline.presets import gantt
 from anytimeline.styling import SYMBOLS
 from anytimeline.widget import Timeline, save_html
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = ["SYMBOLS", "Route", "Timeline", "__version__", "gantt", "save_html"]
