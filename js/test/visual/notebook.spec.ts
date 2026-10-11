@@ -6,7 +6,8 @@ import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { expect, type Page, test } from "@playwright/test";
 
 const hasPython = spawnSync("uv", ["--version"]).status === 0;
-test.describe.configure({ mode: "default" });
+// a marimo app with a kernel: one retry on a busy CI machine
+test.describe.configure({ mode: "default", retries: process.env.CI ? 1 : 0 });
 let server: ChildProcess | null = null;
 let url = "";
 

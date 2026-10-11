@@ -2100,12 +2100,25 @@ export class TimelineView {
     this.hovered = hovered;
     if (sharp) this.layout();
     if (pixels) {
-      const img = await pixels;
-      const gpu = document.createElement("canvas");
-      gpu.width = img.width;
-      gpu.height = img.height;
-      gpu.getContext("2d")!.putImageData(img, 0, 0);
-      ctx.drawImage(gpu, 0, titleH, this.width, this.height);
+      const img = await pixels.catch((err) => {
+        console.warn("[anytimeline] reading the frame back failed; copying the canvas", err);
+        return null;
+      });
+      if (img) {
+        const gpu = document.createElement("canvas");
+        gpu.width = img.width;
+        gpu.height = img.height;
+        gpu.getContext("2d")!.putImageData(img, 0, 0);
+        ctx.drawImage(gpu, 0, titleH, this.width, this.height);
+      } else if (this.renderer) {
+        // draw the frame again and copy the canvas in the same task (best effort)
+        this.hovered = null;
+        if (sharp) this.layout(scale);
+        this.renderFrame();
+        ctx.drawImage(this.renderer.canvas, 0, titleH, this.width, this.height);
+        this.hovered = hovered;
+        if (sharp) this.layout();
+      }
     }
     ctx.drawImage(front, 0, titleH, this.width, this.height);
     legend?.(ctx, titleH);

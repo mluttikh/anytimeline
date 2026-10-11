@@ -214,7 +214,8 @@ export class WebGPURenderer implements Renderer {
     const format = navigator.gpu.getPreferredCanvasFormat();
     // COPY_SRC: snapshots read the frame back (captureNext)
     context.configure({ device, format, alphaMode: "premultiplied", usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
-    const name = info ? [info.vendor, info.architecture, info.description].filter(Boolean).join(" ") : "";
+    const software = (info as { isFallbackAdapter?: boolean } | undefined)?.isFallbackAdapter ? " (software)" : "";
+    const name = (info ? [info.vendor, info.architecture, info.description].filter(Boolean).join(" ") : "") + software;
     return new WebGPURenderer(canvas, device, context, format, name || "WebGPU");
   }
 

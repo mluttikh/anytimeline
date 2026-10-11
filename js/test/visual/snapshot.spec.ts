@@ -8,6 +8,9 @@ for (const renderer of ["webgpu", "webgl2", "canvas2d"] as const) {
     await page.waitForFunction(() => (window as any).__perf?.frame_ms !== undefined, null, { timeout: 15_000 });
     const perf = await page.evaluate(() => (window as any).__perf);
     if (renderer === "webgpu" && perf.renderer !== "webgpu") test.skip(true, "no WebGPU here");
+    // a software WebGPU (SwiftShader on Linux CI) the plot never picks itself ("auto" refuses
+    // it); reading its frames back is not reliable
+    if (renderer === "webgpu" && /\(software\)/.test(perf.description ?? "")) test.skip(true, "software WebGPU");
     const result = await page.locator(".atl-root").evaluate(async (root: any) => {
       const v = root.__view;
       const blob: Blob = await v.snapshot();

@@ -9,7 +9,10 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 
 const hasPython = spawnSync("uv", ["--version"]).status === 0;
-test.describe.configure({ mode: "serial" });
+// a whole JupyterLab with a kernel: slow to start on a busy CI machine, so more time there,
+// and one retry
+test.describe.configure({ mode: "serial", retries: process.env.CI ? 1 : 0 });
+const LIMIT = process.env.CI ? 300_000 : 120_000;
 let server: ChildProcess | null = null;
 let url = "";
 
@@ -43,7 +46,7 @@ function notebook(): string {
 
 test.beforeAll(async ({}, info) => {
   if (!hasPython) return;
-  test.setTimeout(120_000);
+  test.setTimeout(LIMIT);
   const dir = mkdtempSync(join(tmpdir(), "atl-lab-"));
   writeFileSync(join(dir, "plot.ipynb"), notebook());
   const port = 8950 + info.workerIndex;
@@ -84,8 +87,8 @@ test.afterAll(() => server?.kill());
 /** Open the notebook and run all its cells; resolves when the plot has its data. */
 async function openNotebook(page: Page): Promise<void> {
   await page.goto(`${url}lab/tree/plot.ipynb`);
-  await page.locator(".jp-Notebook").waitFor({ timeout: 60_000 });
-  await expect(page.locator(".jp-Notebook-ExecutionIndicator[data-status='idle']")).toHaveCount(1, { timeout: 60_000 });
+  await page.locator(".jp-Notebook").waitFor({ timeout: LIMIT / 2 });
+  await expect(page.locator(".jp-Notebook-ExecutionIndicator[data-status='idle']")).toHaveCount(1, { timeout: LIMIT / 2 });
   // Run All Cells; again if the kernel was not ready yet (a busy machine: the status may say
   // idle before the kernel takes requests)
   for (let attempt = 0; ; attempt++) {
@@ -129,7 +132,7 @@ test.describe("in JupyterLab", () => {
   test.skip(!hasPython, "needs uv and Python");
 
   test("the plot draws, asks Python for tooltips, and its selection reaches Python", async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(LIMIT);
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     await openNotebook(page);
@@ -156,14 +159,14 @@ test.describe("in JupyterLab", () => {
   });
 
   test("save_png writes the picture the browser draws", async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(LIMIT);
     await openNotebook(page);
     await runCell(page, 2, ""); // save_png: the file arrives after the cell
     await expect.poll(() => runCell(page, 3, "PNG"), { timeout: 30_000 }).toMatch(/PNG True \d{5,}/);
   });
 
   test("plots in different cells, linked, zoom together", async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(LIMIT);
     await openNotebook(page);
     const roots = page.locator(".atl-root");
     await expect(roots).toHaveCount(2, { timeout: 30_000 });
@@ -182,7 +185,7 @@ test.describe("in JupyterLab", () => {
   });
 
   test("it follows JupyterLab's dark theme", async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(LIMIT);
     await openNotebook(page);
     const root = page.locator(".atl-root").first();
     const bg = () => root.evaluate((r) => (r as any).__view.theme.bg);
