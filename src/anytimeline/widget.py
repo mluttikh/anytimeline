@@ -219,6 +219,8 @@ class Timeline(anywidget.AnyWidget):
         route: ev.Route | str | None = None,
         overlap: Literal["dodge", "overlay"] = "dodge",
         labels: Literal["beside", "stems"] = "beside",
+        stem_shape: Literal["straight", "curved"] = "straight",
+        label_width: float | None = None,
         importance: str | None = None,
         group: str | None = None,
         hover: bool = True,
@@ -258,6 +260,12 @@ class Timeline(anywidget.AnyWidget):
                 event by a line (a story timeline: few events, the text matters); the events
                 stay on the line. A line break (``"{time:%H:%M}\\n{title}"``) gives a box
                 two lines.
+            stem_shape: With ``labels="stems"``: ``"straight"`` stems (each box over its
+                event) or ``"curved"`` ones (a box may move aside, its stem bending), which
+                fits more boxes where events crowd. No stem ever passes behind a box.
+            label_width: With ``labels="stems"``: the widest a box gets, in pixels; longer
+                titles wrap onto two lines (then end in "…"). By default 16 × the text size;
+                0 for no limit (one line, any width).
             importance: A numeric column; where labels (`text=`) would overlap, the more
                 important events keep theirs.
             group: A column of groups (a host, a region, a day): each group gets a header
@@ -286,6 +294,8 @@ class Timeline(anywidget.AnyWidget):
             route=route,
             overlap=overlap,
             labels=labels,
+            stem_shape=stem_shape,
+            label_width=label_width,
             importance=importance,
             time_unit=self._time_unit,
             hover=hover,

@@ -20,6 +20,7 @@ from anytimeline.timebase import TimeBase, Times, times
 
 Overlap = Literal["dodge", "overlay"]
 Labels = Literal["beside", "stems"]
+StemShape = Literal["straight", "curved"]
 LABELS = ("beside", "stems")
 
 
@@ -68,6 +69,8 @@ class EventsRecord:
     overlap: Overlap
     importance: np.ndarray | None
     labels: Labels
+    stem_shape: StemShape
+    label_width: float | None
     hover: bool
     select: bool
     dropped: int
@@ -102,6 +105,8 @@ def build(
     route: Route | str | None,
     overlap: Overlap,
     labels: Labels = "beside",
+    stem_shape: StemShape = "straight",
+    label_width: float | None = None,
     importance: str | None,
     time_unit: str | None,
     hover: bool,
@@ -114,6 +119,10 @@ def build(
         raise ValueError(f"overlap must be 'dodge' or 'overlay', got {overlap!r}")
     if labels not in LABELS:
         raise ValueError(f"labels must be one of {LABELS}, got {labels!r}")
+    if stem_shape not in ("straight", "curved"):
+        raise ValueError(f"stem_shape must be 'straight' or 'curved', got {stem_shape!r}")
+    if label_width is not None and not label_width >= 0:
+        raise ValueError(f"label_width is a width in pixels (0: no limit), got {label_width!r}")
     if labels == "stems" and text is None:
         raise ValueError('labels="stems" places the events\' text: pass text= as well')
     table = tables.frame(data)
@@ -211,6 +220,8 @@ def build(
         groups=groups,
         overlap=overlap,
         labels=labels,
+        stem_shape=stem_shape,
+        label_width=label_width,
         importance=_numbers(imp, importance or "") if imp is not None else None,
         hover=hover,
         select=select,
@@ -292,6 +303,8 @@ def layout(rec: EventsRecord, base: TimeBase | None, lane_index: Mapping[Any, in
         "lane_starts": put(encode(starts, "uint32")),
         "overlap": rec.overlap,
         "labels": rec.labels,
+        "stem_shape": rec.stem_shape,
+        "label_width": rec.label_width,
         "hover": rec.hover,
         "select": rec.select,
         "dropped": rec.dropped,

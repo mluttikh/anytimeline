@@ -4,7 +4,7 @@ layers added, so everything else (more layers, markers, settings) works as usual
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 from anytimeline.widget import Timeline
 
@@ -89,6 +89,8 @@ def story(
     palette: Mapping[Any, str] | Sequence[str] | None = None,
     symbol: str | None = None,
     importance: str | None = None,
+    stem_shape: Literal["straight", "curved"] = "straight",
+    label_width: float | None = None,
     tooltip: Sequence[str] | None = None,
     title: str = "",
     height: int = 420,
@@ -110,6 +112,10 @@ def story(
         symbol: A column to give the events' marks shapes by.
         importance: A numeric column: when the boxes do not fit, the more important keep
             theirs.
+        stem_shape: ``"straight"`` stems (each box over its event) or ``"curved"`` ones (a box
+            may move aside, its stem bending), which fits more boxes where events crowd.
+        label_width: The widest a box gets, in pixels; longer titles wrap onto two lines. By
+            default 16 × the text size; 0 for no limit.
         tooltip: Columns shown when hovering an event or its box.
         title: Shown above the timeline.
         height: Height in pixels.
@@ -125,6 +131,8 @@ def story(
         lane=lane,
         text=text,
         labels="stems",
+        stem_shape=stem_shape,
+        label_width=label_width,
         color=color,
         palette=palette,
         symbol=symbol,

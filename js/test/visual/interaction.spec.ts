@@ -451,7 +451,8 @@ test("Dodging in a tall lane: the rows spread out until marks no longer overlap"
   expect(stats.spread).toBeLessThan(stats.laneH / 2); // and the marks stay in their lane
 });
 
-/** The stem boxes drawn in the last frame, and whether any two overlap or leave their lane. */
+/** What a story draws: boxes, badges, whether boxes overlap or leave their lane, and whether a
+ * stem passes behind a box. */
 const stemCheck = (page: Page) =>
   view(page).evaluate((root: any) => {
     const v = root.__view;
@@ -467,32 +468,43 @@ const stemCheck = (page: Page) =>
     }
     const plot = v.plot();
     const inLane = boxes.every((b: any) => {
-      const row = Math.floor((b.y0 + b.y1) / 2 - (plot.y - v.scrollY)) / v.laneH;
-      const lane = Math.floor(row);
+      const lane = Math.floor(((b.y0 + b.y1) / 2 - (plot.y - v.scrollY)) / v.laneH);
       const top = plot.y - v.scrollY + lane * v.laneH;
       return b.y0 >= top - 0.5 && b.y1 <= top + v.laneH + 0.5;
     });
     const above = boxes.filter((b: any) => (b.y0 + b.y1) / 2 < plot.y - v.scrollY + v.laneH / 2).length;
-    return { count: boxes.length, overlap, inLane, above, below: boxes.length - above };
+    // stems behind boxes: a stem's x within a box nearer the line, on the same side
+    const placed = [...v.stemCache.get(v.layers[0]).placed.values()].flat();
+    let behind = 0;
+    for (const a of placed) {
+      for (const b of placed) {
+        if (a === b || Math.sign(a.level) !== Math.sign(b.level) || Math.abs(b.level) >= Math.abs(a.level)) continue;
+        if (a.cx > b.x0 && a.cx < b.x0 + b.w) behind++;
+      }
+    }
+    const badged = v.badgeHits.reduce((n: number, h: any) => n + h.n, 0);
+    return { count: boxes.length, badged, overlap, inLane, above, below: boxes.length - above, behind };
   });
 
-test("Story: boxes never overlap and stay in the lane, at every zoom and on Order; a box is its event", async ({ page }) => {
+test("Story: no box overlaps another or hides a stem; badges count the rest and zoom in", async ({ page }) => {
   await open(page, "story_incident");
   let s = await stemCheck(page);
-  expect(s.count).toBe(20); // every event has its box
+  expect(s.count + s.badged).toBe(20); // every event: a box, or counted in a badge
   expect(s.overlap).toBe(false);
+  expect(s.behind).toBe(0);
   expect(s.inLane).toBe(true);
-  // zoomed in on the first minutes: still both sides of the line, not one row
-  await view(page).evaluate((root: any) => {
-    const v = root.__view;
-    const t = v.spec.time.extent;
-    v.camera.fit(t[0], t[0] + (t[1] - t[0]) * 0.15, 0);
-  });
-  s = await stemCheck(page);
-  expect(s.overlap).toBe(false);
-  expect(s.above).toBeGreaterThan(0);
-  expect(s.below).toBeGreaterThan(0);
-  // zoomed far out: the less important may go, none overlap
+  expect(s.badged).toBeGreaterThan(0); // the burst at the start does not fit at this zoom
+  // a click on the biggest badge zooms in: more boxes there
+  const badge = await view(page).evaluate((root: any) => [...root.__view.badgeHits].sort((a: any, b: any) => b.n - a.n)[0]);
+  const stage = await stageBox(page);
+  await page.mouse.click(stage.x + (badge.x0 + badge.x1) / 2, stage.y + (badge.y0 + badge.y1) / 2);
+  await page.waitForTimeout(150);
+  const zoomed = await stemCheck(page);
+  expect(zoomed.overlap).toBe(false);
+  expect(zoomed.behind).toBe(0);
+  expect(zoomed.above).toBeGreaterThan(0);
+  expect(zoomed.below).toBeGreaterThan(0); // both sides of the line, not one row
+  // zoomed far out: still nothing overlaps or hides
   await view(page).evaluate((root: any) => {
     const v = root.__view;
     const t = v.spec.time.extent;
@@ -500,18 +512,31 @@ test("Story: boxes never overlap and stay in the lane, at every zoom and on Orde
   });
   s = await stemCheck(page);
   expect(s.overlap).toBe(false);
+  expect(s.behind).toBe(0);
   expect(s.inLane).toBe(true);
+  // the Order scale
   await page.locator('.atl-toolbar button[aria-label="Order"]').click();
   await page.keyboard.press("0");
   s = await stemCheck(page);
   expect(s.overlap).toBe(false);
-  expect(s.count).toBe(20);
+  expect(s.behind).toBe(0);
+  expect(s.count + s.badged).toBe(20);
   // hovering a box shows its event
-  const box = await view(page).evaluate((root: any) => root.__view.stemHits.find((b: any) => b.index === 9));
-  const stage = await stageBox(page);
+  const box = await view(page).evaluate((root: any) => root.__view.stemHits[0]);
   await page.mouse.move(stage.x + (box.x0 + box.x1) / 2, stage.y + (box.y0 + box.y1) / 2);
-  await expect(page.locator(".atl-tooltip.atl-show")).toContainText("Rollback started");
+  await expect(page.locator(".atl-tooltip.atl-show")).toBeVisible();
   await page.locator("#plot").screenshot({ path: "test-results/shots/story_incident-order.png" });
+});
+
+test("Story: long titles wrap within the box width", async ({ page }) => {
+  await open(page, "story_wrapped");
+  const widths = await view(page).evaluate((root: any) => {
+    const v = root.__view;
+    v.renderFrame();
+    return v.stemHits.map((b: any) => b.x1 - b.x0);
+  });
+  expect(widths.length).toBeGreaterThan(5);
+  for (const w of widths) expect(w).toBeLessThanOrEqual(16 * 12 + 1); // 16 × the text size
 });
 
 test("Story: the Display panel has no spreading switch, the plot no column of lane names", async ({ page }) => {

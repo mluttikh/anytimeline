@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 // Every scene with every backend: it draws (no errors, not blank), with the backend asked
 // for, and looks as stored. Scenes: `uv run python scripts/make_scenes.py`.
 
-const SCENES = ["service_time", "service_routes", "service_sequence", "order_overview", "gantt_plan", "schedule", "spans_events", "trace_waterfall", "trace_list", "service_health", "latency_series", "host_groups", "trace_groups", "trace_compare", "story_incident", "story_teams", "dense", "centuries", "nanoseconds", "order_only"];
+const SCENES = ["service_time", "service_routes", "service_sequence", "order_overview", "gantt_plan", "schedule", "spans_events", "trace_waterfall", "trace_list", "service_health", "latency_series", "host_groups", "trace_groups", "trace_compare", "story_incident", "story_curved", "story_wrapped", "story_teams", "dense", "centuries", "nanoseconds", "order_only"];
 const RENDERERS = ["webgpu", "webgl2", "canvas2d"] as const;
 
 async function open(page: Page, scene: string, renderer: string): Promise<string[]> {

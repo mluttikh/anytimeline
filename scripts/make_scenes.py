@@ -344,6 +344,50 @@ def main() -> None:
         ),
     )
     write(
+        "story_curved",
+        story(
+            inc,
+            "{time:%H:%M}\n{title}",
+            color="kind",
+            palette=kinds,
+            importance="importance",
+            stem_shape="curved",
+            title="Checkout incident (curved stems)",
+            height=460,
+        ),
+    )
+    releases = {
+        "time": np.array(
+            [
+                "2026-01-15",
+                "2026-02-02",
+                "2026-03-10",
+                "2026-03-24",
+                "2026-05-05",
+                "2026-06-30",
+                "2026-07-08",
+                "2026-09-01",
+                "2026-10-11",
+            ],
+            dtype="datetime64[D]",
+        ),
+        "title": [
+            "First prototype of event charts drawn with WebGPU in a notebook",
+            "Canvas 2D fallback for machines without a usable GPU",
+            "Order scale: events by rank, so bursts read as clearly as hours",
+            "Time zones and centuries on the axis",
+            "Gantt charts with dependencies, progress and milestones",
+            "Traces from OpenTelemetry as a waterfall that folds",
+            "States and values behind the events of each lane",
+            "Groups of lanes, linked plots and pages that work without Python",
+            "Story timelines with boxes on stems",
+        ],
+    }
+    write(
+        "story_wrapped",
+        story(releases, "{time:%b %-d}\n{title}", title="A release history", height=460),
+    )
+    write(
         "story_teams",
         story(
             inc,

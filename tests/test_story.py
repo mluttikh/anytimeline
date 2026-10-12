@@ -37,3 +37,17 @@ def test_incident_data():
     assert len(inc["time"]) == 20
     assert set(inc["kind"]) == {"deploy", "alert", "page", "action", "status"}
     assert (np.diff(inc["time"].astype(np.int64)) > 0).all()
+
+
+def test_stem_shape_and_label_width():
+    data = {"time": np.array([1.0, 2.0]), "title": ["a", "b"]}
+    plot = Timeline().events(data, text="title", labels="stems")
+    layer = plot._spec["layers"][0]
+    assert (layer["stem_shape"], layer["label_width"]) == ("straight", None)
+    plot = story(data, "title", stem_shape="curved", label_width=0)
+    layer = plot._spec["layers"][0]
+    assert (layer["stem_shape"], layer["label_width"]) == ("curved", 0)
+    with pytest.raises(ValueError, match="stem_shape"):
+        Timeline().events(data, text="title", labels="stems", stem_shape="wavy")  # ty: ignore[invalid-argument-type]
+    with pytest.raises(ValueError, match="label_width"):
+        Timeline().events(data, text="title", labels="stems", label_width=-5)
