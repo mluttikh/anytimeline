@@ -38,6 +38,12 @@ print(plot._embed_html())
 
 `font_size=` sets their size, with all other text ([how to](size.md)).
 
+## Labels in boxes on stems
+
+When the text matters more than the pattern, `labels="stems"` puts each event's text in a box
+above or below its lane's line, at as many levels as needed so none overlap, joined to the
+event by a line: a [story timeline](story.md).
+
 ## Tooltips
 
 Hovering over an event shows its lane, its time to the precision of your data, and its place

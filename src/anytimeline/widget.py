@@ -81,6 +81,8 @@ class Timeline(anywidget.AnyWidget):
         lane_order: Lanes to show first, top to bottom.
         sort: Lane order: ``"name"`` (natural sort), ``"first"`` / ``"last"`` (time of a
             lane's first / last event) or ``"count"`` (most events first).
+        lane_names: Show the lanes' names left of the plot (False: a plot of one lane, a
+            story, without the column of names).
         group_order: Groups (layers' ``group=``) to show first, top to bottom; the others
             follow in natural order.
         align: ``"time"``: all at their time; ``"start"``: each group's times from its first
@@ -150,6 +152,7 @@ class Timeline(anywidget.AnyWidget):
         sort: LaneSort | None = None,
         group_order: Sequence[Any] | None = None,
         align: Literal["time", "start"] = "time",
+        lane_names: bool = True,
         renderer: Literal["auto", "webgpu", "webgl2", "canvas2d"] = "auto",
         tool: Literal["pan", "zoom", "select"] = "pan",
         font_size: int = 12,
@@ -162,6 +165,7 @@ class Timeline(anywidget.AnyWidget):
         if align not in ("time", "start"):
             raise ValueError(f"align must be 'time' or 'start', got {align!r}")
         self._group_order = list(group_order) if group_order is not None else None
+        self._lane_names = lane_names
         self._align = align
         self._layers: dict[str, ev.EventsRecord | iv.IntervalsRecord | vl.ValuesRecord] = {}
         self._laid: dict[str, ev.Layout | iv.Layout | vl.Layout] = {}
@@ -214,6 +218,9 @@ class Timeline(anywidget.AnyWidget):
         tooltip: Sequence[str] | None = None,
         route: ev.Route | str | None = None,
         overlap: Literal["dodge", "overlay"] = "dodge",
+        labels: Literal["beside", "stems"] = "beside",
+        stem_shape: Literal["straight", "curved"] = "straight",
+        label_width: float | None = None,
         importance: str | None = None,
         group: str | None = None,
         hover: bool = True,
@@ -247,6 +254,18 @@ class Timeline(anywidget.AnyWidget):
                 lines in the order their events happened.
             overlap: ``"dodge"``: events that would overlap are spread over sub-rows of the
                 lane; ``"overlay"``: drawn on top of each other.
+            labels: Where the text (``text=``) goes. ``"beside"``: right of each mark, left out
+                where it would overlap another. ``"stems"``: in boxes above and below the
+                lane's line, at as many levels as needed so no two overlap, each joined to its
+                event by a line (a story timeline: few events, the text matters); the events
+                stay on the line. A line break (``"{time:%H:%M}\\n{title}"``) gives a box
+                two lines.
+            stem_shape: With ``labels="stems"``: ``"straight"`` stems (each box over its
+                event) or ``"curved"`` ones (a box may move aside, its stem bending), which
+                fits more boxes where events crowd. No stem ever passes behind a box.
+            label_width: With ``labels="stems"``: the widest a box gets, in pixels; longer
+                titles wrap onto two lines (then end in "…"). By default 16 × the text size;
+                0 for no limit (one line, any width).
             importance: A numeric column; where labels (`text=`) would overlap, the more
                 important events keep theirs.
             group: A column of groups (a host, a region, a day): each group gets a header
@@ -274,6 +293,9 @@ class Timeline(anywidget.AnyWidget):
             tooltip=tooltip,
             route=route,
             overlap=overlap,
+            labels=labels,
+            stem_shape=stem_shape,
+            label_width=label_width,
             importance=importance,
             time_unit=self._time_unit,
             hover=hover,
@@ -842,6 +864,7 @@ class Timeline(anywidget.AnyWidget):
                 "names": lane_plan.names,
                 "title": lane_plan.title,
                 "tree": lane_plan.tree,
+                "show_names": self._lane_names,
             },
             "layers": [lay.spec for lay in laid.values()],
             "sequence": sequence,

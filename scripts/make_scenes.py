@@ -16,8 +16,15 @@ from pathlib import Path
 
 import numpy as np
 
-from anytimeline import Route, Timeline, gantt, save_html
-from anytimeline.synthetic import instants, service_health, service_log, service_metrics, traces
+from anytimeline import Route, Timeline, gantt, save_html, story
+from anytimeline.synthetic import (
+    incident,
+    instants,
+    service_health,
+    service_log,
+    service_metrics,
+    traces,
+)
 
 OUT = Path(__file__).resolve().parent.parent / "js" / "test" / "visual" / "scenes"
 
@@ -313,6 +320,86 @@ def main() -> None:
     top.zoom_to(np.datetime64("2026-10-12T08:20"), np.datetime64("2026-10-12T08:50"))
     bottom.zoom_to(np.datetime64("2026-10-12T08:20"), np.datetime64("2026-10-12T08:50"))
     save_html(OUT / "saved_linked.html", top, bottom)
+
+    # story timelines: boxes on stems above and below the line
+    inc = incident()
+    kinds = {
+        "deploy": "#4c78a8",
+        "alert": "#e45756",
+        "page": "#f58518",
+        "action": "#54a24b",
+        "status": "#9d755d",
+    }
+    write(
+        "story_incident",
+        story(
+            inc,
+            "{time:%H:%M}\n{title}",
+            color="kind",
+            palette=kinds,
+            importance="importance",
+            tooltip=["team"],
+            title="Checkout incident",
+            height=460,
+        ),
+    )
+    write(
+        "story_curved",
+        story(
+            inc,
+            "{time:%H:%M}\n{title}",
+            color="kind",
+            palette=kinds,
+            importance="importance",
+            stem_shape="curved",
+            title="Checkout incident (curved stems)",
+            height=460,
+        ),
+    )
+    releases = {
+        "time": np.array(
+            [
+                "2026-01-15",
+                "2026-02-02",
+                "2026-03-10",
+                "2026-03-24",
+                "2026-05-05",
+                "2026-06-30",
+                "2026-07-08",
+                "2026-09-01",
+                "2026-10-11",
+            ],
+            dtype="datetime64[D]",
+        ),
+        "title": [
+            "First prototype of event charts drawn with WebGPU in a notebook",
+            "Canvas 2D fallback for machines without a usable GPU",
+            "Order scale: events by rank, so bursts read as clearly as hours",
+            "Time zones and centuries on the axis",
+            "Gantt charts with dependencies, progress and milestones",
+            "Traces from OpenTelemetry as a waterfall that folds",
+            "States and values behind the events of each lane",
+            "Groups of lanes, linked plots and pages that work without Python",
+            "Story timelines with boxes on stems",
+        ],
+    }
+    write(
+        "story_wrapped",
+        story(releases, "{time:%b %-d}\n{title}", title="A release history", height=460),
+    )
+    write(
+        "story_teams",
+        story(
+            inc,
+            "{time:%H:%M}\n{title}",
+            lane="team",
+            color="kind",
+            palette=kinds,
+            importance="importance",
+            title="Checkout incident by team",
+            height=640,
+        ),
+    )
 
     # a page of its own (save_html), for the test that opens it from disk
     saved = Timeline(title="Saved traces")

@@ -15,6 +15,7 @@ import { FLAG_SELECTED, type FrameDraw, type MarkLayerDraw, type Renderer, type 
 import { createRenderer } from "./renderers/select";
 import { type Align, compatible, convert, frameOf, join, leave, type LinkFrame, type LinkPeer, type LinkSpec, others } from "./link";
 import { download, fileName, legendPainter } from "./snapshot";
+import { clusterHidden, levelOffset, levelsFor, placeStems, type StemItem, type StemPlaced, type StemShape, wrapText } from "./stems";
 import { decodeValues, ValueLayer, type ValueView } from "./values";
 import { decodeEvents, type EventsData, fillSolid, lowerBound, parseHex, specBufferIds, upperBound } from "./scene";
 import { TimeAxis, UNIT_NS, fmtNumber } from "./time";
@@ -832,6 +833,7 @@ export class TimelineView {
   }
 
   private measureGutter(): number {
+    if (this.spec?.lanes.show_names === false) return 12;
     const names = this.spec?.lanes.names ?? [];
     const tree = this.spec?.lanes.tree;
     const ctx = this.front.getContext("2d")!;
@@ -1053,6 +1055,13 @@ export class TimelineView {
       backCtx.lineTo(x, plot.y + plot.h);
     }
     backCtx.stroke();
+    if (this.layers.some(isStems)) {
+      // a story's line through the middle of each lane
+      backCtx.fillStyle = this.theme.muted;
+      backCtx.globalAlpha = 0.5;
+      for (let r = l0; r <= l1; r++) backCtx.fillRect(plot.x, Math.round(laneTop + (r + 0.5) * this.laneH) - 1, plot.w, 2);
+      backCtx.globalAlpha = 1;
+    }
     if (this.values.length) {
       const vv = this.valueView(plot);
       for (const v of this.values) v.draw(backCtx, vv, l0, l1);
@@ -1088,7 +1097,7 @@ export class TimelineView {
     for (const l of this.layers) {
       this.cull(l, l0, l1, plot.w);
       inView += l.draw.visibleCount;
-      if (l.data.spec.overlap === "dodge" && this.dodgeOn) this.dodgeLayer(l, l0, l1);
+      if (l.data.spec.overlap === "dodge" && this.dodgeOn && !isStems(l)) this.dodgeLayer(l, l0, l1);
       const d = l.draw;
       d.offset = this.camera.left - this.base;
       d.scale = this.camera.scale;
@@ -1105,6 +1114,7 @@ export class TimelineView {
     this.drawAxis(frontCtx, plot, ticks);
     this.drawLanes(frontCtx, plot, laneTop, l0, l1);
     this.drawBarText(frontCtx, bv, l0, l1, inView <= LABEL_BUDGET);
+    this.drawStems(frontCtx, plot, laneTop, l0, l1);
     if (inView <= LABEL_BUDGET) this.drawLabels(frontCtx, plot, laneTop);
     this.drawMarkers(frontCtx, plot);
     this.drawValueScales(frontCtx, plot, l0, l1);
@@ -1289,6 +1299,7 @@ export class TimelineView {
   }
 
   private drawLanes(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, laneTop: number, l0: number, l1: number): void {
+    if (this.spec!.lanes.show_names === false) return;
     const names = this.spec!.lanes.names;
     ctx.save();
     ctx.beginPath();
@@ -1380,6 +1391,7 @@ export class TimelineView {
     ctx.lineWidth = 3;
     ctx.lineJoin = "round";
     for (const l of this.layers) {
+      if (isStems(l) && this.stemsFit.get(l) !== false) continue; // in boxes on stems
       const text = l.data.text;
       if (!text) continue;
       const vis = l.draw.visible;
@@ -1501,6 +1513,308 @@ export class TimelineView {
       }
     }
     ctx.restore();
+  }
+
+  /** Boxes of stem labels as drawn in the last frame (for picking). */
+  private stemHits: { layer: number; index: number; x0: number; y0: number; x1: number; y1: number }[] = [];
+  /** Badges ("+N") of events without a box, as drawn in the last frame: a click zooms in. */
+  private badgeHits: { x0: number; y0: number; x1: number; y1: number; a: number; b: number; n: number }[] = [];
+  /** Per stems layer: whether its lanes have room for a level of boxes (else its text goes
+   * beside the marks). */
+  private stemsFit = new WeakMap<Layer, boolean>();
+  /** Per stems layer: the boxes laid out for a view (kept while only panning). */
+  private stemCache = new WeakMap<
+    Layer,
+    {
+      key: string;
+      left: number;
+      a: number;
+      b: number;
+      boxH: number;
+      start: number;
+      placed: Map<number, StemPlaced[]>;
+      /** Each event's box lines (wrapped), and whether a line is the box's head (the time). */
+      rows: Map<number, { text: string; head: boolean }[]>;
+      /** Per badge (its negative index): the events it stands for, their span (x units), and
+       * where they are (row; px at layout). */
+      clusters: Map<number, { n: number; a: number; b: number; row: number; px0: number; px1: number }>;
+      /** Badges with no place above or below: drawn on the line, around their events. */
+      onLine: number[];
+    }
+  >();
+
+  /**
+   * The text of stems layers in boxes above and below their lanes' lines, joined to the events
+   * by stems in their colour; no stem passes behind a box. Laid out again when the zoom, lane
+   * height or text changes, over three view widths so panning keeps the boxes where they are.
+   * Events without room for a box are counted in badges ("+N") that zoom in when clicked.
+   */
+  private drawStems(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, laneTop: number, l0: number, l1: number): void {
+    this.stemHits = [];
+    this.badgeHits = [];
+    const cam = this.camera;
+    const bg = parseHex(this.theme.bg);
+    const ink = parseHex(this.theme.text);
+    this.layers.forEach((l, li) => {
+      if (!isStems(l) || !l.data.text) return;
+      const text = l.data.text;
+      const spec = l.data.spec;
+      const shape: StemShape = spec.stem_shape === "curved" ? "curved" : "straight";
+      const lineH = Math.round(this.fs * 1.3);
+      const padX = 9;
+      const padY = 5;
+      const gap = 7;
+      let markR = 2;
+      for (let i = 0; i < Math.min(l.data.count, 1000); i++) markR = Math.max(markR, l.data.size[i] / 2);
+      // curved stems bend in the band between the line and the first level: give it room
+      const start = markR + (shape === "curved" ? 26 : 12);
+      const titleFont = `500 ${Math.max(6, this.fs - 1)}px ${fontFamily}`;
+      const timeFont = `500 ${Math.max(6, this.fs - 2.5)}px ${fontFamily}`;
+      const badgeFont = `600 ${Math.max(6, this.fs - 2)}px ${fontFamily}`;
+      // the widest a box gets: label_width, or 16 × the text size; 0: no limit
+      const maxW = spec.label_width === 0 ? Infinity : spec.label_width ?? 16 * this.fs;
+      const src = this.xsrc(l);
+      const key = [cam.scale, this.laneH, this.fs, this.xscale, shape, maxW, this.laneAt.length, l0, l1].join(":");
+      let cache = this.stemCache.get(l);
+      if (!cache || cache.key !== key || cam.left < cache.a || cam.right > cache.b) {
+        const span = cam.span;
+        const a = cam.left - span;
+        const b = cam.right + span;
+        const rows = new Map<number, { text: string; head: boolean }[]>();
+        const perRow = new Map<number, StemItem[]>();
+        const starts = l.data.laneStarts;
+        const measure = (font: string) => (t: string) => {
+          ctx.font = font;
+          return ctx.measureText(t).width;
+        };
+        let most = 1;
+        for (let r = Math.max(0, l0 - 1); r <= l1 + 1 && r < this.laneAt.length; r++) {
+          const lane = this.laneAt[r];
+          if (lane + 1 >= starts.length) continue;
+          const i0 = lowerBound(src, a, starts[lane], starts[lane + 1]);
+          const i1 = upperBound(src, b, i0, starts[lane + 1]);
+          const items: StemItem[] = [];
+          for (let i = i0; i < i1; i++) {
+            if (!text[i]) continue;
+            // a first line of two or more is the box's head (e.g. the time); the rest is the
+            // title, wrapped to at most two lines within the box's width
+            const parts = text[i].split("\n");
+            const head = parts.length > 1 ? parts[0] : null;
+            const body = (head === null ? parts : parts.slice(1)).join(" ");
+            const inner = maxW - 2 * padX;
+            const lines = [
+              ...(head === null ? [] : wrapText(head, inner, 1, measure(timeFont)).map((t) => ({ text: t, head: true }))),
+              ...wrapText(body, inner, 2, measure(titleFont)).map((t) => ({ text: t, head: false })),
+            ];
+            rows.set(i, lines);
+            most = Math.max(most, lines.length);
+            const w = Math.max(...lines.map((ln) => measure(ln.head ? timeFont : titleFont)(ln.text)));
+            items.push({ index: i, x: (src[i] - cam.left) * cam.scale, w: Math.ceil(w) + 2 * padX, importance: l.data.importance?.[i] ?? 0 });
+          }
+          perRow.set(r, items);
+        }
+        // one height for all boxes of the layer, so levels are rows
+        const boxH = most * lineH + 2 * padY;
+        const levels = levelsFor(this.laneH, boxH, gap, start);
+        const placed = new Map<number, StemPlaced[]>();
+        const clusters = new Map<number, { n: number; a: number; b: number; row: number; px0: number; px1: number }>();
+        const onLine: number[] = [];
+        if (levels > 0) {
+          // boxes may reach past the view (laid out wider than it), not past the data
+          const ext = this.xscale === "sequence" ? [-0.5, (this.seqTimes?.length ?? 1) - 0.5] : this.spec!.time.extent;
+          const left = (Math.max(a, ext[0]) - cam.left) * cam.scale;
+          const right = Math.max(left, (Math.min(b, ext[1]) - cam.left) * cam.scale);
+          const space = { levels, gap, inset: 12, left, right, shape };
+          let badgeIndex = -1;
+          for (const [r, items] of perRow) {
+            const first = placeStems(items, space);
+            const boxed = new Set(first.map((p) => p.index));
+            const hidden = items.filter((it) => !boxed.has(it.index));
+            if (!hidden.length) {
+              placed.set(r, first);
+              continue;
+            }
+            // a badge per group of events without a box, placed after the boxes
+            const badges: StemItem[] = [];
+            const boxedXs = items.filter((it) => boxed.has(it.index)).map((it) => it.x);
+            for (const c of clusterHidden(hidden, 48, boxedXs)) {
+              const index = badgeIndex--;
+              const label = `+${c.indices.length}`;
+              const w = Math.ceil(measure(badgeFont)(label)) + 16;
+              badges.push({ index, x: (c.x0 + c.x1) / 2, w, importance: -Infinity, badge: true });
+              const xs = c.indices.map((i) => src[i]);
+              clusters.set(index, { n: c.indices.length, a: Math.min(...xs), b: Math.max(...xs), row: r, px0: c.x0, px1: c.x1 });
+            }
+            const all = placeStems([...items, ...badges], space);
+            placed.set(r, all);
+            // badges that found no place go on the line, around their events
+            const put = new Set(all.map((p) => p.index));
+            for (const bdg of badges) if (!put.has(bdg.index)) onLine.push(bdg.index);
+          }
+        }
+        this.stemsFit.set(l, levels > 0);
+        cache = { key, left: cam.left, a, b, boxH, start, placed, rows, clusters, onLine };
+        this.stemCache.set(l, cache);
+      }
+      if (!this.stemsFit.get(l)) return; // too little room: the text goes beside the marks
+      const { boxH } = cache;
+      const shift = (cache.left - cam.left) * cam.scale;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(plot.x, plot.y, plot.w, plot.h);
+      ctx.clip();
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "left";
+      const sf = l.draw.sf.data;
+      const color = l.data.color;
+      const muted = parseHex(this.theme.muted);
+      const rgb = (i: number): number[] => (i < 0 ? muted : [color[4 * i], color[4 * i + 1], color[4 * i + 2]]);
+      const css = (c: number[], alpha = 1) => `rgba(${c.map((v) => Math.round(v)).join(",")},${alpha})`;
+      const mix = (x: number[], y: number[], t: number) => x.map((v, k) => v + (y[k] - v) * t);
+      const shown: { p: StemPlaced; cy: number; x0: number; top: number }[] = [];
+      for (const [r, boxes] of cache.placed) {
+        if (r < l0 || r > l1) continue;
+        const cy = laneTop + (r + 0.5) * this.laneH;
+        for (const p of boxes) {
+          const x0 = plot.x + p.x0 + shift;
+          if (x0 > plot.x + plot.w || x0 + p.w < plot.x) continue;
+          shown.push({ p, cy, x0, top: cy + levelOffset(p.level, boxH, gap, cache.start) - boxH / 2 });
+        }
+      }
+      // the stems first, in their event's colour (a badge's dashed, to the middle of its
+      // events); no stem passes behind a box (corridors)
+      ctx.lineCap = "round";
+      for (const { p, cy, top } of shown) {
+        const up = p.level > 0;
+        const badge = p.index < 0;
+        const x = plot.x + p.x + shift;
+        const cx = plot.x + p.cx + shift;
+        const y0 = cy + (up ? -markR - 2 : markR + 2);
+        const badgeH = lineH + 4;
+        const y1 = badge ? top + boxH / 2 + (up ? badgeH / 2 : -badgeH / 2) : up ? top + boxH : top;
+        ctx.strokeStyle = css(rgb(p.index), badge ? 0.7 : 0.85);
+        ctx.lineWidth = badge ? 1 : 1.4;
+        ctx.setLineDash(badge ? [2, 3] : []);
+        ctx.beginPath();
+        ctx.moveTo(x, y0);
+        if (Math.abs(cx - x) > 0.5) {
+          // an S-curve in the band next to the line, then straight up (or down) to the box
+          const bend = cy + (up ? -cache.start + 4 : cache.start - 4);
+          const mid = (y0 + bend) / 2;
+          ctx.bezierCurveTo(x, mid, cx, mid, cx, bend);
+        }
+        ctx.lineTo(cx, y1);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      // a ring around each event that has a box, so the dot stands off the line
+      ctx.strokeStyle = this.theme.bg;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (const { p, cy } of shown) {
+        if (p.index < 0) continue;
+        const x = plot.x + p.x + shift;
+        ctx.moveTo(x + markR + 1, cy);
+        ctx.arc(x, cy, markR + 1, 0, Math.PI * 2);
+      }
+      ctx.stroke();
+      // the boxes: tinted with their event's colour, a soft shadow, the time in that colour
+      for (const { p, x0, top } of shown) {
+        const i = p.index;
+        if (i < 0) {
+          // a badge: "+N" events without a box here; a click zooms in on them
+          const c = cache.clusters.get(i);
+          if (!c) continue;
+          const badgeH = lineH + 4;
+          const by = Math.round(top + boxH / 2 - badgeH / 2) + 0.5;
+          const bx = Math.round(x0) + 0.5;
+          ctx.beginPath();
+          if (ctx.roundRect) ctx.roundRect(bx, by, p.w, badgeH, badgeH / 2);
+          else ctx.rect(bx, by, p.w, badgeH);
+          ctx.fillStyle = css(mix(bg, muted, 0.12));
+          ctx.fill();
+          ctx.strokeStyle = css(mix(bg, muted, 0.5));
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.font = badgeFont;
+          ctx.fillStyle = this.theme.muted;
+          ctx.textAlign = "center";
+          ctx.fillText(`+${c.n}`, x0 + p.w / 2, by + badgeH / 2);
+          ctx.textAlign = "left";
+          this.badgeHits.push({ x0, y0: by, x1: x0 + p.w, y1: by + badgeH, a: c.a, b: c.b, n: c.n });
+          continue;
+        }
+        const c = rgb(i);
+        const selected = (sf[4 * i + 1] & FLAG_SELECTED) !== 0;
+        const hovered = this.hovered && !this.hovered.bar && !this.hovered.val && this.hovered.layer === li && this.hovered.index === i;
+        const bx = Math.round(x0) + 0.5;
+        const by = Math.round(top) + 0.5;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(bx, by, p.w, boxH, 6);
+        else ctx.rect(bx, by, p.w, boxH);
+        ctx.save();
+        ctx.shadowColor = "rgba(15, 23, 42, 0.14)";
+        ctx.shadowBlur = hovered ? 10 : 6;
+        ctx.shadowOffsetY = 1.5;
+        ctx.fillStyle = css(mix(bg, c, 0.09));
+        ctx.fill();
+        ctx.restore();
+        ctx.strokeStyle = selected ? this.theme.select : hovered ? css(mix(c, ink, 0.3)) : css(mix(bg, c, 0.45));
+        ctx.lineWidth = selected ? 2 : 1;
+        ctx.stroke();
+        (cache.rows.get(i) ?? []).forEach((line, k) => {
+          ctx.font = line.head ? timeFont : titleFont;
+          ctx.fillStyle = line.head ? css(mix(c, ink, 0.35)) : this.theme.text;
+          ctx.fillText(line.text, x0 + padX, top + padY + lineH * (k + 0.5));
+        });
+        this.stemHits.push({ layer: li, index: i, x0, y0: top, x1: x0 + p.w, y1: top + boxH });
+      }
+      // badges on the line: a capsule around their events, "+N" at its right end
+      for (const index of cache.onLine) {
+        const c = cache.clusters.get(index);
+        if (!c || c.row < l0 || c.row > l1) continue;
+        const cy = laneTop + (c.row + 0.5) * this.laneH;
+        ctx.font = badgeFont;
+        const label = `+${c.n}`;
+        const tw = ctx.measureText(label).width;
+        const h = Math.max(2 * markR + 8, this.fs + 4);
+        const x0 = plot.x + c.px0 + shift - markR - 5;
+        const x1 = plot.x + c.px1 + shift + markR + 7 + tw + 6;
+        if (x1 < plot.x || x0 > plot.x + plot.w) continue;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(Math.round(x0) + 0.5, Math.round(cy - h / 2) + 0.5, x1 - x0, h, h / 2);
+        else ctx.rect(x0, cy - h / 2, x1 - x0, h);
+        ctx.strokeStyle = css(mix(bg, muted, 0.6));
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = this.theme.muted;
+        ctx.textAlign = "right";
+        ctx.fillText(label, x1 - 6, cy + 0.5);
+        ctx.textAlign = "left";
+        this.badgeHits.push({ x0, y0: cy - h / 2, x1, y1: cy + h / 2, a: c.a, b: c.b, n: c.n });
+      }
+      ctx.restore();
+    });
+  }
+
+  /** The badge under a point (CSS px in the stage), or null. */
+  private badgeAt(p: { x: number; y: number }): { a: number; b: number; n: number } | null {
+    for (const h of this.badgeHits) if (p.x >= h.x0 && p.x <= h.x1 && p.y >= h.y0 && p.y <= h.y1) return h;
+    return null;
+  }
+
+  /** Zoom in on the events a badge stands for, far enough that they get boxes (about 110 px
+   * of time per event, at most most of the plot). */
+  private zoomToBadge(h: { a: number; b: number; n: number }): void {
+    const plot = this.plot();
+    const want = Math.min(plot.w * 0.7, Math.max(240, h.n * 110));
+    const center = (h.a + h.b) / 2;
+    const now = this.camera.span;
+    const spanPx = (h.b - h.a) * this.camera.scale;
+    const span = spanPx > 1 ? ((h.b - h.a) * plot.w) / want : now / 4;
+    this.pushHistory();
+    this.camera.fit(center - span / 2, center + span / 2, 0);
+    this.afterMove();
   }
 
   /** What the values layers need of the frame. */
@@ -1683,6 +1997,11 @@ export class TimelineView {
     if (!this.spec) return null;
     const plot = this.plot();
     if (px < plot.x || px > plot.x + plot.w || py < plot.y || py > plot.y + plot.h) return null;
+    // a story's box stands for its event
+    for (let k = this.stemHits.length - 1; k >= 0; k--) {
+      const b = this.stemHits[k];
+      if (px >= b.x0 && px <= b.x1 && py >= b.y0 && py <= b.y1) return { layer: b.layer, index: b.index };
+    }
     const laneTop = plot.y - this.scrollY;
     const at = Math.floor((py - laneTop) / this.laneH);
     let best: { layer: number; index: number } | null = null;
@@ -1779,7 +2098,7 @@ export class TimelineView {
       if (d.text?.[i]) rows.push(["text", d.text[i]]);
     } else {
       const l = this.layers[h.layer];
-      rows.push([this.spec.lanes.title || "lane", this.spec.lanes.names[l.data.lane[h.index]] ?? ""]);
+      if (this.spec.lanes.show_names !== false) rows.push([this.spec.lanes.title || "lane", this.spec.lanes.names[l.data.lane[h.index]] ?? ""]);
       if (l.data.spec.has_time) rows.push(["time", this.axis.formatFull(l.data.time[h.index])]);
       rows.push(["order", `#${fmtNumber(l.data.rank[h.index] + 1)}`]);
       if (l.data.text?.[h.index]) rows.push(["text", l.data.text[h.index]]);
@@ -1853,7 +2172,7 @@ export class TimelineView {
       fontSize: this.fs,
       markScale: this.markScale,
       dodge: this.dodgeOn,
-      dodges: this.layers.some((l) => l.data.spec.overlap === "dodge"),
+      dodges: this.layers.some((l) => l.data.spec.overlap === "dodge" && !isStems(l)),
     });
   }
 
@@ -2011,7 +2330,7 @@ export class TimelineView {
       if (this.hoverEnabled) this.setHovered(this.pick(p.x, p.y));
       const plotNow = this.plot();
       this.shareCursor(p.x >= plotNow.x && p.x <= plotNow.x + plotNow.w ? p.x : null);
-      this.stage.classList.toggle("atl-foldable", this.foldableAt(p));
+      this.stage.classList.toggle("atl-foldable", this.foldableAt(p) || !!this.badgeAt(p));
       if (this.hovered) this.placeTooltip();
     });
 
@@ -2083,6 +2402,11 @@ export class TimelineView {
       return;
     }
     if (mode === "axis" || !inPlot) return;
+    const badge = this.badgeAt(p);
+    if (badge) {
+      this.zoomToBadge(badge);
+      return;
+    }
     const selecting = this.selectionMode !== "none";
     const hit = selecting ? this.pick(p.x, p.y) : null;
     const select = (m: SelectMode) => {
@@ -2539,4 +2863,9 @@ function rowsOf(lane: Uint32Array, slot: Int32Array): Float32Array {
 function treeKey(spec: SceneSpec): string {
   const t = spec.lanes.tree;
   return t ? `${spec.lanes.names.length}:${t.depth.length}:${spec.lanes.names.slice(0, 50).join("\u0001")}` : "";
+}
+
+/** Whether an events layer puts its text in boxes on stems (a story timeline). */
+function isStems(l: Layer): boolean {
+  return l.data.spec.labels === "stems";
 }

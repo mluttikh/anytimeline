@@ -55,6 +55,12 @@ export interface EventsLayerSpec {
   rank: BufferRef;
   has_time: boolean;
   overlap: "dodge" | "overlay";
+  /** Where the text goes: beside each mark, or in boxes on stems above and below the line. */
+  labels?: "beside" | "stems";
+  /** Stem labels: straight stems (the box over its event), or curved (a box may move aside). */
+  stem_shape?: "straight" | "curved";
+  /** Stem labels: the widest a box gets (px); null: 16 × the text size; 0: no limit. */
+  label_width?: number | null;
   hover: boolean;
   select: boolean;
   dropped: number;
@@ -155,7 +161,8 @@ export interface LaneTree {
 export interface SceneSpec {
   version: number;
   time: TimeSpec;
-  lanes: { names: string[]; title: string; tree?: LaneTree | null };
+  /** show_names false: no column of lane names (a story of one lane). */
+  lanes: { names: string[]; title: string; tree?: LaneTree | null; show_names?: boolean };
   layers: LayerSpec[];
   sequence: { times: BufferRef; count: number } | null;
   markers?: MarkerSpec[];

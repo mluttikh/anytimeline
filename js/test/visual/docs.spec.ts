@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 // The built documentation (uv run python scripts/build_docs.py): its live plots draw.
 const site = resolve(dirname(fileURLToPath(import.meta.url)), "../../../site");
-const pages = ["index.html", "tutorials/first-chart.html", "tutorials/order.html", "how-to/time.html", "how-to/large.html", "how-to/gantt.html", "how-to/intervals.html", "how-to/traces.html", "how-to/states-values.html", "how-to/groups.html"];
+const pages = ["index.html", "tutorials/first-chart.html", "tutorials/order.html", "how-to/time.html", "how-to/large.html", "how-to/gantt.html", "how-to/intervals.html", "how-to/traces.html", "how-to/states-values.html", "how-to/groups.html", "how-to/story.html"];
 
 for (const page of pages) {
   test(`docs: ${page}`, async ({ page: p }) => {

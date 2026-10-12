@@ -6,6 +6,7 @@ import { TimeAxis, formatDuration, localToUtc, niceStep, offsetMs } from "../src
 import type { TimeSpec } from "../src/core/types";
 import { findGaps } from "../src/core/view";
 import { compatible, convert, type LinkFrame } from "../src/core/link";
+import { clusterHidden, levelOffset, levelOrder, levelsFor, placeStems, type StemPlaced, wrapText } from "../src/core/stems";
 
 const NS = 1_000_000_000n;
 
@@ -190,5 +191,108 @@ describe("dodging: the spacing of sub-rows", () => {
     expect(spacing(30, 8, 2)).toBe(8 * MIN_STEP); // a normal lane: as before
     expect(spacing(30, 8, 40)).toBe(8 * MIN_STEP);
     expect(spacing(30, 2, 1)).toBe(3); // a tiny mark: at least 2.5 px, at most a mark + 1
+  });
+});
+
+describe("story timelines: stem labels", () => {
+  const space = { levels: 3, gap: 6, inset: 8, left: 0, right: 1000, shape: "straight" as const };
+  /** Boxes of a level that overlap, and stems that pass behind a box nearer the line. */
+  const problems = (placed: StemPlaced[]) => {
+    let overlaps = 0;
+    let behind = 0;
+    for (const a of placed) {
+      for (const b of placed) {
+        if (a === b) continue;
+        if (a.level === b.level && a.x0 < b.x0 + b.w && b.x0 < a.x0 + a.w) overlaps++;
+        const sameSide = Math.sign(a.level) === Math.sign(b.level);
+        if (sameSide && Math.abs(b.level) < Math.abs(a.level) && a.cx > b.x0 && a.cx < b.x0 + b.w) behind++;
+      }
+    }
+    return { overlaps, behind };
+  };
+  const random = (n: number, seed: number) => {
+    let s = seed;
+    const rnd = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648);
+    return Array.from({ length: n }, (_, index) => ({ index, x: rnd() * 1000, w: 60 + rnd() * 120, importance: Math.floor(rnd() * 3) }));
+  };
+
+  it("alternates levels above and below", () => {
+    expect(levelOrder(2)).toEqual([1, -1, 2, -2]);
+    const placed = placeStems([0, 20, 40, 60].map((x, index) => ({ index, x: 100 + x, w: 100, importance: 0 })), space);
+    expect(placed.map((p) => p.level).slice(0, 2)).toEqual([1, -1]);
+  });
+
+  it("never overlaps boxes, and no stem passes behind a box (straight and curved)", () => {
+    for (const shape of ["straight", "curved"] as const) {
+      for (const seed of [1, 2, 3, 4, 5]) {
+        const placed = placeStems(random(40, seed), { ...space, shape });
+        expect(problems(placed)).toEqual({ overlaps: 0, behind: 0 });
+        for (const p of placed) {
+          if (shape === "straight") expect(p.cx).toBe(p.x); // the box is over its event
+          expect(p.cx).toBeGreaterThanOrEqual(p.x0);
+          expect(p.cx).toBeLessThanOrEqual(p.x0 + p.w);
+        }
+      }
+    }
+  });
+
+  it("curved stems fit more boxes where events crowd", () => {
+    const crowd = random(40, 7).map((it) => ({ ...it, x: 400 + it.x / 5 }));
+    const straight = placeStems(crowd, space).length;
+    const curved = placeStems(crowd, { ...space, shape: "curved" }).length;
+    expect(curved).toBeGreaterThan(straight);
+  });
+
+  it("places the important first", () => {
+    const crowded = [0, 10, 20].map((x, index) => ({ index, x: 300 + x, w: 80, importance: index === 2 ? 3 : 1 }));
+    const placed = placeStems(crowded, { ...space, levels: 1 });
+    expect(placed.find((p) => p.index === 2)?.level).toBe(1);
+  });
+
+  it("an event at the edge keeps its box, within a stem's margin of the bounds", () => {
+    const [first] = placeStems([{ index: 0, x: 0, w: 120, importance: 0 }], space);
+    expect(first.x0).toBeGreaterThanOrEqual(-7);
+    expect(first.cx).toBe(0);
+    const [last] = placeStems([{ index: 0, x: 1000, w: 120, importance: 0 }], space);
+    expect(last.x0 + last.w).toBeLessThanOrEqual(1007);
+  });
+
+  it("fits as many levels as the lane holds", () => {
+    expect(levelsFor(460, 38, 6, 14)).toBe(4); // (230 − 3 − 14 + 6) / 44
+    expect(levelsFor(40, 38, 6, 14)).toBe(0);
+    expect(levelOffset(1, 38, 6, 14)).toBe(-33);
+    expect(levelOffset(-2, 38, 6, 14)).toBe(77);
+  });
+});
+
+describe("story timelines: wrapping and badges", () => {
+  const measure = (t: string) => t.length * 7; // 7 px a character
+
+  it("keeps a title that fits on one line", () => {
+    expect(wrapText("Rollback started", 200, 2, measure)).toEqual(["Rollback started"]);
+    expect(wrapText("Rollback started", Infinity, 2, measure)).toEqual(["Rollback started"]);
+  });
+
+  it("wraps at spaces onto at most two lines, the rest cut with an ellipsis", () => {
+    const lines = wrapText("Queue of failed payments retried after the fix was deployed", 140, 2, measure);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe("Queue of failed");
+    expect(lines[1].endsWith("…")).toBe(true);
+    for (const l of lines) expect(measure(l)).toBeLessThanOrEqual(140);
+    expect(wrapText("Supercalifragilistic", 70, 2, measure)[0].endsWith("…")).toBe(true);
+  });
+
+  it("groups events without a box, never across one with a box", () => {
+    const hidden = [10, 20, 30, 200, 400].map((x, index) => ({ index, x }));
+    expect(clusterHidden(hidden, 48).map((c) => c.indices)).toEqual([[0, 1, 2], [3], [4]]);
+    expect(clusterHidden(hidden, 48, [25]).map((c) => c.indices)).toEqual([[0, 1], [2], [3], [4]]);
+  });
+
+  it("places badges after every event, and they do not push events out", () => {
+    const space = { levels: 2, gap: 6, inset: 8, left: 0, right: 1000, shape: "straight" as const };
+    const events = [100, 400, 700].map((x, index) => ({ index, x, w: 120, importance: 0 }));
+    const without = placeStems(events, space);
+    const withBadge = placeStems([...events, { index: -1, x: 110, w: 30, importance: -Infinity, badge: true }], space);
+    expect(withBadge.filter((p) => p.index >= 0)).toEqual(without);
   });
 });
