@@ -59,7 +59,7 @@ dev = [
 
 [build-system]
 # hatchling 1.30+ writes Metadata-Version 2.5, which PyPI and twine 6 do not accept yet
-requires = ["hatchling>=1.27,<1.30", "hatch-jupyter-builder>=0.9"]
+requires = ["hatchling>=1.27,<1.33", "hatch-jupyter-builder>=0.9"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build]
