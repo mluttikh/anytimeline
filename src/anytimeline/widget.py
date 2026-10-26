@@ -21,10 +21,12 @@ from __future__ import annotations
 
 import base64
 import dataclasses
+import hashlib
 import html
 import json
 import time
 import uuid
+import warnings
 import weakref
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from os import PathLike
@@ -58,6 +60,10 @@ TOOLTIP_CELLS = 1_000_000
 values (events × columns)."""
 FONT_SIZES = (8, 24)
 """The smallest and largest text size, in pixels."""
+DISPLAYS = ("widget", "html")
+HTML_WARN_BYTES = 20_000_000
+"""A plot shown as HTML (``display="html"``) whose data is larger than this warns: the
+notebook file holds it."""
 
 _STATIC = Path(__file__).parent / "static"
 
@@ -94,6 +100,9 @@ class Timeline(anywidget.AnyWidget):
         mark_scale: The size of event marks, as a factor of the layers' own (0.25 to 4).
         dodge: Spread events that would overlap over the lane's height (default), or draw
             them on the lane's line.
+        display: How a notebook shows the plot: ``"widget"`` (default; connected to Python)
+            or ``"html"`` (the page [`save_html`][anytimeline.Timeline.save_html] writes,
+            which a saved or exported notebook shows without a kernel).
     """
 
     _esm = _STATIC / "widget.js"
@@ -132,6 +141,14 @@ class Timeline(anywidget.AnyWidget):
     ``p``, ``z``, ``s``."""
     selection = traitlets.Dict().tag(sync=True)
     """The selected events: layer name → sorted table rows."""
+    display = traitlets.Enum(DISPLAYS, default_value="widget")
+    """How a notebook shows the plot. ``"widget"``: connected to Python, so selections reach
+    it and changes made in Python after it is shown reach the plot. ``"html"``: as the page
+    [`save_html`][anytimeline.Timeline.save_html] writes, with its data in the output, so a
+    saved, exported (nbconvert, Quarto) or shared notebook shows it without a kernel or
+    saved widget state. Zoom, pan, hover, Time / Order, folding, full screen and linking
+    work there; selecting does not, and a change made in Python shows when the plot is
+    shown again."""
     perf = traitlets.Dict()
     """Renderer and timings reported by the browser."""
     _pick = traitlets.Dict().tag(sync=True)
@@ -139,6 +156,8 @@ class Timeline(anywidget.AnyWidget):
     _zoom = traitlets.Dict().tag(sync=True)
     _link = traitlets.Dict().tag(sync=True)
     """The group of linked plots: ``{"group": id, "align": "time" | "start"}``, or empty."""
+    _marimo_selection: Any = None
+    """The observer that ``anytimeline.marimo.selection`` set, or None."""
 
     def __init__(
         self,
@@ -158,6 +177,7 @@ class Timeline(anywidget.AnyWidget):
         font_size: int = 12,
         mark_scale: float = 1.0,
         dodge: bool = True,
+        display: Literal["widget", "html"] = "widget",
         **kwargs: Any,
     ) -> None:
         if sort is not None and sort not in LANE_SORTS:
@@ -168,6 +188,8 @@ class Timeline(anywidget.AnyWidget):
         self._lane_names = lane_names
         self._align = align
         self._layers: dict[str, ev.EventsRecord | iv.IntervalsRecord | vl.ValuesRecord] = {}
+        self._tables: dict[str, Any] = {}
+        """Each layer's table as read (a lazy table read once), for ``selected``."""
         self._laid: dict[str, ev.Layout | iv.Layout | vl.Layout] = {}
         self._markers: list[tuple[Any, str, str | None]] = []
         self._ranks: dict[str, np.ndarray] = {}
@@ -191,6 +213,7 @@ class Timeline(anywidget.AnyWidget):
             font_size=font_size,
             mark_scale=mark_scale,
             dodge=dodge,
+            display=display,
             **kwargs,
         )
         self.on_msg(self._on_frontend_msg)
@@ -274,6 +297,7 @@ class Timeline(anywidget.AnyWidget):
             select: Whether its events can be selected.
             name: The layer's name; adding a layer with an existing name replaces it.
         """
+        data = tables.read_once(data, *_arguments(locals()))
         record = ev.build(
             data,
             name=name,
@@ -388,6 +412,7 @@ class Timeline(anywidget.AnyWidget):
             select: Whether its bars can be selected.
             name: The layer's name; adding a layer with an existing name replaces it.
         """
+        data = tables.read_once(data, *_arguments(locals()))
         record = iv.build(
             data,
             name=name,
@@ -468,6 +493,7 @@ class Timeline(anywidget.AnyWidget):
             select: Whether its states can be selected (as the rows that start them).
             name: The layer's name; adding a layer with an existing name replaces it.
         """
+        data = tables.read_once(data, *_arguments(locals()))
         record = st.build(
             data,
             name=name,
@@ -536,6 +562,7 @@ class Timeline(anywidget.AnyWidget):
             hover: Show the value under the pointer.
             name: The layer's name; adding a layer with an existing name replaces it.
         """
+        data = tables.read_once(data, *_arguments(locals()))
         record = vl.build(
             data,
             name=name,
@@ -655,12 +682,13 @@ class Timeline(anywidget.AnyWidget):
             groups[tables.is_missing(groups)] = grouping.MISSING
             record.lane_groups = groups
             record.lane_group_declared = tables.categories(table, group)
-        old = dict(self._layers)
+        old, old_tables = dict(self._layers), dict(self._tables)
         self._layers[record.name] = record
+        self._tables[record.name] = data
         try:
             self._update_spec()
         except Exception:
-            self._layers = old
+            self._layers, self._tables = old, old_tables
             raise
         return self
 
@@ -697,6 +725,7 @@ class Timeline(anywidget.AnyWidget):
         if name not in self._layers:
             raise NotFoundError(f"no layer {name!r}; layers: {self.layers}")
         del self._layers[name]
+        del self._tables[name]
         self.selection = {k: v for k, v in self.selection.items() if k != name}
         self._update_spec()
         return self
@@ -704,6 +733,7 @@ class Timeline(anywidget.AnyWidget):
     def clear(self) -> Self:
         """Remove every layer."""
         self._layers.clear()
+        self._tables.clear()
         self.selection = {}
         self._update_spec()
         return self
@@ -817,6 +847,8 @@ class Timeline(anywidget.AnyWidget):
                 start += len(ticks)
             seq_times = prim[perm]
             for li, (name, lay) in enumerate(laid.items()):
+                if isinstance(lay, vl.Layout):  # samples take no place in the order
+                    continue
                 cols = comps.get(li, [np.zeros(0)])
                 following = getattr(lay, "following", None)
                 if following is not None and len(cols) == 1:
@@ -835,6 +867,8 @@ class Timeline(anywidget.AnyWidget):
             extent = (float(prim.min()), float(prim.max()))
         else:
             for lay in laid.values():
+                if isinstance(lay, vl.Layout):
+                    continue
                 enc = encode(np.zeros(0), "float32")
                 buffers.append(enc)
                 lay.spec["rank"] = enc.descriptor
@@ -896,7 +930,8 @@ class Timeline(anywidget.AnyWidget):
         """Write the plot to one HTML file that opens in any browser, without Python or a
         network: its data, the drawing code and the styles are all in the file. Pan, zoom,
         hover (with the ``tooltip`` columns), Time / Order, folding and full screen work;
-        selecting does not (it needs Python).
+        selecting does not (it needs Python). For the HTML as text, see
+        [`to_html`][anytimeline.Timeline.to_html].
 
         Args:
             path: The file to write (``.html``).
@@ -906,6 +941,107 @@ class Timeline(anywidget.AnyWidget):
             The path written.
         """
         return save_html(path, self, title=title)
+
+    def to_html(self, *, title: str | None = None, full_html: bool = True) -> str:
+        """The plot as interactive HTML that works without Python: the page
+        [`save_html`][anytimeline.Timeline.save_html] writes, as text.
+
+        Return it from a web app, put it in a report, or hand it to a component that shows
+        HTML, such as Streamlit's ``components.html(plot.to_html(), height=500)``. With
+        ``full_html=False`` it is an element for a page of your own (a template's
+        ``{{ plot | safe }}``): the plot's styles, data and drawing code. A page can hold any
+        number of them, and runs the drawing code once.
+
+        Args:
+            title: The page's title (``full_html`` only); by default the plot's title.
+            full_html: ``True``: a whole page, from ``<!doctype html>``. ``False``: an element
+                to put in a page's ``<body>``; the plot takes the width of the element it is
+                in.
+
+        Returns:
+            The HTML.
+        """
+        if not full_html:
+            if title is not None:
+                raise ValueError("title is the page's title: it needs full_html=True")
+            return self._fragment("this plot is drawn by JavaScript, which did not run here.")
+        return _page([self], title)
+
+    def _repr_mimebundle_(self, **kwargs: Any) -> Any:
+        if self.display == "html":
+            self._warn_if_large()
+            return {"text/plain": repr(self), "text/html": self._notebook_html()}
+        bundle = super()._repr_mimebundle_(**kwargs)
+        if bundle is None:
+            return None
+        data = bundle[0] if isinstance(bundle, tuple) else bundle  # anywidget: (data, metadata)
+        # what a notebook shows where the widget cannot be drawn (exported, or opened without
+        # its kernel): say how to get the plot there
+        data["text/plain"] = (
+            f"{self!r}: an interactive plot. An exported or reopened notebook shows it when "
+            'it is shown with display="html".'
+        )
+        return bundle
+
+    def _display_(self) -> Any:
+        """What marimo shows: the widget, or with ``display="html"`` the page, in a frame (its
+        script runs only there), as high as ``height`` (else 480 px)."""
+        import marimo as mo
+
+        if self.display == "html":
+            self._warn_if_large()
+            return mo.iframe(self.to_html(), height=f"{self.height or 480}px")
+        return mo.ui.anywidget(self)
+
+    def __repr__(self) -> str:
+        parts = []
+        for name, rec in self._layers.items():
+            kind = {"EventsRecord": "events", "ValuesRecord": "samples"}.get(
+                type(rec).__name__, "bars"
+            )
+            parts.append(f"{name}: {len(rec.rows):,} {kind}")
+        return f"Timeline({'; '.join(parts) or 'no layers'})"
+
+    def _warn_if_large(self) -> None:
+        size = sum(len(b) for b in self._buffers.values())
+        if size > HTML_WARN_BYTES:
+            warnings.warn(
+                f"this plot's data is {size / 1e6:.0f} MB, and with display='html' the "
+                "notebook file holds all of it; show it as a widget (display='widget') or "
+                "save it with save_html",
+                stacklevel=3,
+            )
+
+    def _notebook_html(self) -> str:
+        """The plot as a notebook output (``display="html"``): a fragment whose note says how
+        to let its script run."""
+        return self._fragment(
+            "this plot is drawn by JavaScript, which did not run here. In JupyterLab, trust "
+            "the notebook: Trust Notebook in the command palette."
+        )
+
+    def _fragment(self, note: str) -> str:
+        """The plot as HTML to put in a page (a notebook output, ``to_html(full_html=False)``):
+        the plot's CSS, its data, and ``standalone.js``, which then starts this plot, with a
+        note (``note``, after the plot's repr) for where scripts do not run.
+
+        Every fragment has the script: an earlier one may be cleared or not run. A page runs
+        each version of it once (``window.anytimelineEmbeds``, by a hash of the script): a
+        notebook whose tab drew plots before anytimeline was updated draws new ones with the
+        new script, and its older plots keep theirs."""
+        script = _script()
+        version = hashlib.sha256(script.encode()).hexdigest()[:16]
+        style = (_STATIC / "widget.css").read_text(encoding="utf-8")
+        return (
+            f"<style>{style}</style>"
+            '<div class="anytimeline-embed"><p class="anytimeline-note">'
+            f"{html.escape(repr(self))}: {html.escape(note)}</p>"
+            f'<script type="application/json">{self._standalone_data()}</script></div>'
+            "<script>(function(s){var r=window.anytimelineEmbeds=window.anytimelineEmbeds||{};"
+            f'if(!r["{version}"]){{{script};\nr["{version}"]=window.anytimelineEmbed}}'
+            f'r["{version}"].add(s&&s.previousElementSibling)}})(document.currentScript)'
+            "</script>"
+        )
 
     def link(self, *others: Timeline, align: Literal["time", "start"] = "time") -> Self:
         """Link this plot with others: zooming or panning one moves the others to the same
@@ -1008,8 +1144,9 @@ class Timeline(anywidget.AnyWidget):
             "tooltips": self._tooltip_tables(),
             "link": self._link or None,
         }
-        # "</" cannot close the script element it is in
-        return json.dumps(payload, allow_nan=False, separators=(",", ":")).replace("</", "<\\/")
+        # inside <script>, "</script" or "<!--" in the data would change how the page parses;
+        # JSON has no "<" left after this (\u003c means the same)
+        return json.dumps(payload, allow_nan=False, separators=(",", ":")).replace("<", "\\u003c")
 
     def _tooltip_tables(self) -> dict[str, dict[str, Any]]:
         """Per layer, its tooltip columns as text in the order the browser has the events,
@@ -1084,6 +1221,27 @@ class Timeline(anywidget.AnyWidget):
         return rows
 
     # ------------------------------------------------------------------ selection
+
+    def selected(self, layer: str | None = None) -> Any:
+        """The selected rows of a layer: the rows of its table that
+        [`selection`][anytimeline.Timeline.selection] names, as a table of the type plotted
+        (Polars, PyArrow, pandas with its index, or a dict of arrays). Nothing selected gives
+        no rows, of the same type.
+
+        A lazy table (a Polars ``LazyFrame``, a DuckDB relation, an Ibis table) is read once
+        when its layer is added, with the columns the layer uses; its selected rows are
+        those of that read (a Polars or PyArrow table), the rows drawn.
+
+        Args:
+            layer: The layer's name; may be left out when the plot has one layer.
+        """
+        if layer is None:
+            if len(self._layers) != 1:
+                raise ValueError(f"name the layer: the plot has {len(self._layers)}: {self.layers}")
+            layer = next(iter(self._layers))
+        if layer not in self._layers:
+            raise NotFoundError(f"no layer {layer!r}; layers: {self.layers}")
+        return tables.take(self._tables[layer], self.selection.get(layer, []))
 
     def on_select(
         self, callback: Callable[[dict[str, list[int]]], Any], *, remove: bool = False
@@ -1206,6 +1364,11 @@ class Timeline(anywidget.AnyWidget):
         return None
 
 
+def _arguments(arguments: Mapping[str, Any]) -> list[Any]:
+    """A layer method's arguments other than the plot and the table: what may name columns."""
+    return [v for k, v in arguments.items() if k not in ("self", "data")]
+
+
 def _text(value: Any) -> str:
     if value is None:
         return "–"
@@ -1240,12 +1403,18 @@ def save_html(
     shown: list[Timeline] = []
     for p in plots:
         shown.extend([p] if isinstance(p, Timeline) else list(p))
+    out = Path(path)
+    out.write_text(_page(shown, title), encoding="utf-8")
+    return out
+
+
+def _page(shown: list[Timeline], title: str | None) -> str:
+    """A page of its own with ``shown``, one above the other (one plot fills the window)."""
     if not shown:
         raise ValueError("no plots to save")
     for p in shown:
         if not p._layers:
             raise ValueError("a plot has no layers yet: add some before saving it")
-    script = (_STATIC / "standalone.js").read_text(encoding="utf-8")
     style = (_STATIC / "widget.css").read_text(encoding="utf-8")
     name = title if title is not None else (shown[0].title or "anytimeline")
     fill = ' data-fill="window"' if len(shown) == 1 else ""
@@ -1254,16 +1423,18 @@ def save_html(
         f'<script type="application/json">{p._standalone_data()}</script>\n</div>'
         for p in shown
     )
-    page = _PAGE.format(
-        title=html.escape(name),
-        style=style,
-        plots=embeds,
-        # "</script" in the code would end the element early
-        script=script.replace("</script", "<\\/script"),
-    )
-    out = Path(path)
-    out.write_text(page, encoding="utf-8")
-    return out
+    return _PAGE.format(title=html.escape(name), style=style, plots=embeds, script=_script())
+
+
+def _script() -> str:
+    """``standalone.js``, ready to go inside a ``<script>`` element."""
+    path = _STATIC / "standalone.js"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} is missing: build the JavaScript first (npm run build in js/)"
+        )
+    # "</script" in the code would end the element early
+    return path.read_text(encoding="utf-8").replace("</script", "<\\/script")
 
 
 _PAGE = """<!doctype html>

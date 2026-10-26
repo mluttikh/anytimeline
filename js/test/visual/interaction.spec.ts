@@ -545,3 +545,54 @@ test("Story: the Display panel has no spreading switch, the plot no column of la
   await expect(page.locator(".atl-popover-check")).toBeHidden();
   expect(await view(page).evaluate((root: any) => root.__view.gutter)).toBe(12);
 });
+
+test("a states tooltip shows every lane's state at the pointer's time, and follows the pointer", async ({ page }) => {
+  await open(page, "service_health");
+  const box = await stageBox(page);
+  // a point in the cache's "down" state, a fraction of the way along it
+  const target = (fraction: number) =>
+    view(page).evaluate((root: any, f) => {
+      const v = root.__view;
+      const d = v.bars[0].data;
+      const i = d.states.indexOf("down");
+      const plot = v.plot();
+      const x0 = Math.max(plot.x + (d.start[i] - v.camera.left) * v.camera.scale, plot.x) + 2;
+      const x1 = Math.min(plot.x + (d.end[i] - v.camera.left) * v.camera.scale, plot.x + plot.w) - 2;
+      return { x: x0 + (x1 - x0) * f, y: v.barPosition(0, i).y - 12 };
+    }, fraction);
+  // every lane's state at the pointer's time, from the bars one by one
+  const expected = () =>
+    view(page).evaluate((root: any) => {
+      const v = root.__view;
+      const d = v.bars[0].data;
+      const t = v.camera.fromPx(v.pointer.x - v.plot().x);
+      const states: Record<string, string> = {};
+      for (let k = 0; k < d.count; k++) {
+        if (d.start[k] <= t && t <= d.end[k]) states[v.spec.lanes.names[d.lane[k]]] = d.states[k];
+      }
+      return { states, time: v.axis.formatFull(t) };
+    });
+  const tip = page.locator(".atl-tooltip.atl-show");
+  const rows = () =>
+    tip.locator(".atl-tip-row").evaluateAll((els) =>
+      els.map((e) => [...e.children].map((c) => c.textContent).concat(e.classList.contains("atl-tip-here") ? ["here"] : [])),
+    );
+  const times: string[] = [];
+  for (const f of [0.1, 0.9]) {
+    const p = await target(f);
+    await page.mouse.move(box.x + p.x, box.y + p.y);
+    const want = await expected();
+    times.push(want.time);
+    await expect.poll(async () => (await rows()).find((r) => r[0] === "time")?.[1]).toBe(want.time);
+    const got = await rows();
+    expect(Object.keys(want.states)).toHaveLength(5);
+    for (const [lane, state] of Object.entries(want.states)) {
+      expect(got.find((r) => r[0] === lane)?.slice(1, 2)).toEqual([state]);
+    }
+    expect(got.filter((r) => r.includes("here"))).toEqual([["cache", "down", "here"]]);
+  }
+  expect(times[0]).not.toBe(times[1]);
+  await page.screenshot({ path: "test-results/shots/states_tooltip.png" });
+  // the hovered state's own rows follow the lanes; its tooltip columns come from Python
+  await expect(tip).toContainText("duration");
+});

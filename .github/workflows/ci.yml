@@ -1,9 +1,12 @@
-# Checks on every push and pull request: Python (lint, types, tests) on Python 3.12 to 3.14;
+# Checks on every push and pull request: Python (lint, types, tests) on Python 3.12 to 3.14,
+# on Linux and Windows;
 # the JavaScript and the browser tests (Playwright: scenes, interactions, docs, marimo,
 # JupyterLab) with the docs built; and the wheel, installed into a clean environment.
 #
 # Screenshot comparisons run on macOS only (the baselines are macOS renderings); on Linux the
 # browser tests run everything else, with WebGPU skipped where the runner has none.
+#
+# scripts/check.py runs the Linux jobs' steps locally.
 name: CI
 
 on:
@@ -19,12 +22,22 @@ concurrency:
 
 jobs:
   python:
-    name: Python ${{ matrix.python }}
-    runs-on: ubuntu-latest
+    name: Python ${{ matrix.python }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python: ["3.12", "3.13", "3.14"]
+        include:
+          # Windows: paths, line ends and text encodings (cp1252) differ there
+          - os: windows-latest
+            python: "3.12"
+          - os: windows-latest
+            python: "3.14"
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7

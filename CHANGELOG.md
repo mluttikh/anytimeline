@@ -4,6 +4,50 @@ All notable changes to anytimeline. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+Foundations: plots that show where widgets do not, and checks that Python and the browser
+agree.
+
+### Added
+
+- **HTML in the notebook**: `Timeline(display="html")` shows the plot as HTML with its data
+  in the output, so a saved, exported (nbconvert, Quarto) or shared notebook shows it without
+  a kernel. Zoom, pan, hover, Time / Order, folding, full screen and linking work there.
+  Where scripts do not run (an untrusted notebook in JupyterLab, GitHub) the output says so.
+  In marimo the plot is shown as a page in a frame, which `marimo export html` keeps.
+- `Timeline.to_html()`: the page `save_html` writes, as text; `to_html(full_html=False)`: an
+  element for a page of your own, any number per page.
+- `Timeline.selected(layer)`: the selected rows as a table of the type plotted (pandas keeps
+  its index).
+- `anytimeline.marimo.selection(plot)`: the selection as marimo state, so a cell runs again on
+  a selection and not on every pan, tool or text size.
+- **States**: the tooltip lists every lane's state at the pointer's time, and follows the
+  pointer.
+- **Warnings for times that look wrong**: datetimes all in January 1970 (epoch numbers read
+  in a too fine unit), and plain numbers that look like seconds, milliseconds, microseconds
+  or nanoseconds since the epoch. An `end` column of durations says to pass `duration=`.
+- A text repr: `Timeline(events: 2,256 events; cpu: 1,810 samples)`.
+
+### Changed
+
+- A lazy table (Polars LazyFrame, DuckDB relation) is read once with only the columns its
+  layer uses, not every column.
+- A widget's plain-text output (what a notebook without the widget shows) says how to show
+  the plot as HTML.
+
+### Fixed
+
+- Values layers no longer send an order buffer the browser does not use.
+
+### Development
+
+- The spec Python sends is checked against a JSON Schema generated from the browser's types,
+  for a plot of every kind; random plots (Hypothesis) and every kind of table (dict, Polars,
+  PyArrow, pandas with NumPy, nullable and Arrow dtypes, DuckDB, with missing values) are
+  tested for the same spec and the same selection.
+- `scripts/check.py` runs CI's Linux jobs locally; CI runs the Python tests on Windows too.
+
 ## [0.3.0] - 2026-10-12
 
 Story timelines: for a few dozen events whose text matters.
@@ -79,6 +123,7 @@ drawn with WebGPU, WebGL2 or Canvas 2D.
   that follow the notebook.
 - Synthetic example data (`anytimeline.synthetic`) and documentation with live examples.
 
+[Unreleased]: https://github.com/mluttikh/anytimeline/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.3.0
 [0.2.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.2.0
 [0.1.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.1.0

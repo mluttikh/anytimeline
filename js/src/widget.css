@@ -338,6 +338,13 @@ body.vscode-high-contrast:not(.vscode-high-contrast-light) .atl-root,
   color: var(--atl-muted);
   min-width: 48px;
 }
+/* a states tooltip: the hovered lane among the lanes, and the space under them */
+.atl-tip-here {
+  font-weight: 600;
+}
+.atl-tip-gap {
+  height: 4px;
+}
 .atl-notice {
   position: absolute;
   left: 50%;
@@ -406,4 +413,13 @@ body.vscode-high-contrast:not(.vscode-high-contrast-light) .atl-root,
   display: flex;
   justify-content: space-between;
   color: var(--atl-muted);
+}
+
+/* a plot shown as HTML (display="html", to_html): what it needs where scripts do not run;
+   removed when the plot starts */
+.anytimeline-note {
+  margin: 0;
+  padding: 8px 0;
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #6b7280;
 }

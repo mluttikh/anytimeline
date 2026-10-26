@@ -3,7 +3,8 @@ arrays."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import string
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 import numpy as np
@@ -32,6 +33,58 @@ def frame(data: Any) -> Any:
     if isinstance(out, nw.LazyFrame):
         out = out.collect()
     return out
+
+
+def read_once(data: Any, *used: Any) -> Any:
+    """A lazy table (a Polars ``LazyFrame``, a DuckDB relation, an Ibis table) read: only the
+    columns that ``used`` names (column names, templates such as ``"{event} ({user})"``, or
+    anything with a ``group`` column, as a ``Route``), as an eager table of the type its
+    library reads into (Polars, PyArrow). Other tables are returned as given.
+
+    A layer reads its table once and keeps it: a database returns rows in no fixed order, so
+    reading it twice could give the rows another order (and selected rows other rows).
+    """
+    if isinstance(data, Mapping):
+        return data
+    import narwhals as nw
+
+    try:
+        lazy = nw.from_native(data)
+    except TypeError:
+        return data  # frame() says what it takes
+    if not isinstance(lazy, nw.LazyFrame):
+        return data
+    available = lazy.collect_schema().names()
+    wanted = set(_names(used))
+    return lazy.select([c for c in available if c in wanted]).collect().to_native()
+
+
+def _names(values: Iterable[Any]) -> Iterable[str]:
+    """The column names in arguments: names, the fields of templates, a ``Route``'s group."""
+    for v in values:
+        if isinstance(v, str):
+            yield v
+            yield from (f for _, f, _, _ in string.Formatter().parse(v) if f)
+        elif isinstance(v, list | tuple):
+            yield from _names(v)
+        elif isinstance(getattr(v, "group", None), str):
+            yield v.group
+
+
+def take(table: Any, rows: Any) -> Any:
+    """The rows ``rows`` (positions) of a table, as a table of its type: a dict of arrays,
+    or a Polars, PyArrow or pandas table (pandas keeps its index)."""
+    positions = np.asarray(rows, dtype=np.int64)
+    if isinstance(table, Mapping):
+        return {
+            k: [v[i] for i in positions]
+            if isinstance(v, list | tuple)
+            else np.asarray(v)[positions]
+            for k, v in table.items()
+        }
+    import narwhals as nw
+
+    return nw.from_native(table, eager_only=True)[positions].to_native()
 
 
 def column_names(table: Any) -> list[str]:

@@ -63,4 +63,28 @@ test.describe("in marimo", () => {
     await page.locator('.atl-toolbar button[aria-label="Order"]').click();
     await expect.poll(async () => (await python()).xscale).toBe("sequence");
   });
+
+  test("a cell of anytimeline.marimo.selection runs again on a selection, and on nothing else", async ({ page }) => {
+    const python = await open(page);
+    const runs = async () => JSON.parse(await page.locator("#selection-runs").innerText());
+    await expect.poll(async () => (await runs()).runs).toEqual([0]);
+    // a tool and the scale switch change synced settings, not the selection
+    await page.locator('.atl-toolbar button[aria-label="Select"]').click();
+    await expect.poll(async () => (await python()).tool).toBe("select");
+    await page.locator('.atl-toolbar button[aria-label="Order"]').click();
+    await expect.poll(async () => (await python()).xscale).toBe("sequence");
+    expect((await runs()).runs).toEqual([0]);
+    const pos = await page.locator(".atl-root").evaluate((root) => {
+      const view = (root as any).__view;
+      for (let i = 0; i < 300; i++) {
+        const p = view.eventPosition(0, i);
+        if (p && p.x > 120 && p.x < 700) return p;
+      }
+      return null;
+    });
+    const box = (await page.locator(".atl-stage").boundingBox())!;
+    await page.mouse.click(box.x + pos.x, box.y + pos.y);
+    await expect.poll(async () => (await runs()).runs).toEqual([0, 1]);
+    expect((await runs()).requests).toHaveLength(1);
+  });
 });

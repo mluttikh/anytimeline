@@ -78,13 +78,29 @@ async function show(host: HTMLElement, payload: Payload): Promise<TimelineView> 
   return view;
 }
 
-function embedded(): void {
+/** Start the plots of the page, each when it comes near the screen; returns `add`, which
+ * starts one more (a notebook's output, Python: display="html") or, without a host, any that
+ * have not started. */
+function embedded(): (host?: HTMLElement | null) => void {
+  const views = new Map<HTMLElement, TimelineView>();
+  // a notebook's output that is cleared or replaced (a cell run again) takes its plot off the
+  // page: its view stops (and leaves its group of linked plots)
+  const prune = () => {
+    for (const [host, view] of views) {
+      if (host.isConnected) continue;
+      views.delete(host);
+      view.destroy();
+    }
+  };
   const start = (host: HTMLElement) => {
     const data = host.querySelector<HTMLScriptElement>("script[type='application/json']");
     if (!data || host.dataset.state) return;
+    prune();
     host.dataset.state = "loading";
+    host.querySelector(".anytimeline-note")?.remove(); // says what the plot needs if scripts do not run
     show(host, JSON.parse(data.textContent!) as Payload)
-      .then(() => {
+      .then((view) => {
+        views.set(host, view);
         host.dataset.state = "ready";
       })
       .catch((err) => {
@@ -93,23 +109,49 @@ function embedded(): void {
         host.append(`anytimeline could not draw this plot: ${String(err)}`);
       });
   };
-  const hosts = [...document.querySelectorAll<HTMLElement>(".anytimeline-embed")];
-  if (!("IntersectionObserver" in window)) hosts.forEach(start);
-  else {
-    const near = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (!e.isIntersecting) continue;
-          near.unobserve(e.target);
-          start(e.target as HTMLElement);
-        }
-      },
-      { rootMargin: "300px 0px" },
-    );
-    hosts.forEach((h) => near.observe(h));
-  }
+  const near =
+    "IntersectionObserver" in window
+      ? new IntersectionObserver(
+          (entries) => {
+            for (const e of entries) {
+              if (!e.isIntersecting) continue;
+              near!.unobserve(e.target);
+              start(e.target as HTMLElement);
+            }
+          },
+          { rootMargin: "300px 0px" },
+        )
+      : null;
+  const add = (host: HTMLElement) => (near ? near.observe(host) : start(host));
+  document.querySelectorAll<HTMLElement>(".anytimeline-embed").forEach(add);
   // (each view follows the page's light or dark theme itself)
+  return (host) => {
+    if (host) {
+      // a notebook's output: JupyterLab and its exports style the HTML in outputs (striped
+      // table rows, padding), and not a widget's; this output only holds the plot, which then
+      // looks as it does as a widget
+      host.parentElement?.classList.remove("jp-RenderedHTMLCommon");
+      add(host);
+    } else document.querySelectorAll<HTMLElement>(".anytimeline-embed:not([data-state])").forEach(add);
+  };
 }
 
-if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", embedded);
-else embedded();
+declare global {
+  interface Window {
+    /** Plots in a notebook's outputs (Python: display="html"): each output runs this script
+     * only when the page has not run this version of it (kept under a hash of it in
+     * `window.anytimelineEmbeds`), then adds its plot. */
+    anytimelineEmbed?: { add: (host?: HTMLElement | null) => void };
+  }
+}
+
+if (document.readyState === "loading") {
+  // a page of its own: its plots are in the page when it is read
+  let add: ((host?: HTMLElement | null) => void) | null = null;
+  const pending: (HTMLElement | null | undefined)[] = [];
+  window.anytimelineEmbed = { add: (host) => (add ? add(host) : pending.push(host)) };
+  document.addEventListener("DOMContentLoaded", () => {
+    add = embedded();
+    pending.forEach((h) => add!(h));
+  });
+} else window.anytimelineEmbed = { add: embedded() };

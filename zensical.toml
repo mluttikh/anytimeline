@@ -53,6 +53,7 @@ nav = [
     { "gantt" = "reference/gantt.md" },
     { "story" = "reference/story.md" },
     { "save_html" = "reference/save-html.md" },
+    { "anytimeline.marimo" = "reference/marimo.md" },
     { "OpenTelemetry" = "reference/otel.md" },
     { "Route and symbols" = "reference/styling.md" },
     { "Example data" = "reference/synthetic.md" },

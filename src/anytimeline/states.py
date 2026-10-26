@@ -47,7 +47,12 @@ def build(
     names = tables.column_names(table)
     tables.check(table, [time, state] + ([lane] if lane else []) + list(tooltip or []))
     n = len(tables.column(table, time))
-    t = times(tables.column(table, time), timezone=tables.time_zone(table, time), unit=time_unit)
+    t = times(
+        tables.column(table, time),
+        timezone=tables.time_zone(table, time),
+        unit=time_unit,
+        column=time,
+    )
     valid = np.flatnonzero(t.valid)
     states_all = tables.column(table, state).astype(object)
     lanes_all = (
@@ -136,6 +141,8 @@ def build(
         dropped=int(n - len(valid)),
         fade_open=False,
         chained=True,
+        states=[styling.label(v) for v in values.tolist()],
+        state_title=state,
     )
 
 
