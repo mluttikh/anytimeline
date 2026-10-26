@@ -22,6 +22,8 @@ export interface BarsData {
   themeColor: boolean;
   progress: Float32Array | null;
   text: string[] | null;
+  /** States layers: each bar's state. */
+  states: string[] | null;
   links: Uint32Array | null;
   critical: Uint32Array | null;
   /** Per lane, the longest bar: how far left of the view a bar in view may start. */
@@ -87,6 +89,7 @@ export function decodeBars(spec: IntervalsLayerSpec, source: DataSource): BarsDa
     themeColor,
     progress: spec.progress ? (view(spec.progress, source) as Float32Array) : null,
     text: spec.text ? decodeStrings(spec.text, source) : null,
+    states: spec.states ? decodeStrings(spec.states.values, source) : null,
     links: spec.links ? (view(spec.links.pairs, source) as Uint32Array) : null,
     critical: spec.critical?.count ? (view(spec.critical.segments, source) as Uint32Array) : null,
     maxDur,
@@ -141,6 +144,16 @@ export class BarLayer {
   /** Start and end on the current scale. */
   ends(sequence: boolean): [Float64Array, Float64Array] {
     return sequence ? [this.data.rankStart, this.data.rankEnd] : [this.data.start, this.data.end];
+  }
+
+  /** The bar of `lane` that `x` (on the current scale) is in, or -1: the last that starts
+   * at or before it and ends after it (states: a lane's bars follow one another). */
+  at(x: number, lane: number, sequence: boolean): number {
+    const [lo, hi] = this.ends(sequence);
+    const starts = this.data.laneStarts;
+    if (lane + 1 >= starts.length) return -1;
+    const i = upperBound(lo, x, starts[lane], starts[lane + 1]) - 1;
+    return i >= starts[lane] && hi[i] >= x ? i : -1;
   }
 
   rebase(base: number, sequence: boolean, version: number): void {

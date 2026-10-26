@@ -1,0 +1,1063 @@
+{
+  "$ref": "#/definitions/SceneSpec",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "BufferRef": {
+      "additionalProperties": false,
+      "description": "A buffer Python holds, by content id; fetched with a \"need\" message.",
+      "properties": {
+        "byteLength": {
+          "type": "number"
+        },
+        "components": {
+          "type": "number"
+        },
+        "count": {
+          "type": "number"
+        },
+        "dtype": {
+          "$ref": "#/definitions/DType"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "dtype",
+        "count",
+        "components",
+        "byteLength"
+      ],
+      "type": "object"
+    },
+    "CategoryLegend": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "color": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "color"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "const": "categories",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "title",
+        "items"
+      ],
+      "type": "object"
+    },
+    "ContinuousLegend": {
+      "additionalProperties": false,
+      "properties": {
+        "clim": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "colors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "const": "continuous",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "title",
+        "colors",
+        "clim"
+      ],
+      "type": "object"
+    },
+    "DType": {
+      "enum": [
+        "float64",
+        "float32",
+        "int32",
+        "uint32",
+        "uint16",
+        "uint8",
+        "utf8"
+      ],
+      "type": "string"
+    },
+    "EventsLayerSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "additionalProperties": false,
+          "properties": {
+            "alpha": {
+              "type": "number"
+            },
+            "legend": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/CategoryLegend"
+                },
+                {
+                  "$ref": "#/definitions/ContinuousLegend"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rgba": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/BufferRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "solid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "rgba",
+            "solid",
+            "alpha",
+            "legend"
+          ],
+          "type": "object"
+        },
+        "count": {
+          "type": "number"
+        },
+        "dropped": {
+          "type": "number"
+        },
+        "has_time": {
+          "type": "boolean"
+        },
+        "hover": {
+          "type": "boolean"
+        },
+        "importance": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BufferRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label_width": {
+          "description": "Stem labels: the widest a box gets (px); null: 16 × the text size; 0: no limit.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "labels": {
+          "description": "Where the text goes: beside each mark, or in boxes on stems above and below the line.",
+          "enum": [
+            "beside",
+            "stems"
+          ],
+          "type": "string"
+        },
+        "lane": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "lane_starts": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "count of lanes + 1 offsets: lane l's events are lane_starts[l] .. lane_starts[l + 1]."
+        },
+        "name": {
+          "type": "string"
+        },
+        "overlap": {
+          "enum": [
+            "dodge",
+            "overlay"
+          ],
+          "type": "string"
+        },
+        "rank": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "route": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "color": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "count": {
+                  "type": "number"
+                },
+                "segments": {
+                  "$ref": "#/definitions/BufferRef"
+                },
+                "width": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "segments",
+                "count",
+                "color",
+                "width"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "select": {
+          "type": "boolean"
+        },
+        "size": {
+          "additionalProperties": false,
+          "properties": {
+            "legend": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "size"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "items"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "value": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "values": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/BufferRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "values",
+            "value",
+            "legend"
+          ],
+          "type": "object"
+        },
+        "stem_shape": {
+          "description": "Stem labels: straight stems (the box over its event), or curved (a box may move aside).",
+          "enum": [
+            "straight",
+            "curved"
+          ],
+          "type": "string"
+        },
+        "symbol": {
+          "additionalProperties": false,
+          "properties": {
+            "legend": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "symbol": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "symbol"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "items"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "names": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "values": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/BufferRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "values",
+            "value",
+            "names",
+            "legend"
+          ],
+          "type": "object"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BufferRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "time": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "Sorted by lane, then time, then order: ticks (or the order where there is no time)."
+        },
+        "tooltip": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "type": {
+          "const": "events",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "name",
+        "count",
+        "time",
+        "lane",
+        "lane_starts",
+        "rank",
+        "has_time",
+        "overlap",
+        "hover",
+        "select",
+        "dropped",
+        "color",
+        "symbol",
+        "size",
+        "text",
+        "importance",
+        "tooltip",
+        "route"
+      ],
+      "type": "object"
+    },
+    "IntervalsLayerSpec": {
+      "additionalProperties": false,
+      "description": "Bars from a start to an end (Python: Timeline.intervals). Sorted by lane, start, end.",
+      "properties": {
+        "color": {
+          "additionalProperties": false,
+          "properties": {
+            "alpha": {
+              "type": "number"
+            },
+            "legend": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/CategoryLegend"
+                },
+                {
+                  "$ref": "#/definitions/ContinuousLegend"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rgba": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/BufferRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "solid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "rgba",
+            "solid",
+            "alpha",
+            "legend"
+          ],
+          "type": "object"
+        },
+        "count": {
+          "type": "number"
+        },
+        "critical": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "count": {
+                  "type": "number"
+                },
+                "segments": {
+                  "$ref": "#/definitions/BufferRef"
+                }
+              },
+              "required": [
+                "segments",
+                "count"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The critical path (layers with a tree): rows (bar, from, to); from and to are instants, 2 × bar for a bar's start and 2 × bar + 1 for its end."
+        },
+        "dropped": {
+          "type": "number"
+        },
+        "durations": {
+          "description": "Write each bar's duration right of it.",
+          "type": "boolean"
+        },
+        "end": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "fade_open": {
+          "description": "False: an open bar (no end) does not fade out (states: the lane is still in it).",
+          "type": "boolean"
+        },
+        "height": {
+          "type": "number"
+        },
+        "hover": {
+          "type": "boolean"
+        },
+        "kind": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "1: a milestone (start = end), 2: open (no end; runs to the plot's last time)."
+        },
+        "lane": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "lane_starts": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "links": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "count": {
+                  "type": "number"
+                },
+                "pairs": {
+                  "$ref": "#/definitions/BufferRef"
+                }
+              },
+              "required": [
+                "pairs",
+                "count"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Pairs of bar indices: an arrow from the end of the first to the start of the second."
+        },
+        "name": {
+          "type": "string"
+        },
+        "overlap": {
+          "enum": [
+            "pack",
+            "overlay"
+          ],
+          "type": "string"
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BufferRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rank": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "Two components: the order of each bar's start and end."
+        },
+        "row": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "Sub-row of each bar in its lane, and the number of sub-rows of its lane."
+        },
+        "rows": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "select": {
+          "type": "boolean"
+        },
+        "start": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "states": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "values": {
+                  "$ref": "#/definitions/BufferRef"
+                }
+              },
+              "required": [
+                "values",
+                "title"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "States layers (Python: Timeline.states): each bar's state, and the state column's name. The tooltip then shows every lane's state at the pointer's time."
+        },
+        "text": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BufferRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tooltip": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "type": {
+          "const": "intervals",
+          "type": "string"
+        },
+        "unit_ns": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "name",
+        "count",
+        "start",
+        "end",
+        "lane",
+        "lane_starts",
+        "row",
+        "rows",
+        "kind",
+        "rank",
+        "height",
+        "overlap",
+        "hover",
+        "select",
+        "dropped",
+        "color",
+        "progress",
+        "text",
+        "tooltip",
+        "links",
+        "unit_ns"
+      ],
+      "type": "object"
+    },
+    "LaneTree": {
+      "additionalProperties": false,
+      "description": "Lanes that form a tree (the first depth.length lanes; Timeline.intervals with parent=), in depth-first order: lane l's descendants are the lanes l + 1 .. l + size[l] - 1.",
+      "properties": {
+        "compact": {
+          "description": "Compact lanes (spans): folding moves the lanes below instead of resizing all.",
+          "type": "boolean"
+        },
+        "depth": {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "header": {
+          "description": "The header lanes of groups (layers' group=).",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "open": {
+          "description": "Whether a lane's children show at first.",
+          "items": {
+            "type": "boolean"
+          },
+          "type": "array"
+        },
+        "size": {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "depth",
+        "size",
+        "open"
+      ],
+      "type": "object"
+    },
+    "LayerSpec": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/EventsLayerSpec"
+        },
+        {
+          "$ref": "#/definitions/IntervalsLayerSpec"
+        },
+        {
+          "$ref": "#/definitions/ValuesLayerSpec"
+        }
+      ]
+    },
+    "MarkerSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "x": {
+          "description": "Time in ticks.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "label",
+        "color"
+      ],
+      "type": "object"
+    },
+    "SceneSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "lanes": {
+          "additionalProperties": false,
+          "description": "show_names false: no column of lane names (a story of one lane).",
+          "properties": {
+            "names": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "show_names": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            },
+            "tree": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/LaneTree"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "names",
+            "title"
+          ],
+          "type": "object"
+        },
+        "layers": {
+          "items": {
+            "$ref": "#/definitions/LayerSpec"
+          },
+          "type": "array"
+        },
+        "markers": {
+          "items": {
+            "$ref": "#/definitions/MarkerSpec"
+          },
+          "type": "array"
+        },
+        "sequence": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "count": {
+                  "type": "number"
+                },
+                "times": {
+                  "$ref": "#/definitions/BufferRef"
+                }
+              },
+              "required": [
+                "times",
+                "count"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "t": {
+          "description": "When Python made it (seconds since the epoch): a new spec is always a change, so it syncs.",
+          "type": "number"
+        },
+        "time": {
+          "$ref": "#/definitions/TimeSpec"
+        },
+        "version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "version",
+        "time",
+        "lanes",
+        "layers",
+        "sequence"
+      ],
+      "type": "object"
+    },
+    "TimeSpec": {
+      "additionalProperties": false,
+      "description": "The time axis. Ticks are float64 values relative to the origin: for datetimes and durations ticks of `unit` (absolute ns = origin_ns + tick × ns per unit), for plain numbers the value minus `origin`, for \"order\" ranks.",
+      "properties": {
+        "extent": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "datetime",
+            "duration",
+            "number",
+            "order"
+          ],
+          "type": "string"
+        },
+        "origin": {
+          "type": "number"
+        },
+        "origin_ns": {
+          "description": "int64 as a decimal string.",
+          "type": "string"
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "unit": {
+          "enum": [
+            "",
+            "s",
+            "ms",
+            "us",
+            "ns"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "unit",
+        "origin_ns",
+        "origin",
+        "timezone",
+        "extent"
+      ],
+      "type": "object"
+    },
+    "ValuesLayerSpec": {
+      "additionalProperties": false,
+      "description": "A number over time per lane (Python: Timeline.values). Sorted by lane, series, time.",
+      "properties": {
+        "color": {
+          "additionalProperties": false,
+          "properties": {
+            "alpha": {
+              "type": "number"
+            },
+            "legend": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/CategoryLegend"
+                },
+                {
+                  "$ref": "#/definitions/ContinuousLegend"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "solid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "solid",
+            "alpha",
+            "legend"
+          ],
+          "type": "object"
+        },
+        "count": {
+          "type": "number"
+        },
+        "dropped": {
+          "type": "number"
+        },
+        "hover": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "line",
+            "area",
+            "step"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "runs": {
+          "additionalProperties": false,
+          "description": "Runs: one line each (a lane's series): their first samples (count + 1), lanes, colours.",
+          "properties": {
+            "color": {
+              "$ref": "#/definitions/BufferRef"
+            },
+            "count": {
+              "type": "number"
+            },
+            "lane": {
+              "$ref": "#/definitions/BufferRef"
+            },
+            "starts": {
+              "$ref": "#/definitions/BufferRef"
+            }
+          },
+          "required": [
+            "starts",
+            "lane",
+            "color",
+            "count"
+          ],
+          "type": "object"
+        },
+        "select": {
+          "const": false,
+          "type": "boolean"
+        },
+        "series": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The series of each run, or null."
+        },
+        "series_title": {
+          "type": "string"
+        },
+        "time": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "tooltip": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "type": {
+          "const": "values",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "float32; NaN: a gap in the line."
+        },
+        "width": {
+          "type": "number"
+        },
+        "ylim": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "Per lane of the plot: low and high of its band (two float64 components)."
+        }
+      },
+      "required": [
+        "type",
+        "name",
+        "count",
+        "time",
+        "value",
+        "runs",
+        "series",
+        "series_title",
+        "ylim",
+        "kind",
+        "width",
+        "hover",
+        "select",
+        "dropped",
+        "color",
+        "tooltip"
+      ],
+      "type": "object"
+    }
+  }
+}

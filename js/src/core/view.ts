@@ -36,6 +36,8 @@ const DOUBLE_CLICK_MS = 300;
 /** Views remembered for Back. */
 const HISTORY = 20;
 const HOVER_PX = 9;
+/** The most lanes a states layer's tooltip lists. */
+const STATE_TIP_LANES = 16;
 const LABEL_BUDGET = 3000;
 const ROUTE_BUDGET = 60_000;
 /** Break marks of long gaps (Order scale) at least this far apart (px); the longest win. */
@@ -167,6 +169,8 @@ export class TimelineView {
   private box: Box | null = null;
   private pointer: { x: number; y: number } | null = null;
   private tooltipKey = "";
+  /** The tooltip columns Python sent for the hovered mark (tooltipKey's). */
+  private tooltipExtra: string[][] = [];
   private readonly resizeObserver: ResizeObserver;
   private loadToken = 0;
   private firstFrameAt = 0;
@@ -2073,9 +2077,14 @@ export class TimelineView {
       return;
     }
     const key = `${h.val ? "v" : h.bar ? "b" : "e"}${h.layer}:${h.index}`;
+    // the same mark again (a states tooltip follows the pointer): what Python sent stays
+    const again = key === this.tooltipKey;
     this.tooltipKey = key;
-    const rows: [string, string][] = [];
+    if (!again) this.tooltipExtra = [];
+    /** [key, value], and a class for the row. */
+    const rows: [string, string, string?][] = [];
     if (this.layers.length + this.bars.length + this.values.length > 1) rows.push(["layer", spec.name]);
+    if (h.bar && this.bars[h.layer].data.states) rows.push(...this.statesAt(h));
     if (h.val) {
       const v = this.values[h.layer];
       const d = v.data;
@@ -2087,7 +2096,8 @@ export class TimelineView {
     } else if (h.bar) {
       const d = this.bars[h.layer].data;
       const i = h.index;
-      rows.push([this.spec.lanes.title || "lane", this.spec.lanes.names[d.lane[i]] ?? ""]);
+      // (a states layer's rows above name the lanes)
+      if (!d.states) rows.push([this.spec.lanes.title || "lane", this.spec.lanes.names[d.lane[i]] ?? ""]);
       if (d.kind[i] === 1) rows.push(["at", this.axis.formatFull(d.start[i])], ["", "milestone"]);
       else {
         rows.push(["start", this.axis.formatFull(d.start[i])]);
@@ -2095,7 +2105,7 @@ export class TimelineView {
         if (d.kind[i] !== 2) rows.push(["duration", this.axis.formatSpan(d.end[i] - d.start[i])]);
       }
       if (d.progress && d.progress[i] >= 0) rows.push(["progress", `${Math.round(d.progress[i] * 100)}%`]);
-      if (d.text?.[i]) rows.push(["text", d.text[i]]);
+      if (d.text?.[i] && d.text[i] !== d.states?.[i]) rows.push(["text", d.text[i]]);
     } else {
       const l = this.layers[h.layer];
       if (this.spec.lanes.show_names !== false) rows.push([this.spec.lanes.title || "lane", this.spec.lanes.names[l.data.lane[h.index]] ?? ""]);
@@ -2105,9 +2115,10 @@ export class TimelineView {
     }
     const render = (extra: string[][]) => {
       if (this.tooltipKey !== key) return;
+      this.tooltipExtra = extra;
       this.tooltip.replaceChildren(
-        ...[...rows, ...extra].map(([k, v]) => {
-          const row = div("atl-tip-row");
+        ...[...rows, ...extra].map(([k, v, cls]) => {
+          const row = div(cls ? `atl-tip-row ${cls}` : "atl-tip-row");
           const kk = document.createElement("span");
           kk.className = "atl-tip-key";
           kk.textContent = k;
@@ -2119,11 +2130,37 @@ export class TimelineView {
       );
       this.placeTooltip();
     };
-    render([]);
+    render(this.tooltipExtra);
     this.tooltip.classList.add("atl-show");
-    if (spec.tooltip.length && this.callbacks.onTooltip) {
+    if (!again && spec.tooltip.length && this.callbacks.onTooltip) {
       this.callbacks.onTooltip(spec.name, h.index).then(render, () => {});
     }
+  }
+
+  /** A states layer's tooltip: the time at the pointer, and every lane's state then (the
+   * hovered lane's marked), so lanes compare at one moment; at most STATE_TIP_LANES lanes,
+   * those around the hovered one. Under them, the hovered state's own rows. */
+  private statesAt(h: Hit): [string, string, string?][] {
+    const b = this.bars[h.layer];
+    const d = b.data;
+    const sequence = this.xscale === "sequence";
+    const x = this.pointer ? this.camera.fromPx(this.pointer.x - this.plot().x) : d.start[h.index];
+    const rows: [string, string, string?][] = [];
+    if (!sequence && this.axis) rows.push(["time", this.axis.formatFull(x)]);
+    const lanes = [...this.laneAt].filter((l) => l + 1 < d.laneStarts.length && d.laneStarts[l + 1] > d.laneStarts[l]);
+    const here = lanes.indexOf(d.lane[h.index]);
+    const from = Math.max(0, Math.min(here - (STATE_TIP_LANES >> 1), lanes.length - STATE_TIP_LANES));
+    const shown = lanes.slice(from, from + STATE_TIP_LANES);
+    if (from > 0) rows.push(["", `… ${fmtNumber(from)} lanes above`]);
+    for (const l of shown) {
+      const i = b.at(x, l, sequence);
+      const state = i >= 0 ? d.states![i] : "–";
+      rows.push([this.spec!.lanes.names[l] ?? "", state, l === d.lane[h.index] ? "atl-tip-here" : undefined]);
+    }
+    const below = lanes.length - from - shown.length;
+    if (below > 0) rows.push(["", `… ${fmtNumber(below)} lanes below`]);
+    rows.push(["", "", "atl-tip-gap"]);
+    return rows;
   }
 
   private placeTooltip(): void {
@@ -2331,7 +2368,9 @@ export class TimelineView {
       const plotNow = this.plot();
       this.shareCursor(p.x >= plotNow.x && p.x <= plotNow.x + plotNow.w ? p.x : null);
       this.stage.classList.toggle("atl-foldable", this.foldableAt(p) || !!this.badgeAt(p));
-      if (this.hovered) this.placeTooltip();
+      // a states tooltip shows the lanes at the pointer's time: it changes with the pointer
+      if (this.hovered?.bar && this.bars[this.hovered.layer]?.data.states) this.showTooltip();
+      else if (this.hovered) this.placeTooltip();
     });
 
     const end = (e: PointerEvent) => {

@@ -140,6 +140,7 @@ def build(
             tables.column(table, time),
             timezone=tables.time_zone(table, time),
             unit=time_unit,
+            column=time,
         )
         keep &= t.valid
     order_values = None

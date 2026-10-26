@@ -56,6 +56,8 @@ class IntervalsRecord:
     durations: bool = False
     fade_open: bool = True  # an open bar fades out at its end (states: it does not)
     chained: bool = False  # states: each bar ends where its lane's next one starts
+    states: list[str] | None = None  # states: each bar's state, as text (for the tooltip)
+    state_title: str = ""
     perm: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
     lane_groups: np.ndarray | None = None  # each row's group (group=), or None
     lane_group_declared: list[Any] | None = None
@@ -112,9 +114,24 @@ def build(
     names = tables.column_names(table)
     n = len(tables.column(table, names[0])) if names else 0
 
-    s = times(tables.column(table, start), timezone=tables.time_zone(table, start), unit=time_unit)
+    s = times(
+        tables.column(table, start),
+        timezone=tables.time_zone(table, start),
+        unit=time_unit,
+        column=start,
+    )
     if end is not None:
-        e = times(tables.column(table, end), timezone=tables.time_zone(table, end), unit=time_unit)
+        e = times(
+            tables.column(table, end),
+            timezone=tables.time_zone(table, end),
+            unit=time_unit,
+            column=end,
+        )
+        if e.kind == "duration" and s.kind == "datetime":
+            raise TypeError(
+                f"end column {end!r} holds durations, not times: pass it as "
+                f"duration={end!r} (with end=None)"
+            )
         if e.kind != s.kind:
             raise TypeError(f"start and end must be of one kind, got {s.kind} and {e.kind}")
     else:
@@ -365,6 +382,12 @@ def layout(
         "unit_ns": UNITS.get(base.unit, 1),
         "durations": rec.durations,
         "fade_open": rec.fade_open,
+        "states": {
+            "values": put(encode_strings([rec.states[i] for i in perm])),
+            "title": rec.state_title,
+        }
+        if rec.states is not None
+        else None,
         "critical": None,
     }
     if rec.critical and rec.tree is not None and n:

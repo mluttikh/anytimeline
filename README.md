@@ -105,6 +105,7 @@ uv run python scripts/make_scenes.py  # scenes for the visual tests
 uv run nbstripout --install           # once per clone: commit notebooks without outputs
 uv run python scripts/build_docs.py   # user documentation into site/ (examples run; warnings fail)
 uv run python scripts/build_docs.py serve   # preview it at http://localhost:8000
+uv run python scripts/check.py        # all of CI's Linux jobs, here (or: check.py python)
 ```
 
 The user documentation is in `docs/user/`, built with [Zensical](https://zensical.org) and

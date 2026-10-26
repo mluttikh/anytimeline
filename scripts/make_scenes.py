@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -50,6 +51,60 @@ def write(name: str, plot: Timeline, **traits: object) -> None:
         json.dumps({"state": state, "buffers": buffers}), encoding="utf-8"
     )
     print(f"{name}: {sum(len(b) for b in plot._buffers.values()) / 1e6:.2f} MB")
+
+
+def notebook_outputs(*plots: Timeline) -> None:
+    """Plots shown as HTML in a notebook (display="html"), for html_display.spec.ts: their
+    outputs in a page (as an exported notebook has them, and as text for the test to put in
+    a page the way JupyterLab does), and a notebook run and exported by nbconvert."""
+    for p in plots:
+        p.display = "html"
+    outputs = [p._notebook_html() for p in plots]  # what _repr_mimebundle_ shows
+    cells = "\n".join(
+        f'<div class="jp-OutputArea-output jp-RenderedHTMLCommon">{html}</div>' for html in outputs
+    )
+    (OUT / "notebook_outputs.html").write_text(
+        "<!doctype html>\n<html><head><meta charset='utf-8'></head><body>\n"
+        f"{cells}\n</body></html>",
+        encoding="utf-8",
+    )
+    (OUT / "notebook_outputs.json").write_text(json.dumps(outputs), encoding="utf-8")
+
+    import nbformat
+    from nbclient import NotebookClient
+    from nbconvert import HTMLExporter
+
+    nb = nbformat.v4.new_notebook()
+    nb.cells = [
+        nbformat.v4.new_code_cell(
+            "from anytimeline import Timeline\n"
+            "from anytimeline.synthetic import service_log\n"
+            'plot = Timeline(title="Exported", display="html")\n'
+            'plot.events(service_log(300), lane="service", color="level")'
+        ),
+        nbformat.v4.new_code_cell(
+            'Timeline(title="A widget").events(service_log(50), lane="service")'
+        ),
+    ]
+    NotebookClient(nb, timeout=120, kernel_name="python3").execute(cwd=str(OUT))
+    body, _ = HTMLExporter().from_notebook_node(nb)
+    (OUT / "nbconvert_export.html").write_text(body, encoding="utf-8")
+
+    app = Path(__file__).resolve().parent.parent / "js" / "test" / "visual" / "apps"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "marimo",
+            "export",
+            "html",
+            str(app / "html_display.py"),
+            "-o",
+            str(OUT / "marimo_export.html"),
+        ],
+        check=True,
+        capture_output=True,
+    )
 
 
 def main() -> None:
@@ -320,6 +375,7 @@ def main() -> None:
     top.zoom_to(np.datetime64("2026-10-12T08:20"), np.datetime64("2026-10-12T08:50"))
     bottom.zoom_to(np.datetime64("2026-10-12T08:20"), np.datetime64("2026-10-12T08:50"))
     save_html(OUT / "saved_linked.html", top, bottom)
+    notebook_outputs(top, bottom)
 
     # story timelines: boxes on stems above and below the line
     inc = incident()

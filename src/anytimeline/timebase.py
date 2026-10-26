@@ -12,8 +12,10 @@ milliseconds.
 from __future__ import annotations
 
 import datetime as dt
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
@@ -71,7 +73,13 @@ def _int_ticks(values: np.ndarray, kind: str) -> tuple[np.ndarray, np.ndarray, i
     raise OverflowError("times out of range")
 
 
-def times(values: np.ndarray, *, timezone: str | None = None, unit: str | None = None) -> Times:
+def times(
+    values: np.ndarray,
+    *,
+    timezone: str | None = None,
+    unit: str | None = None,
+    column: str | None = None,
+) -> Times:
     """Read a time column.
 
     Args:
@@ -80,7 +88,16 @@ def times(values: np.ndarray, *, timezone: str | None = None, unit: str | None =
         unit: For numbers only: what one unit of them is (``"d"``, ``"h"``, ``"min"``,
             ``"s"``, ``"ms"``, ``"us"``, ``"ns"``). They become durations; without it they
             stay plain numbers.
+        column: The column's name: a user's column, whose values are checked for the
+            likely mistakes of ``check``.
     """
+    out = _times(values, timezone=timezone, unit=unit)
+    if column is not None:
+        check(out, column)
+    return out
+
+
+def _times(values: np.ndarray, *, timezone: str | None, unit: str | None) -> Times:
     kind = values.dtype.kind
     if kind == "M":
         raw, valid, per = _int_ticks(values, "M8")
@@ -106,6 +123,52 @@ def times(values: np.ndarray, *, timezone: str | None = None, unit: str | None =
         f"a time column must hold datetimes, durations or numbers, got {values.dtype}; parse "
         "text first, e.g. pl.col('t').str.to_datetime()"
     )
+
+
+_JANUARY_1970_NS = 31 * 86_400 * UNITS["s"]
+_EPOCH_UNITS = {"s": 1, "ms": 1_000, "us": 1_000_000, "ns": 1_000_000_000}
+_YEAR_2000_S, _YEAR_2100_S = 946_684_800, 4_102_444_800
+_PACKAGE = str(Path(__file__).parent)
+
+
+def check(t: Times, column: str) -> None:
+    """Warn about times that are most likely a mistake (the plot is still drawn):
+
+    * datetimes all in January 1970: numbers since the epoch read in a too fine unit (epoch
+      seconds read as nanoseconds land in the first two seconds of 1970);
+    * plain numbers that are all seconds, milliseconds, microseconds or nanoseconds since the
+      epoch of this century: drawn as numbers, not as dates.
+    """
+    if not t.valid.any():
+        return
+    if t.kind == "datetime" and t.raw is not None:
+        ns = t.raw[t.valid].astype(np.float64) * t.per
+        if ns.min() >= 0 and ns.max() < _JANUARY_1970_NS:
+            _warn(
+                f"the times in column {column!r} are all in January 1970: numbers since the "
+                "epoch read in a too fine unit? For seconds since the epoch: "
+                "pd.to_datetime(x, unit='s') or pl.from_epoch(x, time_unit='s')"
+            )
+    elif t.kind == "number" and t.values is not None:
+        v = t.values[t.valid]
+        for name, per_s in _EPOCH_UNITS.items():
+            if v.min() >= _YEAR_2000_S * per_s and v.max() < _YEAR_2100_S * per_s:
+                first = np.datetime64(int(v.min() // per_s), "s")
+                _warn(
+                    f"the times in column {column!r} look like {_UNIT_WORDS[name]} since the "
+                    f"epoch (the first: {first}), and are drawn as plain numbers. Make them "
+                    f"datetimes to see dates: pd.to_datetime(x, unit={name!r}) or "
+                    f"pl.from_epoch(x, time_unit={name!r})"
+                )
+                return
+
+
+_UNIT_WORDS = {"s": "seconds", "ms": "milliseconds", "us": "microseconds", "ns": "nanoseconds"}
+
+
+def _warn(message: str) -> None:
+    # at the user's line: the first frame outside anytimeline
+    warnings.warn(message, UserWarning, skip_file_prefixes=(_PACKAGE,))
 
 
 def _objects(values: np.ndarray, timezone: str | None) -> Times:

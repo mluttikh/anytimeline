@@ -46,5 +46,24 @@ def _(json, mo, plot, widget):
     return
 
 
+@app.cell
+def _(plot):
+    import anytimeline.marimo
+
+    get_selection = anytimeline.marimo.selection(plot)
+    runs = []
+    return get_selection, runs
+
+
+@app.cell
+def _(get_selection, json, mo, plot, runs):
+    # re-runs only when the selection changes (anytimeline.marimo.selection): its runs, and
+    # the requests of the rows selected
+    runs.append(sum(len(rows) for rows in get_selection().values()))
+    picked = plot.selected("events")["request"].tolist()
+    mo.Html(f"<pre id='selection-runs'>{json.dumps({'runs': runs, 'requests': picked})}</pre>")
+    return
+
+
 if __name__ == "__main__":
     app.run()

@@ -105,6 +105,9 @@ export interface IntervalsLayerSpec {
   durations?: boolean;
   /** False: an open bar (no end) does not fade out (states: the lane is still in it). */
   fade_open?: boolean;
+  /** States layers (Python: Timeline.states): each bar's state, and the state column's name.
+   * The tooltip then shows every lane's state at the pointer's time. */
+  states?: { values: BufferRef; title: string } | null;
   /** The critical path (layers with a tree): rows (bar, from, to); from and to are instants,
    * 2 × bar for a bar's start and 2 × bar + 1 for its end. */
   critical?: { segments: BufferRef; count: number } | null;
@@ -166,6 +169,8 @@ export interface SceneSpec {
   layers: LayerSpec[];
   sequence: { times: BufferRef; count: number } | null;
   markers?: MarkerSpec[];
+  /** When Python made it (seconds since the epoch): a new spec is always a change, so it syncs. */
+  t?: number;
 }
 
 /** Where buffers come from: Python (BufferStore), or a page with the data in it. */

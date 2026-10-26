@@ -10,13 +10,15 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:visual": "playwright test",
-    "test:visual:update": "playwright test --update-snapshots"
+    "test:visual:update": "playwright test --update-snapshots",
+    "schema": "ts-json-schema-generator --path src/core/types.ts --type SceneSpec --tsconfig tsconfig.json --out ../tests/fixtures/scene-schema.json"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.3",
     "@webgpu/types": "^0.1.74",
     "esbuild": "^0.28.2",
+    "ts-json-schema-generator": "^2.9.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.2"
   }

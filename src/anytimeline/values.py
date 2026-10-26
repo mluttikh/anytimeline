@@ -86,7 +86,12 @@ def build(
     names = tables.column_names(table)
     tables.check(table, [time, value] + [c for c in (lane, series) if c] + list(tooltip or []))
     n = len(tables.column(table, time))
-    t = times(tables.column(table, time), timezone=tables.time_zone(table, time), unit=time_unit)
+    t = times(
+        tables.column(table, time),
+        timezone=tables.time_zone(table, time),
+        unit=time_unit,
+        column=time,
+    )
     rows = np.flatnonzero(t.valid)
     t = t.take(rows)
     v = _numbers(tables.column(table, value)[rows], value)

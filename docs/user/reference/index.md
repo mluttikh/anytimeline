@@ -7,6 +7,7 @@ Every argument, setting and gesture.
 - [gantt](gantt.md): a Gantt chart in one call.
 - [story](story.md): a story timeline in one call.
 - [save_html](save-html.md): several plots in one page.
+- [anytimeline.marimo](marimo.md): the selection as marimo state.
 - [OpenTelemetry](otel.md): read traces in the OTLP/JSON format.
 - [Route and symbols](styling.md): the look of routes, and the names of symbols.
 - [Example data](synthetic.md): the example logs these pages use.
