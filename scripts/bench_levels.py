@@ -9,7 +9,6 @@ holds (the process's peak resident memory, before building and after).
 from __future__ import annotations
 
 import json
-import resource
 import sys
 import time
 
@@ -64,7 +63,11 @@ def first_ids(spec: dict) -> set[str]:
 
 
 def peak_mb() -> float:
-    """The process's peak resident memory so far (MB)."""
+    """The process's peak resident memory so far (MB; NaN on Windows)."""
+    if sys.platform == "win32":
+        return float("nan")
+    import resource  # (not on Windows)
+
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return peak / 1e6 if sys.platform == "darwin" else peak / 1e3  # bytes on macOS, else kB
 
