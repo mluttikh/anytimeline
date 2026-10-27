@@ -52,15 +52,19 @@ gantt(plan, task="task", start="start", end="end", depends="after", progress="do
 Bars on other lanes (machines, people, services) come from `Timeline.intervals(...)`, and mix
 with events on the same lanes.
 
-Traces (OpenTelemetry, or any table of spans with a parent) plot as a waterfall that folds,
-with each span's duration and the critical path:
+Traces (OpenTelemetry, Jaeger, Chrome's trace format, or any table of spans with a parent)
+plot as a waterfall that folds, with each span's duration and the critical path, or as a
+flame chart; many traces merge into one flame graph, and two compare span by span:
 
 ```python
-from anytimeline import Timeline
+from anytimeline import Timeline, compare_traces
 from anytimeline.otel import read_otlp
+from anytimeline.traces import merge
 
-tr = read_otlp("traces.jsonl")  # or anytimeline.synthetic.traces()
+tr = read_otlp("traces.jsonl")  # or read_jaeger, read_chrome, anytimeline.synthetic.traces()
 Timeline().spans(tr.spans, color="service").events(tr.events, time="time", lane="span_id")
+Timeline().spans(merge(tr.spans), layout="flame", color="service")
+compare_traces(before.spans, after.spans)  # two traces, each read as tr is
 ```
 
 The toolbar has three tools: **Pan** (drag moves through time and lanes), **Zoom** (drag a

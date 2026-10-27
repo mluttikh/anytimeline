@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from anytimeline import traces
 from anytimeline.parts import Stem
 from anytimeline.plot import Timeline
 from anytimeline.renamed import renamed
@@ -142,4 +143,75 @@ def story(
     )
     if today is not None:
         plot.marker(today, "today")
+    return plot
+
+
+def compare_traces(
+    before: Any,
+    after: Any,
+    *,
+    id: str = "span_id",
+    parent: str = "parent_id",
+    start: str = "start",
+    end: str = "end",
+    by: Sequence[str] | None = None,
+    threshold: float = 0.1,
+    title: str = "",
+    height: int = 0,
+) -> Timeline:
+    """Two traces compared span by span: the second's waterfall, each span coloured by what
+    changed (added, removed, slower, faster, the same), the first's span behind it in grey,
+    and the change in its tooltip and bar. The spans are matched as
+    [`traces.compare`][anytimeline.traces.compare] matches them; times are from each trace's
+    start.
+
+    Args:
+        before: A table with a row per span of the first trace (e.g. ``read_otlp(...).spans``
+            of one trace).
+        after: A table with a row per span of the second trace.
+        id: The column of span ids.
+        parent: The column of parent span ids (missing for a root).
+        start: The column of start times.
+        end: The column of end times.
+        by: The columns that name a span: by default ``service`` and ``name`` (those of
+            them in the tables).
+        threshold: How much longer (as a fraction: 0.1 is 10%) a span must take to be
+            "slower"; as much shorter, "faster".
+        title: Shown above the chart.
+        height: Height in pixels; 0 sizes the chart to its spans.
+
+    Returns:
+        The chart: show it as the last expression of a cell.
+    """
+    diff = traces.compare(
+        before, after, id=id, parent=parent, start=start, end=end, by=by, threshold=threshold
+    )
+    names = [c for c in ("service", "name") if c in diff] if by is None else list(by)
+    plot = Timeline(title=title, height=height)
+    # the first trace's spans, behind the second's
+    plot.intervals(
+        diff,
+        start="before_start",
+        end="before_end",
+        lane="span_id",
+        color="#a0a0a0",
+        opacity=0.45,
+        height=0.9,
+        overlap="overlay",
+        tooltip=[*names, "before"],
+        select=False,
+        name="before",
+    )
+    plot.spans(
+        diff,
+        lane=names[-1],
+        color="change",
+        palette={c: traces.CHANGE_COLORS[c] for c in traces.CHANGES},
+        text="difference",
+        tooltip=[*names, "change", "before", "after", "difference"],
+        expand="all",
+        critical_path=False,
+        height=0.5,
+        name="spans",
+    )
     return plot

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from anytimeline import Route, Stem, Timeline, gantt, levels, story
+from anytimeline import Route, Stem, Timeline, compare_traces, gantt, levels, story
 from anytimeline.synthetic import (
     incident,
     instants,
@@ -14,6 +14,7 @@ from anytimeline.synthetic import (
     service_metrics,
     traces,
 )
+from anytimeline.traces import merge
 
 SERVICES = ["gateway", "auth", "api", "cache", "db"]
 
@@ -91,6 +92,13 @@ def every_kind() -> dict[str, Timeline]:
         Timeline()
         .spans(tr.spans, color="service")
         .events(tr.events, time="time", lane="span_id", symbol="name", name="span events")
+    )
+    plots["flame"] = Timeline().spans(tr.spans, layout="flame", group="trace_id", color="service")
+    one = tr.spans["trace_id"] == tr.spans["trace_id"][0]
+    two = tr.spans["trace_id"] == tr.spans["trace_id"][-1]
+    plots["merged_flame"] = Timeline().spans(merge(tr.spans), layout="flame", tooltip=["count"])
+    plots["compare_traces"] = compare_traces(
+        {k: v[one] for k, v in tr.spans.items()}, {k: v[two] for k, v in tr.spans.items()}
     )
     plots["intervals_tree"] = Timeline().intervals(
         tr.spans, id="span_id", parent="parent_id", lane="name", critical_path=True, expand="all"

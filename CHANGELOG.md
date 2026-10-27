@@ -4,6 +4,48 @@ All notable changes to anytimeline. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+Traces in depth: flame charts, flame graphs of many traces, two traces compared, and traces
+from Jaeger and from Chrome's trace format.
+
+### Added
+
+- **Flame charts**: `spans(..., layout="flame")` puts the spans on a lane per depth, each
+  under the span that called it and named in its bar, so a deep trace stays a few lanes
+  high. Spans of one depth that ran at the same time go to sub-rows, each under its parent
+  where it can; `group="trace_id"` gives each trace its own lanes.
+- **Flame graphs of many traces**: `anytimeline.traces.merge(spans)` adds up the spans of
+  one trace or many by their path (the service and name of each span from the root down),
+  the heaviest first, with each path's count, total and own (self) time. Plot it with
+  `spans(merged, layout="flame")`.
+- **Two traces compared**: `compare_traces(before, after)` colours each span of the second
+  trace by what changed (added, removed, slower, faster, the same; `threshold=` 10%), with
+  the first trace's span behind it and the change in its bar.
+  `anytimeline.traces.compare` gives the table behind it.
+- `anytimeline.jaeger.read_jaeger`: Jaeger's JSON (the UI's download, the query API), as
+  spans and events with the columns of `read_otlp`.
+- `anytimeline.chrome.read_chrome`: Chrome's trace event format (DevTools, `chrome://tracing`,
+  Perfetto's JSON, PyTorch's profiler, ...): slices as spans, nested on their thread (async
+  slices by their id), instants as events, counters as values, and flows as arrows
+  (`depends="follows"`).
+- `spans(depends=)`: arrows from the spans a span follows, as `intervals(depends=)` draws
+  them.
+
+### Changed
+
+- `spans()` marks the critical path and writes durations by default in a waterfall only
+  (`critical_path=` and `durations=` default to `None`); `height=` defaults to 0.6 in a
+  waterfall and 0.9 in a flame chart.
+- The lanes of a plot with a tree are titled as the tree names them, not as the first
+  layer does.
+- The OpenTelemetry reference page is now Traces, with every reader, `merge` and
+  `compare`.
+
+### Fixed
+
+- The error for `expand=None` said it was 0.4's spelling; it was 0.3's.
+
 ## [0.4.0] - 2026-10-27
 
 Foundations: plots that show where widgets do not, and checks that Python and the browser
@@ -218,6 +260,7 @@ drawn with WebGPU, WebGL2 or Canvas 2D.
   that follow the notebook.
 - Synthetic example data (`anytimeline.synthetic`) and documentation with live examples.
 
+[Unreleased]: https://github.com/mluttikh/anytimeline/compare/v0.4.0...HEAD
 [0.4.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.4.0
 [0.3.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.3.0
 [0.2.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.2.0

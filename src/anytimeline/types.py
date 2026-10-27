@@ -26,6 +26,7 @@ __all__ = [
     "LaneSort",
     "Renderer",
     "SelectionMode",
+    "SpanLayout",
     "StemShape",
     "Symbol",
     "Tool",
@@ -60,6 +61,9 @@ ValuesKind = Literal["line", "area", "step"]
 until the next)."""
 ValuesScale = Literal["lane", "shared"]
 """The range of a values lane: its own lowest to highest value, or one for all lanes."""
+SpanLayout = Literal["waterfall", "flame"]
+"""The spans of traces: a lane per span, under its parent; or a lane per depth, each span
+under its parent (a flame chart)."""
 StemShape = Literal["straight", "curved"]
 """The stems of a story: each box over its event, or moved aside with a bending stem."""
 Expand = int | Literal["auto", "all"]

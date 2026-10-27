@@ -55,6 +55,7 @@ from anytimeline.types import (
     LaneSort,
     Renderer,
     SelectionMode,
+    SpanLayout,
     StemShape,
     Tool,
     ValuesKind,
@@ -659,36 +660,33 @@ class Timeline:
             select: Whether its bars can be selected.
             name: The layer's name; adding a layer with an existing name replaces it.
         """
+        return self._intervals(**{k: v for k, v in locals().items() if k != "self"})
+
+    def _intervals(
+        self,
+        data: Any,
+        *,
+        lane: str | None,
+        parent: str | None,
+        tooltip: str | Sequence[str] | None,
+        expand: Expand,
+        group: str | None,
+        flame: bool = False,
+        **options: Any,
+    ) -> Self:
+        """intervals(), and spans() with ``flame``: a lane per depth of the tree."""
         tooltip = _columns(tooltip, "tooltip")
-        data = tables.read_once(data, *_arguments(locals()))
+        data = tables.read_once(data, lane, parent, tooltip, group, *options.values())
         record = iv.build(
             data,
-            name=name,
-            start=start,
-            end=end,
-            duration=duration,
             lane=None if parent is not None else lane,
-            id=id,
-            depends=depends,
-            color=color,
-            colormap=colormap,
-            clim=clim,
-            palette=palette,
-            opacity=opacity,
-            text=text,
-            tooltip=tooltip,
-            progress=progress,
-            overlap=overlap,
-            height=height,
-            time_unit=self._time_unit,
-            duration_unit=duration_unit,
-            hover=hover,
-            select=select,
-            parent=parent,
             label=lane if parent is not None else None,
+            parent=parent,
+            tooltip=tooltip,
             expand=_expand(expand),
-            critical_path=critical_path,
-            durations=durations,
+            flame=flame,
+            time_unit=self._time_unit,
+            **options,
         )
         return self._add(record, data, group)
 
@@ -847,6 +845,8 @@ class Timeline:
         id: str = "span_id",
         parent: str = "parent_id",
         lane: str = "name",
+        layout: SpanLayout = "waterfall",
+        depends: str | None = None,
         color: str | None = None,
         colormap: str | Sequence[str] | None = None,
         clim: Clim | None = None,
@@ -855,9 +855,9 @@ class Timeline:
         text: str | None = None,
         tooltip: str | Sequence[str] | None = None,
         expand: Expand = "auto",
-        critical_path: bool = True,
-        durations: bool = True,
-        height: float = 0.6,
+        critical_path: bool | None = None,
+        durations: bool | None = None,
+        height: float | None = None,
         group: str | None = None,
         hover: bool = True,
         select: bool = True,
@@ -865,12 +865,16 @@ class Timeline:
     ) -> Self:
         """Add the spans of traces: a waterfall with a lane per span, under its parent span,
         its duration beside it and the critical path of each trace marked. Lanes fold: click
-        a span's name.
+        a span's name. Or, with ``layout="flame"``, a flame chart: a lane per depth, each
+        span under its parent and named in its bar, so a deep trace stays compact.
 
         This is [`intervals`][anytimeline.Timeline.intervals] set up for traces (OpenTelemetry,
-        Jaeger, Zipkin): read them with [`read_otlp`][anytimeline.otel.read_otlp], or pass
-        any table with a row per span. Events (logs, errors) of the spans go on their lanes
-        with ``events(..., lane="span_id")``.
+        Jaeger, Chrome's trace format): read them with
+        [`read_otlp`][anytimeline.otel.read_otlp],
+        [`read_jaeger`][anytimeline.jaeger.read_jaeger] or
+        [`read_chrome`][anytimeline.chrome.read_chrome], or pass any table with a row per
+        span. Events (logs, errors) of the spans go on their lanes with
+        ``events(..., lane="span_id")`` (in a waterfall).
 
         Args:
             data: A table with a row per span.
@@ -880,7 +884,13 @@ class Timeline:
             duration_unit: What one unit of a numeric duration is (``"ms"``, ``"us"``, ...).
             id: The column of span ids, unique in the table.
             parent: The column of parent span ids (missing for the root of a trace).
-            lane: The column that names each span's lane.
+            lane: The column that names each span: its lane in a waterfall, the text in its
+                bar in a flame chart.
+            layout: ``"waterfall"``: a lane per span; ``"flame"``: a lane per depth (with
+                ``group=``, per group: ``group="trace_id"`` gives each trace its own).
+                Spans of a depth that overlap (parallel calls) go to sub-rows.
+            depends: A column with, per span, the spans it follows (their ids; a flow in
+                Chrome's format): an arrow runs from the end of each to its start.
             color: A column (the service, the status) or one colour.
             colormap: For numbers: a colormap name or a list of colours.
             clim: For numbers: colour limits ``(low, high)``, or ``"robust"``.
@@ -890,17 +900,27 @@ class Timeline:
             tooltip: Columns shown when hovering a span.
             expand: The levels shown at first (1: the roots only), ``"all"``, or ``"auto"``:
                 as many as keep about 200 lanes.
-            critical_path: Mark the critical path of each trace.
-            durations: Write each span's duration right of it.
-            height: The bars' height, as a fraction of the lane.
+            critical_path: Mark the critical path of each trace (default: in a waterfall).
+            durations: Write each span's duration right of it (default: in a waterfall).
+            height: The bars' height, as a fraction of the lane (default 0.6 in a waterfall,
+                0.9 in a flame chart).
             group: A column of groups (a host, a region, a day): each group gets a header
                 lane with its own lanes under it, in the plot's lane order; groups fold.
             hover: Show tooltips for this layer.
             select: Whether its spans can be selected.
             name: The layer's name.
         """
-        return self.intervals(
+        if layout not in get_args(SpanLayout):
+            raise ValueError(f"layout must be one of {get_args(SpanLayout)}, got {layout!r}")
+        flame = layout == "flame"
+        if flame:
+            # the lanes are depths: the span's name goes in its bar and its tooltip
+            text = text if text is not None else lane
+            tips = _columns(tooltip, "tooltip") or []
+            tooltip = tips if lane in tips else [lane, *tips]
+        return self._intervals(
             data,
+            flame=flame,
             start=start,
             end=end,
             duration=duration,
@@ -908,6 +928,7 @@ class Timeline:
             id=id,
             parent=parent,
             lane=lane,
+            depends=depends,
             color=color,
             colormap=colormap,
             clim=clim,
@@ -915,11 +936,12 @@ class Timeline:
             opacity=opacity,
             text=text,
             tooltip=tooltip,
+            progress=None,
             expand=expand,
-            critical_path=critical_path,
-            durations=durations,
-            overlap="overlay",
-            height=height,
+            critical_path=not flame if critical_path is None else critical_path,
+            durations=not flame if durations is None else durations,
+            overlap="pack" if flame else "overlay",
+            height=height if height is not None else 0.9 if flame else 0.6,
             group=group,
             hover=hover,
             select=select,
@@ -1858,7 +1880,7 @@ def _columns(value: str | Sequence[str] | None, name: str) -> list[str] | None:
 def _expand(value: Any) -> Any:
     """``expand=`` as the tree reads it: a number, "auto", or None for every level."""
     if value is None:
-        raise ValueError("expand='all' shows every level (expand=None was 0.4's)")
+        raise ValueError("expand='all' shows every level (expand=None was 0.3's)")
     if value == "all":
         return None
     if value == "auto" or (isinstance(value, int) and not isinstance(value, bool)):
