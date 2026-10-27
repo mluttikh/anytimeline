@@ -9,7 +9,8 @@ All notable changes to anytimeline. The format follows
 Foundations: plots that show where widgets do not, and checks that Python and the browser
 agree. The plot as a Python object, with one name per idea: a release that changes code.
 Each old spelling raises an error that names the new one, for this release. And levels of
-detail: ten million events, samples or bars in a plot that opens at once.
+detail: ten million events, samples or bars in a plot that opens at once. And images and
+analysis: pictures drawn in Python, the selection in numbers, search, and notes.
 
 ### Breaking changes
 
@@ -36,6 +37,30 @@ detail: ten million events, samples or bars in a plot that opens at once.
 
 ### Added
 
+- **Pictures drawn in Python**: `plot.save_image("plot.svg")` and `plot.to_svg()` draw the
+  plot as the browser does at that size and view, without a browser: in scripts, tests and
+  CI. The SVG holds only shapes, lines and text (no clip paths, filters or images), so
+  PowerPoint, Keynote and Google Slides import it as shapes. `.png` through the optional
+  `resvg-py` (`pip install 'anytimeline[png]'`). `width=`, `height=`, `view=`,
+  `theme="dark"`, `scale=`.
+- **The selection in numbers**: while something is selected, a panel counts it in total, by
+  colour category and by lane, with bars' total and mean duration, events' span and values'
+  mean, least and greatest. `plot.summary(layer, rows="selected" | "all")` gives the same as
+  a table of the type plotted. `Timeline(summary_panel=False)` hides the panel.
+- **Find and step**: `/` or Ctrl/Cmd+F finds text and lane names; Enter and Shift+Enter go
+  through the matches, bringing each into sight with a ring and its text. `.` and `,` go to
+  the next and previous mark of a lane, over layers; `F` fits the view to it. Python answers
+  from every mark (layers sent as levels too); a page searches the marks it holds.
+- **Annotations**: `plot.annotate(start, end, text, lane=)` (a band, or a line at one time)
+  and `plot.connect(a, b, text)` (an arrow from one mark to another), as `Annotation` and
+  `Connection` in `plot.annotations` and `plot.connections`. In the plot, `a` then a drag
+  or a click makes a note, `c` on two marks an arrow; both come to Python. They show in
+  pages and pictures.
+- **Undo for the selection**: Ctrl/Cmd+Z and Shift+Ctrl/Cmd+Z, and
+  `plot.undo_selection()` / `plot.redo_selection()`; 50 changes kept in Python.
+- **Touch waits for a tap**: before it, a finger scrolls the page; after it, one finger pans
+  and two pinch to zoom.
+- `tzdata` is a dependency on Windows, for time zones.
 - **Levels of detail**: a layer of more than 250,000 events, samples or bars is sent as
   levels. Zoomed out, the browser draws counts per lane and bin (bins a factor of 4 apart):
   events as bars from a bin's first to its last event, as tall as it has events, in its most
@@ -96,10 +121,16 @@ detail: ten million events, samples or bars in a plot that opens at once.
 
 ### Fixed
 
+- Month and day ticks across a new year counted on from the old year's months ("Oct, Nov,
+  Dec, Oct").
 - Values layers no longer send an order buffer the browser does not use.
+- A flaky browser test of the Display panel waits for the marks to change.
 
 ### Development
 
+- Twins: Python's ports of the browser's time axis, level choice, dodging and stem layout
+  (for pictures) are tested against the browser's code on the same cases
+  (`tests/fixtures/twins.json`, written by `UPDATE_TWINS=1 npm test`).
 - The spec Python sends is checked against a JSON Schema generated from the browser's types,
   for a plot of every kind; random plots (Hypothesis) and every kind of table (dict, Polars,
   PyArrow, pandas with NumPy, nullable and Arrow dtypes, DuckDB, with missing values) are

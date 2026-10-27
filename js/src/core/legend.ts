@@ -5,7 +5,8 @@ import { SYMBOLS } from "./scene";
 import type { LayerSpec } from "./types";
 import { tracePath } from "./renderers/symbols";
 
-const MAX_ITEMS = 16;
+/** The most items a block of the legend lists. */
+export const MAX_ITEMS = 16;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);

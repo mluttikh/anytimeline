@@ -73,6 +73,7 @@ class TimelineWidget(anywidget.AnyWidget):
     xscale = traitlets.Unicode("time").tag(sync=True)
     hover = traitlets.Bool(True).tag(sync=True)
     legend = traitlets.Bool(True).tag(sync=True)
+    summary_panel = traitlets.Bool(True).tag(sync=True)
     selection_mode = traitlets.Unicode("multiple", allow_none=True).tag(sync=True)
     font_size = traitlets.Int(12).tag(sync=True)
     mark_scale = traitlets.Float(1.0).tag(sync=True)
@@ -82,6 +83,8 @@ class TimelineWidget(anywidget.AnyWidget):
     _pick = traitlets.Dict().tag(sync=True)
     _marks = traitlets.Dict().tag(sync=True)
     _marked = traitlets.Dict().tag(sync=True)
+    _summary = traitlets.List().tag(sync=True)
+    _notes = traitlets.Dict().tag(sync=True)
     _zoom = traitlets.Dict().tag(sync=True)
     _link = traitlets.Dict().tag(sync=True)
 
@@ -136,6 +139,21 @@ class TimelineWidget(anywidget.AnyWidget):
             except Exception as err:
                 answer["error"] = str(err)
             self.send(answer)
+        elif kind in ("find", "step"):
+            answer = {"type": "answer", "request": content.get("request")}
+            try:
+                answer.update(plot._find(content) if kind == "find" else plot._step(content))
+            except Exception as err:
+                answer["error"] = str(err)
+            self.send(answer)
+        elif kind == "undo":
+            plot.undo_selection()
+        elif kind == "redo":
+            plot.redo_selection()
+        elif kind == "annotate":
+            plot._annotate_from(content)
+        elif kind == "connect":
+            plot._connect_from(content)
         elif kind == "view":
             plot._shown(content)
         elif kind == "image":

@@ -52,6 +52,9 @@ async function main(): Promise<void> {
         }, 1);
       } else if (content.type === "tooltip") {
         setTimeout(() => handlers.get("msg:custom")?.forEach((h) => h({ type: "answer", request: content.request, rows: [["row", String(content.index)]] }), []), 1);
+      } else if (content.type === "find" || content.type === "step") {
+        // no Python here: the view searches the marks it holds
+        setTimeout(() => handlers.get("msg:custom")?.forEach((h) => h({ type: "answer", request: content.request, error: "no Python in the harness" }), []), 1);
       } else if (content.type === "perf") {
         (window as any).__perf = content.update;
       }

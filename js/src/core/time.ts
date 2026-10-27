@@ -114,9 +114,11 @@ export function offsetMs(ms: number, tz: string): number {
   return asUtc - Math.floor(ms / 1000) * 1000;
 }
 
+/** The instant of a UTC wall time; months and days past their end carry over (13/1 is
+ * January of the next year). */
 function utcOf(y: number, mo: number, d: number, h = 0, mi = 0, s = 0): number {
-  const date = new Date(Date.UTC(2000, mo - 1, d, h, mi, s));
-  date.setUTCFullYear(y); // years 0-99 too
+  const date = new Date(Date.UTC(2000, 0, 1, h, mi, s));
+  date.setUTCFullYear(y, mo - 1, d); // years 0-99 too
   return date.getTime();
 }
 

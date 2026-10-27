@@ -79,7 +79,12 @@ number over time, as a line, area or steps) go on the same lanes, behind the eve
 `a.link(b)` and zoom and pan together.
 
 `plot.save_html("plot.html")` writes the plot to one file that opens in any browser, still
-interactive; the toolbar saves it as a PNG, and so does `plot.save_png("plot.png")`.
+interactive. `plot.save_image("plot.svg")` draws it in Python, without a browser: an SVG that
+slides import as shapes, or a PNG (`pip install 'anytimeline[png]'`).
+
+In the plot, a panel counts what is selected (`plot.summary()` gives it as a table), `/`
+finds text and lanes, `.` and `,` step through a lane, and `a` and `c` leave notes and arrows
+(`plot.annotate(start, end, text)`, `plot.connect(a, b)`).
 
 Documentation online: <https://mluttikh.github.io/anytimeline/>; or build it with
 `uv run python scripts/build_docs.py` and open `site/index.html`. Example notebooks in

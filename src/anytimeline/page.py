@@ -137,6 +137,8 @@ def data(plot: Timeline) -> str:
         "lanes": plot._zoom.get("lanes"),
         "marks": {k: base64.b64encode(v).decode("ascii") for k, v in plot._marks.items()},
         "marked": {k: base64.b64encode(v).decode("ascii") for k, v in plot._marked.items()},
+        "summary": plot._summary,
+        "notes": plot._notes,
         "tooltips": tooltip_tables(plot),
         "link": plot._link or None,
     }

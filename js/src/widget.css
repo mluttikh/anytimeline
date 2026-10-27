@@ -415,6 +415,90 @@ body.vscode-high-contrast:not(.vscode-high-contrast-light) .atl-root,
   color: var(--atl-muted);
 }
 
+/* the selection in numbers (Timeline.summary), bottom right over the plot */
+.atl-summary {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 2;
+  max-height: 45%;
+  max-width: min(420px, 70%);
+  overflow: auto;
+  padding: 6px 22px 6px 8px;
+  border-radius: 4px;
+  background: var(--atl-panel);
+  border: 1px solid var(--atl-border);
+  pointer-events: auto;
+}
+.atl-summary-close {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  border: 0;
+  background: none;
+  color: var(--atl-muted);
+  font: inherit;
+  font-size: 1.15em;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.atl-summary-close:hover {
+  color: var(--atl-text);
+}
+.atl-summary-table {
+  border-collapse: collapse;
+}
+.atl-summary-table + .atl-summary-table {
+  margin-top: 6px;
+}
+.atl-summary-table td,
+.atl-summary-table th {
+  padding: 0 0 0 10px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+.atl-summary-table td:first-child,
+.atl-summary-table th:first-child {
+  padding-left: 0;
+}
+.atl-summary-caption td {
+  font-weight: 600;
+}
+.atl-summary-head th {
+  color: var(--atl-muted);
+  font-weight: normal;
+  text-align: right;
+}
+.atl-summary-all td {
+  font-weight: 600;
+}
+.atl-summary-title td {
+  color: var(--atl-muted);
+  padding-top: 4px;
+}
+.atl-summary-note td,
+.atl-summary-more td {
+  color: var(--atl-muted);
+}
+.atl-summary-label {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.atl-summary-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.atl-summary-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+
 /* a plot shown as HTML (display="html", to_html): what it needs where scripts do not run;
    removed when the plot starts */
 .anytimeline-note {
@@ -422,4 +506,75 @@ body.vscode-high-contrast:not(.vscode-high-contrast-light) .atl-root,
   padding: 8px 0;
   font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: #6b7280;
+}
+
+/* the search box (/, Ctrl/Cmd+F), top left over the plot */
+.atl-finder {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 6px;
+  border-radius: 4px;
+  background: var(--atl-panel);
+  border: 1px solid var(--atl-border);
+  pointer-events: auto;
+}
+.atl-finder[hidden] {
+  display: none;
+}
+.atl-finder input {
+  font: inherit;
+  width: 180px;
+  padding: 2px 4px;
+  color: var(--atl-text);
+  background: var(--atl-bg);
+  border: 1px solid var(--atl-border);
+  border-radius: 3px;
+}
+.atl-finder-status {
+  color: var(--atl-muted);
+  white-space: nowrap;
+  min-width: 4em;
+}
+.atl-finder button {
+  border: 0;
+  background: none;
+  color: var(--atl-muted);
+  font: inherit;
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.atl-finder button:hover {
+  color: var(--atl-text);
+  background: var(--atl-band);
+}
+
+/* what the next gesture does (the keys a and c), top middle over the plot */
+.atl-mode {
+  position: absolute;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: var(--atl-panel);
+  border: 1px solid var(--atl-accent);
+  color: var(--atl-text);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.atl-note-input {
+  position: absolute;
+  z-index: 3;
+  width: 220px;
+  font: inherit;
+  padding: 2px 4px;
+  color: var(--atl-text);
+  background: var(--atl-bg);
+  border: 1px solid var(--atl-accent);
+  border-radius: 3px;
 }

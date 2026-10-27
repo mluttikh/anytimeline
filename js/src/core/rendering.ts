@@ -1,6 +1,7 @@
 // Building a frame: the events in view culled and dodged, routes as segments, and what
 // the renderer draws; then the front canvas.
 
+import { drawNotes } from "./notes";
 import { dodge, rowsFor, spacing } from "./dodge";
 import type { FrameDraw, SegmentDraw } from "./renderers/renderer";
 import { lowerBound, parseHex, upperBound } from "./scene";
@@ -170,10 +171,12 @@ export function renderFrame(view: TimelineView): void {
   drawing.drawStems(view, frontCtx, plot, laneTop, l0, l1);
   drawing.drawMarked(view, frontCtx, plot, laneTop, l0, l1);
   if (inView <= LABEL_BUDGET) drawing.drawLabels(view, frontCtx, plot, laneTop);
+  drawNotes(view, frontCtx, plot, laneTop);
   drawing.drawMarkers(view, frontCtx, plot);
   drawing.drawValueScales(view, frontCtx, plot, l0, l1);
   drawing.drawLinkedCursor(view, frontCtx, plot);
   if (gaps.length) drawing.drawGaps(view, frontCtx, plot, gaps);
+  drawing.drawFocus(view, frontCtx, plot, laneTop);
   drawing.drawHover(view, frontCtx, plot, laneTop);
   if (view.box) drawing.drawBox(view, frontCtx, plot, view.box);
   view.callbacks.onPerf?.({ frame_ms: Math.round((performance.now() - t0) * 100) / 100, in_view: inView });
