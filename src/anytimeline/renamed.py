@@ -1,4 +1,4 @@
-"""Arguments and attributes that were renamed or removed in 0.5: an old spelling raises an
+"""Arguments and attributes that were renamed or removed in 0.4.0: an old spelling raises an
 error that gives the new one, instead of Python's "unexpected keyword argument". They go in
 a later release."""
 

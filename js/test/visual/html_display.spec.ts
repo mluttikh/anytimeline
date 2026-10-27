@@ -101,8 +101,9 @@ test("a notebook run and exported by nbconvert shows the plot shown as HTML", as
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(pathToFileURL(resolve(scenes, "nbconvert_export.html")).href);
   await ready(page, 1);
-  await expect(page.locator(".atl-root")).toHaveCount(1);
-  await expect(page.locator(".atl-title")).toContainText("Exported");
+  // (the notebook's widget draws too where its widget manager loads from the internet)
+  await expect(page.locator(".anytimeline-embed .atl-root")).toHaveCount(1);
+  await expect(page.locator(".anytimeline-embed .atl-title")).toContainText("Exported");
   // the page's own scripts (MathJax, RequireJS) may fail offline; the plot's must not
   expect(errors.filter((e) => /anytimeline|atl-/i.test(e))).toEqual([]);
   await page.screenshot({ path: "test-results/shots/nbconvert_export.png", fullPage: true });

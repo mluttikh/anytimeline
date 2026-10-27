@@ -135,3 +135,10 @@ def test_wrapping() -> None:
         assert stems.levels_for(lane_h, box_h, 7, start) == levels
         assert stems.level_offset(2, box_h, 7, start) == up
         assert stems.level_offset(-1, box_h, 7, start) == down
+
+
+def test_zones_before_1970() -> None:
+    # (datetime.fromtimestamp fails before 1970 on Windows)
+    ms = -9_307_120_012_877  # 1675-01-25T16:53:07Z, in local mean time:
+    assert axis.parts_at(ms, "America/New_York") == (1675, 1, 25, 11, 57, 5)  # -4:56:02
+    assert axis.parts_at(ms, "Asia/Kolkata") == (1675, 1, 25, 22, 46, 35)  # +5:53:28

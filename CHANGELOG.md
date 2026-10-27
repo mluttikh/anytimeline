@@ -4,7 +4,7 @@ All notable changes to anytimeline. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] - 2026-10-27
 
 Foundations: plots that show where widgets do not, and checks that Python and the browser
 agree. The plot as a Python object, with one name per idea: a release that changes code.
@@ -217,7 +217,7 @@ drawn with WebGPU, WebGL2 or Canvas 2D.
   that follow the notebook.
 - Synthetic example data (`anytimeline.synthetic`) and documentation with live examples.
 
-[Unreleased]: https://github.com/mluttikh/anytimeline/compare/v0.3.0...HEAD
+[0.4.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.4.0
 [0.3.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.3.0
 [0.2.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.2.0
 [0.1.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.1.0

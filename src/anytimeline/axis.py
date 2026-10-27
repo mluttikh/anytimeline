@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from functools import cache
 from zoneinfo import ZoneInfo
@@ -115,6 +115,7 @@ def _zone(tz: str) -> ZoneInfo | None:
 
 _SECONDS_MIN = -62135596800  # 0001-01-01
 _SECONDS_MAX = 253402300799  # 9999-12-31 23:59:59
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def _offset_s(ms: float, tz: str) -> int:
@@ -122,7 +123,8 @@ def _offset_s(ms: float, tz: str) -> int:
     if zone is None:
         return 0
     seconds = min(_SECONDS_MAX - 86400, max(_SECONDS_MIN + 86400, math.floor(ms / 1000)))
-    offset = datetime.fromtimestamp(seconds, UTC).astimezone(zone).utcoffset()
+    # (not datetime.fromtimestamp: on Windows it fails before 1970)
+    offset = (_EPOCH + timedelta(seconds=seconds)).astimezone(zone).utcoffset()
     return int(offset.total_seconds()) if offset is not None else 0
 
 
