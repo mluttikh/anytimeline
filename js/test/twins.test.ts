@@ -37,6 +37,9 @@ function axisCases(): { spec: TimeSpec; left: number; right: number; width: numb
       for (const unit of ["s", "ns"])
         for (const span of spansNs) {
           if (unit === "s" && span < 1e9) continue;
+          // centuries back in a zone: before 1970 tz databases differ (in some builds
+          // Europe/Amsterdam is Brussels), so Python's and the browser's may disagree
+          if (tz !== "UTC" && span > 1e19) continue;
           const per = UNIT[unit];
           const left = -(span / per) * 0.37;
           out.push({ spec: { kind: "datetime", unit: unit as TimeSpec["unit"], origin_ns: exactNs(origin), origin: 0, timezone: tz, extent: [0, 1] }, left, right: left + span / per, width: span > 1e15 ? 640 : 900 });

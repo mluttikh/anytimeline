@@ -130,6 +130,6 @@ test.describe("in marimo", () => {
     // zoomed in on the Order scale: the events there
     await show(page, 0.5, 0.5005);
     await expect.poll(async () => (await drawn(page)).bins, { timeout: 20_000 }).toBeNull();
-    expect((await drawn(page)).events).toBeGreaterThan(0);
+    await expect.poll(async () => (await drawn(page)).events, { timeout: 20_000 }).toBeGreaterThan(0);
   });
 });

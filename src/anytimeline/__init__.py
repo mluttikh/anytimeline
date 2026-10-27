@@ -9,7 +9,7 @@ from anytimeline.presets import gantt, story
 from anytimeline.styling import SYMBOLS
 from anytimeline.view import View
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "SYMBOLS",
