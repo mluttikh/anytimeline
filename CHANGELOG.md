@@ -107,6 +107,7 @@ analysis: pictures drawn in Python, the selection in numbers, search, and notes.
 - `tooltip=` takes one column name as well as a list.
 - `plot.dev.benchmark(frames)` times frames in the browser; the result comes in
   `plot.dev.perf`.
+- Python 3.15 (tested on 3.12 to 3.15).
 
 ### Changed
 
