@@ -1,4 +1,4 @@
-# Checks on every push and pull request: Python (lint, types, tests) on Python 3.12 to 3.14,
+# Checks on every push and pull request: Python (lint, types, tests) on Python 3.12 to 3.15,
 # on Linux and Windows;
 # the JavaScript and the browser tests (Playwright: scenes, interactions, docs, marimo,
 # JupyterLab) with the docs built; and the wheel, installed into a clean environment.
@@ -28,13 +28,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python: ["3.12", "3.13", "3.14"]
+        python: ["3.12", "3.13", "3.14", "3.15"]
         include:
           # Windows: paths, line ends and text encodings (cp1252) differ there
           - os: windows-latest
             python: "3.12"
           - os: windows-latest
-            python: "3.14"
+            python: "3.15"
     defaults:
       run:
         shell: bash
@@ -103,7 +103,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.12", "3.14"]
+        python: ["3.12", "3.15"]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
