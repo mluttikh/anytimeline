@@ -1,6 +1,14 @@
-# Route and symbols
+# Parts and views
+
+The parts of a layer whose settings only matter together, and what a plot shows.
+
+::: anytimeline.View
 
 ::: anytimeline.Route
+
+::: anytimeline.Stem
+
+::: anytimeline.Marker
 
 ## Symbols
 

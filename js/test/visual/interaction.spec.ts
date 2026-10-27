@@ -52,7 +52,7 @@ test("Select: a click selects an event, a drag selects a box", async ({ page }) 
   await page.mouse.up();
   const sent = await picks(page);
   expect(sent[0]).toMatchObject({ kind: "click", index: 3, mode: "replace" });
-  expect(sent[1]).toMatchObject({ kind: "box", lanes: [0, 2], mode: "replace", xscale: "sequence" });
+  expect(sent[1]).toMatchObject({ kind: "box", lanes: [0, 2], mode: "replace", xscale: "order" });
 });
 
 test("Zoom: a drag zooms to that time range, Back returns, the key z switches", async ({ page }) => {
@@ -157,7 +157,7 @@ test("full screen: the plot fills the screen, lanes fill its height, the time ra
 test("Time and Order are icons; the text size changes all text and reaches Python", async ({ page }) => {
   await open(page, "service_time");
   await page.locator('.atl-toolbar button[aria-label="Order"]').click();
-  expect(await state(page, "xscale")).toBe("sequence");
+  expect(await state(page, "xscale")).toBe("order");
   await expect(page.locator('.atl-toolbar button[aria-label="Order"]')).toHaveAttribute("aria-pressed", "true");
   const axis = () => view(page).evaluate((root: any) => root.__view.axisH);
   expect(await axis()).toBe(44);
@@ -280,6 +280,34 @@ test("Spans: a click on a name folds and unfolds; keys fold all; a double-click 
   expect(a).toBeLessThanOrEqual(span[0]);
   expect(b).toBeGreaterThanOrEqual(span[1]);
   expect(b - a).toBeLessThan((span[1] - span[0]) * 1.2);
+});
+
+test("plot.view: the lane set in Python comes to the top, unfolded, and its view comes back", async ({ page }) => {
+  // short, so the lanes do not all fit
+  await page.goto("/test/visual/harness.html?scene=trace_list&renderer=webgl2&height=220");
+  await page.waitForFunction(() => (window as any).__perf?.frame_ms !== undefined, null, { timeout: 15_000 });
+  const tree = await view(page).evaluate((root: any) => root.__view.spec.lanes.tree);
+  const names: string[] = await view(page).evaluate((root: any) => root.__view.spec.lanes.names.map(String));
+  // a span of the third trace, folded away (expand=1) under its parents, with a name of its own
+  const roots = tree.depth.map((d: number, i: number) => (d === 0 ? i : -1)).filter((i: number) => i >= 0);
+  const lane = names.findIndex((n, i) => i > roots[2] && i < roots[2] + tree.size[roots[2]] && tree.depth[i] >= 1 && names.indexOf(n) === i);
+  expect(lane).toBeGreaterThan(0);
+  expect(await rows(page)).not.toContain(lane);
+  const set = (zoom: unknown) =>
+    page.evaluate((z) => {
+      const m = (window as any).__model;
+      m.state._zoom = z;
+      m.emit("change:_zoom");
+    }, zoom);
+  await set({ n: 1, range: null, lanes: names[lane] });
+  const shown = await rows(page);
+  expect(shown).toContain(lane);
+  expect(shown.indexOf(roots[2])).toBeLessThan(shown.indexOf(lane)); // its parents unfolded
+  await expect.poll(async () => (await page.evaluate(() => (window as any).__log.filter((m: any) => m.type === "view").at(-1)?.lanes))?.[0]).toBe(names[lane]);
+  // null: from the top again, the lanes as they are
+  await set({ n: 2, range: null, lanes: null });
+  await expect.poll(async () => (await page.evaluate(() => (window as any).__log.filter((m: any) => m.type === "view").at(-1)?.lanes))?.[0]).toBe(names[roots[0]]);
+  expect(await rows(page)).toEqual(shown);
 });
 
 test("Spans: a box over folded lanes selects only the lanes that show", async ({ page }) => {

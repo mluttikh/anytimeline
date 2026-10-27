@@ -7,7 +7,31 @@ All notable changes to anytimeline. The format follows
 ## [Unreleased]
 
 Foundations: plots that show where widgets do not, and checks that Python and the browser
-agree.
+agree. And the plot as a Python object, with one name per idea: a release that changes
+code. Each old spelling raises an error that names the new one, for this release.
+
+### Breaking changes
+
+- **A plot is a Python object, not a widget.** `Timeline` owns the widget that shows it,
+  `plot.widget`, made the first time the plot is shown (pages and images need none). Where
+  a widget itself is needed, use `plot.widget`:
+  `mo.ui.anywidget(plot.widget)` in marimo, `ipywidgets.VBox([a.widget, b.widget])`;
+  `plot.widget.observe(fn, "tool")` instead of `plot.observe`.
+- A setting set to a value of the wrong kind raises a `TypeError`, a wrong value a
+  `ValueError` (was `traitlets.TraitError`).
+- `plot.range` is `plot.view`: a `View(start, end, lanes)` of what the plot shows, which can
+  also be set (see Added).
+- `plot.perf` is `plot.dev.perf`.
+- `xscale="sequence"` is `xscale="order"`, the name the toolbar gives it.
+- `selection_mode="none"` is `selection_mode=None`; `states(text=False)` is `text=None`.
+- `intervals(label=)` is `lane=`: with `parent=`, the column that names each bar's lane;
+  `spans(label=)` is `lane=` too (default `"name"`).
+- `expand=None` (every level of a tree) is `expand="all"`.
+- `events(labels="stems")`, `stem_shape=` and `label_width=` (and `story`'s) are one
+  argument, `stems=`: `True`, `"curved"`, or a `Stem(shape, width)`.
+- Markers are `Marker(time, label, color)` objects in `plot.markers`, a list to set;
+  `clear_markers()` is `plot.markers = []`. `plot.marker(time, label)` still adds one.
+- The layer modules are in `anytimeline.layers` (`anytimeline.layers.events`, ...).
 
 ### Added
 
@@ -28,6 +52,17 @@ agree.
   in a too fine unit), and plain numbers that look like seconds, milliseconds, microseconds
   or nanoseconds since the epoch. An `end` column of durations says to pass `duration=`.
 - A text repr: `Timeline(events: 2,256 events; cpu: 1,810 samples)`.
+- `plot.view = View(start, end, lanes=["db"])` shows a time range and brings a lane to the
+  top, unfolding the lanes it is under; `other.view = plot.view` shows the same in another
+  plot, and `plot.view = None` the whole timeline from the top.
+- Plots copy (`copy.copy`, `copy.deepcopy`) and pickle: a plot of its own, without the
+  widget, links and callbacks.
+- `anytimeline.types`: the options of arguments as `Literal` types (`Tool`, `XScale`,
+  `LaneSort`, ...), for your own functions; editors complete them and type checkers catch a
+  misspelled one.
+- `tooltip=` takes one column name as well as a list.
+- `plot.dev.benchmark(frames)` times frames in the browser; the result comes in
+  `plot.dev.perf`.
 
 ### Changed
 
@@ -47,6 +82,11 @@ agree.
   PyArrow, pandas with NumPy, nullable and Arrow dtypes, DuckDB, with missing values) are
   tested for the same spec and the same selection.
 - `scripts/check.py` runs CI's Linux jobs locally; CI runs the Python tests on Windows too.
+- Each layer kind is a module of `anytimeline.layers` (reading the table, its layout,
+  picking); `widget.py` is only the protocol with the browser, `page.py` the HTML, and
+  `scene.py` lays the layers out together.
+- The browser's view is split into modules (folding, rendering, drawing, picking, input),
+  with no change in what it does.
 
 ## [0.3.0] - 2026-10-12
 

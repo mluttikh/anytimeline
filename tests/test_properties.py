@@ -11,8 +11,8 @@ from hypothesis import strategies as st
 from test_spec_contract import check
 
 from anytimeline import Route, Timeline
+from anytimeline.page import page as _page
 from anytimeline.synthetic import service_health, service_log, service_metrics, traces
-from anytimeline.widget import _page
 
 SEEDS = st.integers(0, 5)
 
@@ -50,7 +50,7 @@ def intervals(draw: st.DrawFn) -> tuple[str, dict[str, Any], dict[str, Any]]:
         "select": draw(st.booleans()),
     }
     if tree:
-        options |= {"id": "span_id", "parent": "parent_id", "label": "name"}
+        options |= {"id": "span_id", "parent": "parent_id", "lane": "name"}
         options["critical_path"] = draw(st.booleans())
     else:
         options["lane"] = draw(st.sampled_from(["service", "trace_id"]))
@@ -63,7 +63,7 @@ def states(draw: st.DrawFn) -> tuple[str, dict[str, Any], dict[str, Any]]:
     data = service_health(draw(st.integers(2, 12)), seed=draw(SEEDS))
     options = {
         "lane": "service",
-        "text": draw(st.sampled_from([True, False, "{state} ({reason})"])),
+        "text": draw(st.sampled_from([True, None, "{state} ({reason})"])),
         "tooltip": draw(st.sampled_from([None, ["reason"]])),
         "height": draw(st.sampled_from([0.8, 1.0])),
         "opacity": draw(st.sampled_from([1.0, 0.3])),
@@ -88,7 +88,7 @@ def values(draw: st.DrawFn) -> tuple[str, dict[str, Any], dict[str, Any]]:
 
 PLOT_OPTIONS = st.fixed_dictionaries(
     {
-        "xscale": st.sampled_from(["time", "sequence"]),
+        "xscale": st.sampled_from(["time", "order"]),
         "sort": st.sampled_from([None, "name", "first", "last", "count"]),
         "align": st.sampled_from(["time", "start"]),
         "lane_names": st.booleans(),
@@ -128,8 +128,8 @@ def test_any_plot(options, layers):
     named = buffer_ids(plot._spec)
     assert named <= plot._buffers.keys()
     served: list[dict[str, Any]] = []
-    setattr(plot, "send", lambda content, buffers=None: served.append(content))  # noqa: B010
-    plot._on_frontend_msg(plot, {"type": "need", "ids": sorted(named)}, [])
+    setattr(plot.widget, "send", lambda content, buffers=None: served.append(content))  # noqa: B010
+    plot.widget._on_msg(plot.widget, {"type": "need", "ids": sorted(named)}, [])
     assert {c["id"] for c in served if c["type"] == "put"} == named
 
     page = _page([plot], None)

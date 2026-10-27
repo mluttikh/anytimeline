@@ -17,8 +17,8 @@ import numpy as np
 
 from anytimeline import data as tables
 from anytimeline import styling
-from anytimeline.events import _texts
-from anytimeline.intervals import IntervalsRecord
+from anytimeline.layers.common import texts
+from anytimeline.layers.intervals import IntervalsRecord
 from anytimeline.timebase import Times, times
 
 
@@ -116,7 +116,7 @@ def build(
     if text is True:
         labels = [styling.label(v) for v in values.tolist()]
     elif text:
-        labels = _texts(table, text, rows)
+        labels = texts(table, text, rows)
     else:
         labels = None
     tip_cols = list(tooltip) if tooltip is not None else []

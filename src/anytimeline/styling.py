@@ -10,11 +10,12 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, get_args
 
 import numpy as np
 
 from anytimeline.data import is_missing
+from anytimeline.types import Symbol
 
 TAB10 = [
     "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
@@ -25,10 +26,7 @@ TAB10 = [
 MISSING_COLOR = "#a8adb3"
 """Rows without a colour value."""
 
-SYMBOLS = (
-    "circle", "square", "diamond", "triangle", "triangle-down", "cross", "x", "tick",
-    "circle-open", "square-open", "diamond-open", "triangle-open", "triangle-down-open",
-)  # fmt: skip
+SYMBOLS = get_args(Symbol)
 """The shapes of events; a category column gets them in this order."""
 
 DEFAULT_SIZE = 8.0

@@ -27,7 +27,7 @@ def _():
         route="request",
         tooltip=["request", "user"],
     )
-    widget = mo.ui.anywidget(plot)
+    widget = mo.ui.anywidget(plot.widget)
     widget
     return json, mo, plot, widget
 
@@ -40,7 +40,7 @@ def _(json, mo, plot, widget):
         "selected": {name: len(rows) for name, rows in plot.selection.items()},
         "xscale": plot.xscale,
         "tool": plot.tool,
-        "renderer": plot.perf.get("renderer"),
+        "renderer": plot.dev.perf.get("renderer"),
     }
     mo.Html(f"<pre id='python-state'>{json.dumps(state, sort_keys=True)}</pre>")
     return

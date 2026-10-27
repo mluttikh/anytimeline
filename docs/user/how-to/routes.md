@@ -29,7 +29,7 @@ from anytimeline import Timeline
 from anytimeline.synthetic import service_log
 
 log = pl.DataFrame(service_log(300))
-plot = Timeline(lane_order=["gateway", "auth", "api", "cache", "db"], xscale="sequence", height=300)
+plot = Timeline(lane_order=["gateway", "auth", "api", "cache", "db"], xscale="order", height=300)
 plot.events(
     log, time="time", lane="service", color="request", order="seq", route="request", text="{event}"
 )

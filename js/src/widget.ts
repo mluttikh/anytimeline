@@ -47,6 +47,16 @@ function stateFor(model: AnyModel): ModelState {
     else if (msg?.type === "answer") {
       state.pending.get(msg.request)?.(msg);
       state.pending.delete(msg.request);
+    } else if (msg?.type === "benchmark") {
+      // Python's plot.dev.benchmark(): frames drawn in the first view, as perf
+      const view = [...state.views][0];
+      view
+        ?.benchmark(Number(msg.frames ?? 60))
+        .then((result) => {
+          Object.assign(state.perf, { benchmark: result });
+          send(model, { type: "perf", update: state.perf });
+        })
+        .catch(() => {});
     } else if (msg?.type === "snapshot") {
       // Python's save_png: a picture of the plot as shown (the first view that has one)
       const view = [...state.views][0];
@@ -120,7 +130,7 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
       model.set("_pick", { ...g, n: ++pickCount });
       model.save_changes();
     },
-    onView: (range) => send(model, { type: "view", range }),
+    onView: (range, lanes) => send(model, { type: "view", range, lanes }),
     onXScale: (xscale: XScale) => {
       model.set("xscale", xscale);
       model.save_changes();
@@ -171,7 +181,7 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
   const onMarks = () => view.setMarks(marksOf(model));
   const onHover = () => view.setHover(Boolean(model.get("hover")));
   const onLegend = () => view.setLegend(Boolean(model.get("legend")));
-  const onMode = () => view.setSelectionMode(String(model.get("selection_mode")));
+  const onMode = () => view.setSelectionMode(String(model.get("selection_mode") ?? "none"));
   const onTool = () => view.setTool((model.get("tool") ?? "pan") as Tool);
   const onFontSize = () => view.setFontSize(Number(model.get("font_size") ?? 12));
   const onMarkScale = () => view.setMarkScale(Number(model.get("mark_scale") ?? 1));
@@ -181,11 +191,13 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
     view.setLink(l?.group ? { group: l.group, align: l.align === "start" ? "start" : "time" } : null);
   };
   let zoomN = Number(model.get("_zoom")?.n ?? 0);
+  // plot.view and zoom_to: a range (null: the whole timeline) and, set with plot.view, the
+  // lane at the top (null: from the top)
   const onZoom = () => {
     const z = model.get("_zoom");
-    if (z?.n && z.n !== zoomN && Array.isArray(z.range)) {
+    if (z?.n && z.n !== zoomN) {
       zoomN = z.n;
-      view.zoomTo(z.range as [number, number]);
+      view.setView(Array.isArray(z.range) ? (z.range as [number, number]) : null, "lanes" in z ? (z.lanes as string | null) : undefined);
     }
   };
   const handlers: [string, () => void][] = [
@@ -221,7 +233,7 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
   load();
   // a zoom_to made before the plot was shown applies once the data is there
   const z = model.get("_zoom");
-  if (z?.range) setTimeout(() => {
+  if (z?.n) setTimeout(() => {
     zoomN = 0;
     onZoom();
   }, 50);

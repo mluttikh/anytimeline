@@ -2,7 +2,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from anytimeline import Timeline, gantt
+from anytimeline import Marker, Timeline, gantt
 from anytimeline.codec import decode
 
 
@@ -138,7 +138,12 @@ def test_markers():
     plot = gantt(plan())
     plot.marker("2026-10-10", "freeze", color="#d62728")
     assert plot._spec["markers"][-1] == {"x": 9 * 86400.0, "label": "freeze", "color": "#d62728"}
-    plot.clear_markers()
+    assert plot.markers[-1] == Marker("2026-10-10", "freeze", "#d62728")
+    plot.markers = []
     assert plot._spec["markers"] == []
+    with pytest.raises(TypeError, match="list of Markers"):
+        plot.markers = [("2026-10-10", "freeze")]  # ty: ignore[invalid-assignment]
+    with pytest.raises(AttributeError, match="markers = "):
+        plot.clear_markers()
     with pytest.raises(ValueError, match="markers need"):
         Timeline().events({"step": [1, 2]}, time=None, order="step").marker(1)

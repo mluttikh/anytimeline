@@ -5,67 +5,40 @@
 //
 // Framework-agnostic: widget.ts connects it to anywidget; another host supplies a
 // DataSource and the callbacks.
+//
+// The view's parts are modules of functions that take it: folding (rows and folding),
+// rendering (a frame), drawing (the front canvas), picking (and tooltips) and input. Its
+// members without `private` are theirs to use; other code uses its methods.
 
-import { BarLayer, type BarView, decodeBars } from "./bars";
+import { BarLayer, decodeBars } from "./bars";
 import { TimeCamera } from "./camera";
-import { dodge, rowsFor, spacing } from "./dodge";
 import { buildHelp } from "./help";
 import { buildLegend } from "./legend";
-import { FLAG_SELECTED, type FrameDraw, type MarkLayerDraw, type Renderer, type SegmentDraw } from "./renderers/renderer";
+import { FLAG_SELECTED, type MarkLayerDraw, type Renderer } from "./renderers/renderer";
 import { createRenderer } from "./renderers/select";
 import { type Align, compatible, convert, frameOf, join, leave, type LinkFrame, type LinkPeer, type LinkSpec, others } from "./link";
 import { download, fileName, legendPainter } from "./snapshot";
-import { clusterHidden, levelOffset, levelsFor, placeStems, type StemItem, type StemPlaced, type StemShape, wrapText } from "./stems";
+import type { StemPlaced } from "./stems";
 import { decodeValues, ValueLayer, type ValueView } from "./values";
-import { decodeEvents, type EventsData, fillSolid, lowerBound, parseHex, specBufferIds, upperBound } from "./scene";
-import { TimeAxis, UNIT_NS, fmtNumber } from "./time";
-import { FONT_SIZES, TOOLS, type Tool, Toolbar } from "./toolbar";
+import { decodeEvents, type EventsData, fillSolid, lowerBound, specBufferIds, upperBound } from "./scene";
+import { fmtNumber, TimeAxis, UNIT_NS } from "./time";
+import { FONT_SIZES, type Tool, Toolbar, TOOLS } from "./toolbar";
 import type { DataSource, EventsLayerSpec, IntervalsLayerSpec, RendererKind, RendererPreference, SceneSpec, ValuesLayerSpec, XScale } from "./types";
+import { AUTO_LANE, type Box, canvas, div, type DragMode, findGaps, fontFamily, type Gesture, HISTORY, type Hit, isStems, type Layer, MIN_LANE, PAD_BOTTOM, PAD_RIGHT, rowsOf, type Theme, THEME_ATTRIBUTES } from "./common";
+import * as folding from "./folding";
+import * as rendering from "./rendering";
+import * as drawing from "./drawing";
+import * as picking from "./picking";
+import * as input from "./input";
 
-/** What is under the pointer: an event, a bar (`bar`) or a sample of a values layer (`val`);
- * `layer` indexes the view's events layers, bars or values accordingly. */
-type Hit = { layer: number; index: number; bar?: boolean; val?: boolean };
-
-const PAD_RIGHT = 10;
-const PAD_BOTTOM = 8;
-const MIN_LANE = 18;
-const AUTO_LANE = 30;
-/** A zoom or selection box narrower than this (px) is a click. */
-const MIN_BOX = 8;
-const DOUBLE_CLICK_MS = 300;
-/** Views remembered for Back. */
-const HISTORY = 20;
-const HOVER_PX = 9;
-/** The most lanes a states layer's tooltip lists. */
-const STATE_TIP_LANES = 16;
-const LABEL_BUDGET = 3000;
-const ROUTE_BUDGET = 60_000;
-/** Break marks of long gaps (Order scale) at least this far apart (px); the longest win. */
-const GAP_PX = 28;
-
-export type Gesture =
-  | { kind: "click"; layer: string; index: number; mode: SelectMode }
-  | { kind: "box"; x: [number, number]; lanes: [number, number]; shown?: number[]; xscale: XScale; mode: SelectMode }
-  | { kind: "clear" };
-export type SelectMode = "replace" | "add" | "remove" | "toggle";
+export type { Gesture, SelectMode } from "./common";
+export { findGaps } from "./common";
 export type { Tool } from "./toolbar";
-
-/** What a drag does: set when it starts, from the tool, the keys held and where it starts. */
-type DragMode = "pan" | "zoom" | "select" | "axis";
-/** A zoom range (a band over all lanes), a selection box, or a time range to select. */
-type BoxKind = "range" | "select" | "range-select";
-interface Box {
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
-  kind: BoxKind;
-}
 
 export interface ViewCallbacks {
   onGesture?: (g: Gesture) => void;
-  /** The visible range in time ticks (debounced). */
-  onView?: (range: [number, number]) => void;
+  /** The time range in sight and the names of the lanes in sight, top to bottom. */
+  onView?: (range: [number, number], lanes: string[]) => void;
   onXScale?: (xscale: XScale) => void;
   /** Tooltip columns of one event: [name, value] rows. */
   onTooltip?: (layer: string, index: number) => Promise<string[][]>;
@@ -84,112 +57,91 @@ export interface ViewCallbacks {
   onDodge?: (on: boolean) => void;
 }
 
-interface Layer {
-  data: EventsData;
-  draw: MarkLayerDraw;
-  /** Screen x per event (CSS px, plot-relative) of the last cull. */
-  xs: Float64Array;
-  /** The range in x units that dodging covered, and at which scale. */
-  dodged: { left: number; right: number; scale: number; laneH: number } | null;
-  /** The marks' sizes as the layer gives them (data.size holds them × the mark scale). */
-  baseSize: Float32Array;
-}
-
-interface Theme {
-  bg: string;
-  text: string;
-  muted: string;
-  grid: string;
-  band: string;
-  select: string;
-  accent: string;
-}
-
 export class TimelineView {
   readonly root: HTMLDivElement;
   private readonly header: HTMLDivElement;
   private readonly titleEl: HTMLSpanElement;
-  private readonly info: HTMLSpanElement;
+  readonly info: HTMLSpanElement;
   private readonly toolbar: Toolbar;
-  private tool: Tool = "pan";
+  tool: Tool = "pan";
   private history: { left: number; span: number; scrollY: number; xscale: XScale }[] = [];
-  private helpEl: HTMLElement | null = null;
-  private spaceDown = false;
-  private lastWheel = 0;
+  helpEl: HTMLElement | null = null;
+  spaceDown = false;
+  lastWheel = 0;
   /** Text size in CSS px: lane names; axis and labels are 1 px smaller. */
-  private fs = FONT_SIZES.default;
-  private readonly stage: HTMLDivElement;
-  private readonly back: HTMLCanvasElement;
-  private readonly front: HTMLCanvasElement;
-  private readonly tooltip: HTMLDivElement;
+  fs = FONT_SIZES.default;
+  readonly stage: HTMLDivElement;
+  readonly back: HTMLCanvasElement;
+  readonly front: HTMLCanvasElement;
+  readonly tooltip: HTMLDivElement;
   private readonly notice: HTMLDivElement;
-  private legendEl: HTMLElement | null = null;
-  private renderer: Renderer | null = null;
+  legendEl: HTMLElement | null = null;
+  renderer: Renderer | null = null;
   private rendererPref: RendererPreference = "auto";
   private failedKinds: RendererKind[] = [];
-  private spec: SceneSpec | null = null;
-  private axis: TimeAxis | null = null;
-  private layers: Layer[] = [];
-  private seqTimes: Float64Array | null = null;
-  private gaps: { at: number; span: number }[] = [];
-  private readonly camera = new TimeCamera();
-  private xscale: XScale = "time";
-  private base = 0;
+  spec: SceneSpec | null = null;
+  axis: TimeAxis | null = null;
+  layers: Layer[] = [];
+  seqTimes: Float64Array | null = null;
+  gaps: { at: number; span: number }[] = [];
+  readonly camera = new TimeCamera();
+  xscale: XScale = "time";
+  base = 0;
   private baseVersion = 0;
-  private scrollY = 0;
-  private laneH = AUTO_LANE;
+  scrollY = 0;
+  laneH = AUTO_LANE;
   /** The lane each row of the plot shows; folded lanes hide the lanes under them. */
-  private laneAt = new Int32Array(0);
+  laneAt = new Int32Array(0);
   /** The row of each lane, -1 when hidden. */
-  private slot = new Int32Array(0);
+  slot = new Int32Array(0);
   /** Per lane of the tree (lanes.tree): whether its children show. */
-  private open = new Uint8Array(0);
+  open = new Uint8Array(0);
   /** Rows the plot's automatic height is for (fixed when the spec arrives, so folding does
    * not resize the plot). */
-  private autoRows = 1;
+  autoRows = 1;
   private gutter = 80;
   /** Room on the right: the legend's column when the plot is wide enough. */
   private padRight = PAD_RIGHT;
-  private width = 0;
-  private height = 0;
+  width = 0;
+  height = 0;
   private fixedHeight = 0;
-  private dpr = 1;
-  private marks: Record<string, Int32Array> = {};
+  dpr = 1;
+  marks: Record<string, Int32Array> = {};
   /** The event or bar under the pointer (`bar`: an index into `bars`, else into `layers`). */
-  private hovered: Hit | null = null;
-  private bars: BarLayer[] = [];
-  private values: ValueLayer[] = [];
-  private hoverEnabled = true;
-  private selectionMode = "multiple";
+  hovered: Hit | null = null;
+  bars: BarLayer[] = [];
+  values: ValueLayer[] = [];
+  hoverEnabled = true;
+  selectionMode = "multiple";
   private showLegend = true;
-  private theme: Theme;
+  theme: Theme;
   private frameRequested = false;
   private viewTimer: ReturnType<typeof setTimeout> | undefined;
-  private drag: { x: number; y: number; left: number; scrollY: number; mode: DragMode; moved: boolean } | null = null;
-  private box: Box | null = null;
-  private pointer: { x: number; y: number } | null = null;
-  private tooltipKey = "";
+  drag: { x: number; y: number; left: number; scrollY: number; mode: DragMode; moved: boolean } | null = null;
+  box: Box | null = null;
+  pointer: { x: number; y: number } | null = null;
+  tooltipKey = "";
   /** The tooltip columns Python sent for the hovered mark (tooltipKey's). */
-  private tooltipExtra: string[][] = [];
+  tooltipExtra: string[][] = [];
   private readonly resizeObserver: ResizeObserver;
   private loadToken = 0;
   private firstFrameAt = 0;
   private status: string | null = null;
-  private lastTap = 0;
+  lastTap = 0;
   /** The group of linked plots this view is in, and how it is in it. */
   private link: { spec: LinkSpec; peer: LinkPeer } | null = null;
   /** Following another view (its range or pointer): do not pass it on. */
   private following = false;
   /** The pointer of a linked view: a time in this view's ticks, or null. */
-  private linkedCursor: number | null = null;
+  linkedCursor: number | null = null;
   /** This view's own gutter and right padding, before the group's widest. */
   private own = { gutter: 80, padRight: PAD_RIGHT };
   /** The last click on a lane's name: a second one soon after on the same lane zooms to it. */
-  private lastNameTap = { at: 0, lane: -1 };
+  lastNameTap = { at: 0, lane: -1 };
 
   constructor(
     private readonly host: HTMLElement,
-    private readonly callbacks: ViewCallbacks = {},
+    readonly callbacks: ViewCallbacks = {},
   ) {
     this.root = document.createElement("div");
     this.root.className = "atl-root";
@@ -233,7 +185,7 @@ export class TimelineView {
     this.root.append(this.header, this.stage);
     host.append(this.root);
     this.theme = this.readTheme();
-    this.bindInput();
+    input.bindInput(this);
     this.stage.dataset.tool = this.tool;
     this.updateToolbar();
     this.resizeObserver = new ResizeObserver(() => this.layout());
@@ -305,7 +257,7 @@ export class TimelineView {
 
   setHover(on: boolean): void {
     this.hoverEnabled = on;
-    if (!on) this.setHovered(null);
+    if (!on) picking.setHovered(this, null);
   }
 
   setSelectionMode(mode: string): void {
@@ -365,15 +317,15 @@ export class TimelineView {
     this.updateToolbar();
   }
 
-  private dodgeOn = true;
+  dodgeOn = true;
 
   /** The canvas font, `delta` px from the text size. */
-  private font(delta = 0): string {
+  font(delta = 0): string {
     return `${Math.max(6, this.fs + delta)}px ${fontFamily}`;
   }
 
   /** The time axis' height: two rows of text. */
-  private get axisH(): number {
+  get axisH(): number {
     return Math.round((44 * this.fs) / FONT_SIZES.default);
   }
 
@@ -424,12 +376,12 @@ export class TimelineView {
       .filter((ls): ls is ValuesLayerSpec => ls.type === "values")
       .map((ls) => new ValueLayer(decodeValues(ls, source), this.theme.accent));
     this.hovered = null;
-    this.initRows(spec);
+    folding.initRows(this, spec);
     this.seqTimes = spec.sequence ? (new Float64Array(source.get(spec.sequence.times.id))) : null;
     this.gaps = findGaps(this.seqTimes);
     this.renderer?.retain(new Set([...this.layers.map((l) => l.draw.key), ...this.bars.map((b) => b.draw.key)]));
     const orderOnly = spec.time.kind === "order";
-    if (orderOnly && this.xscale === "time") this.xscale = "sequence";
+    if (orderOnly && this.xscale === "time") this.xscale = "order";
     this.legendEl?.remove();
     this.legendEl = buildLegend(spec.layers, this.theme.accent);
     if (this.legendEl) {
@@ -463,7 +415,7 @@ export class TimelineView {
     this.requestRender();
   }
 
-  private infoText = "";
+  infoText = "";
 
   private makeLayer(data: EventsData): Layer {
     const n = data.count;
@@ -510,13 +462,13 @@ export class TimelineView {
   // ------------------------------------------------------------------ scales and camera
 
   /** x positions of a layer's events on the current scale. */
-  private xsrc(l: Layer): Float64Array {
-    return this.xscale === "sequence" ? l.data.rank : l.data.time;
+  xsrc(l: Layer): Float64Array {
+    return this.xscale === "order" ? l.data.rank : l.data.time;
   }
 
   private setLimits(): void {
     if (!this.spec) return;
-    if (this.xscale === "sequence") {
+    if (this.xscale === "order") {
       const n = this.spec.sequence?.count ?? 1;
       this.camera.setLimits([-0.5, Math.max(0.5, n - 0.5)], 1 / 200);
     } else {
@@ -541,9 +493,9 @@ export class TimelineView {
   }
 
   setXScale(xscale: XScale, fromUser = false): void {
-    if (xscale === "sequence" && this.spec && !this.spec.sequence?.count) return; // samples only
+    if (xscale === "order" && this.spec && !this.spec.sequence?.count) return; // samples only
     if (!this.spec || (xscale === "time" && this.spec.time.kind === "order")) {
-      this.xscale = this.spec?.time.kind === "order" ? "sequence" : xscale;
+      this.xscale = this.spec?.time.kind === "order" ? "order" : xscale;
       this.updateToolbar();
       return;
     }
@@ -553,7 +505,7 @@ export class TimelineView {
     this.xscale = xscale;
     this.setLimits();
     if (seq && seq.length) {
-      if (xscale === "sequence") {
+      if (xscale === "order") {
         const r0 = lowerBound(seq, a);
         const r1 = upperBound(seq, b) - 1;
         if (r1 >= r0) this.camera.fit(r0 - 0.5, r1 + 0.5, 0);
@@ -576,7 +528,7 @@ export class TimelineView {
   zoomTo(range: [number, number]): void {
     if (!this.spec) return;
     let [a, b] = range;
-    if (this.xscale === "sequence" && this.seqTimes) {
+    if (this.xscale === "order" && this.seqTimes) {
       a = lowerBound(this.seqTimes, a) - 0.5;
       b = upperBound(this.seqTimes, b) - 0.5;
     }
@@ -596,7 +548,7 @@ export class TimelineView {
    * Positions go to the GPU as float32 relative to a base near the view. Rebase when the
    * view has moved far from it (relative to its span), so float32 keeps sub-pixel precision.
    */
-  private rebase(force = false): void {
+  rebase(force = false): void {
     const center = this.camera.left + this.camera.span / 2;
     if (!force && Math.abs(center - this.base) < this.camera.span * 400) return;
     this.base = center;
@@ -607,26 +559,40 @@ export class TimelineView {
       for (let i = 0; i < src.length; i++) x[i] = src[i] - this.base;
       l.draw.x.version = this.baseVersion * 1000 + 1;
     }
-    for (const b of this.bars) b.rebase(this.base, this.xscale === "sequence", this.baseVersion * 1000 + 1);
+    for (const b of this.bars) b.rebase(this.base, this.xscale === "order", this.baseVersion * 1000 + 1);
   }
 
-  private reportView(): void {
+  reportView(): void {
     clearTimeout(this.viewTimer);
     this.viewTimer = setTimeout(() => {
       let [a, b] = [this.camera.left, this.camera.right];
-      if (this.xscale === "sequence" && this.seqTimes?.length) {
+      if (this.xscale === "order" && this.seqTimes?.length) {
         const n = this.seqTimes.length;
         a = this.seqTimes[Math.max(0, Math.min(n - 1, Math.ceil(a)))];
         b = this.seqTimes[Math.max(0, Math.min(n - 1, Math.floor(b)))];
       }
-      this.callbacks.onView?.([a, b]);
+      this.callbacks.onView?.([a, b], folding.lanesInSight(this));
     }, 250);
+  }
+
+  /** Show a view set in Python (plot.view): a time range (null: the whole timeline), and
+   * with `lane` (undefined: as it is) the lane of that name at the top, unfolding what it
+   * is in (null: from the top). */
+  setView(range: [number, number] | null, lane?: string | null): void {
+    if (!this.spec) return;
+    if (range) this.zoomTo(range);
+    else this.resetView();
+    if (lane !== undefined) this.scrollToLane(lane);
+  }
+
+  scrollToLane(name: string | null): void {
+    return folding.scrollToLane(this, name);
   }
 
   // ------------------------------------------------------------------ layout
 
   /** Size the canvases to the plot; `dpr`: draw at this many pixels per CSS px (a snapshot). */
-  private layout(dpr = window.devicePixelRatio || 1): void {
+  layout(dpr = window.devicePixelRatio || 1): void {
     const width = Math.max(120, Math.round(this.root.clientWidth || this.host.clientWidth || 600));
     const lanes = this.laneAt.length || 1;
     const headerH = this.header.offsetHeight || 30;
@@ -663,7 +629,7 @@ export class TimelineView {
     // a tree's lanes stay compact: folding and unfolding then only moves the lanes below
     if (this.spec?.lanes.tree?.compact) this.laneH = Math.max(this.minLane(), Math.min(this.laneH, Math.round(this.fs * 2.4)));
     this.scrollY = topLane * this.laneH;
-    this.clampScroll();
+    folding.clampScroll(this);
     this.camera.setWidth(plot.w);
     this.setLimits();
     this.requestRender();
@@ -726,13 +692,13 @@ export class TimelineView {
 
   /** The time range shown, in ticks (on the Order scale: the times of the events at the edges). */
   private timeRange(): [number, number] {
-    if (this.xscale !== "sequence" || !this.seqTimes?.length) return [this.camera.left, this.camera.right];
+    if (this.xscale !== "order" || !this.seqTimes?.length) return [this.camera.left, this.camera.right];
     return [this.timeAt(this.camera.left), this.timeAt(this.camera.right)];
   }
 
   /** The time at position x (ticks; on the Order scale interpolated between the events). */
   private timeAt(x: number): number {
-    if (this.xscale !== "sequence" || !this.seqTimes?.length) return x;
+    if (this.xscale !== "order" || !this.seqTimes?.length) return x;
     const seq = this.seqTimes;
     const i = Math.max(0, Math.min(seq.length - 1, Math.floor(x)));
     const j = Math.min(seq.length - 1, i + 1);
@@ -741,8 +707,8 @@ export class TimelineView {
   }
 
   /** The position of time t (ticks) on the current scale. */
-  private xAt(t: number): number {
-    if (this.xscale !== "sequence" || !this.seqTimes?.length) return t;
+  xAt(t: number): number {
+    if (this.xscale !== "order" || !this.seqTimes?.length) return t;
     const seq = this.seqTimes;
     const j = lowerBound(seq, t);
     if (j <= 0) return -0.5;
@@ -789,7 +755,7 @@ export class TimelineView {
   }
 
   /** Show the pointer's time in the other views of the group (null: it left the plot). */
-  private shareCursor(px: number | null): void {
+  shareCursor(px: number | null): void {
     if (!this.link || !this.spec) return;
     const at = px === null ? null : this.timeAt(this.camera.fromPx(px - this.plot().x));
     const from = frameOf(this.spec.time);
@@ -807,21 +773,6 @@ export class TimelineView {
         return;
       }
     }
-  }
-
-  /** The other views' pointer: a dashed line across the lanes. */
-  private drawLinkedCursor(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }): void {
-    if (this.linkedCursor === null) return;
-    const x = Math.round(plot.x + this.camera.toPx(this.xAt(this.linkedCursor))) + 0.5;
-    if (x < plot.x || x > plot.x + plot.w) return;
-    ctx.save();
-    ctx.strokeStyle = this.theme.muted;
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath();
-    ctx.moveTo(x, plot.y);
-    ctx.lineTo(x, plot.y + plot.h);
-    ctx.stroke();
-    ctx.restore();
   }
 
   /** The legend in a column right of the plot when there is room, else over the plot. */
@@ -844,111 +795,20 @@ export class TimelineView {
     ctx.font = this.font(0);
     let w = 0;
     for (let i = 0; i < Math.min(names.length, 2000); i++) {
-      const indent = tree && i < tree.depth.length ? this.treeIndent(tree.depth[i]) : 0;
+      const indent = tree && i < tree.depth.length ? folding.treeIndent(this, tree.depth[i]) : 0;
       w = Math.max(w, indent + ctx.measureText(names[i]).width);
     }
     return Math.round(Math.min(this.width * (tree ? 0.35 : 0.3), Math.max(48, w + 20)));
   }
 
-  /** The header lanes of groups, or null. */
-  private headerSet(): Set<number> | null {
-    const h = this.spec?.lanes.tree?.header;
-    if (!h?.length) return null;
-    if (this.headers?.list !== h) this.headers = { list: h, set: new Set(h) };
-    return this.headers.set;
-  }
-
-  private headers: { list: number[]; set: Set<number> } | null = null;
-
-  /** Where a tree lane's name starts (after its fold triangle), in px from the left. */
-  private treeIndent(depth: number): number {
-    return 6 + depth * Math.round(this.fs * 0.9) + Math.round(this.fs * 1.1);
-  }
+  headers: { list: number[]; set: Set<number> } | null = null;
 
   // ------------------------------------------------------------------ rows and folding
 
-  /** The rows when a spec arrives: tree lanes open as the spec says, unless the same lanes
-   * were shown before (a layer added, a marker set): then they stay as the user left them. */
-  private initRows(spec: SceneSpec): void {
-    const tree = spec.lanes.tree;
-    const names = spec.lanes.names;
-    const key = treeKey(spec);
-    const same = key !== "" && key === this.rowKey;
-    if (!same) this.open = tree ? Uint8Array.from(tree.open, (o) => (o ? 1 : 0)) : new Uint8Array(0);
-    this.rowKey = key;
-    this.computeRows(names.length);
-    if (!same) {
-      if (tree) this.scrollY = 0;
-      this.autoRows = this.laneAt.length;
-    }
-  }
+  rowKey = "";
 
-  private rowKey = "";
-
-  private computeRows(n = this.spec?.lanes.names.length ?? 0): void {
-    const tree = this.spec?.lanes.tree;
-    const slot = new Int32Array(n).fill(-1);
-    const at: number[] = [];
-    for (let l = 0; l < n; ) {
-      slot[l] = at.length;
-      at.push(l);
-      l += tree && l < tree.size.length && !this.open[l] ? tree.size[l] : 1;
-    }
-    this.laneAt = Int32Array.from(at);
-    this.slot = slot;
-    for (const l of this.layers) {
-      l.draw.lane.data = rowsOf(l.data.lane, slot);
-      l.draw.lane.version++;
-      l.dodged = null;
-    }
-    for (const b of this.bars) b.setSlots(slot);
-  }
-
-  /** Fold or unfold a lane of the tree (`deep`: everything under it too). */
-  toggleLane(lane: number, deep = false): void {
-    const tree = this.spec?.lanes.tree;
-    if (!tree || lane < 0 || lane >= tree.size.length || tree.size[lane] < 2) return;
-    const open = this.open[lane] ? 0 : 1;
-    this.open[lane] = open;
-    if (deep) for (let k = lane + 1; k < lane + tree.size[lane]; k++) this.open[k] = open;
-    this.computeRows();
-    this.hovered = null;
-    this.clampScroll();
-    this.layout();
-  }
-
-  /** Unfold every lane of the tree, or fold them all to their roots. */
-  expandAll(open: boolean): void {
-    if (!this.spec?.lanes.tree) return;
-    this.open.fill(open ? 1 : 0);
-    this.computeRows();
-    this.hovered = null;
-    this.scrollY = 0;
-    this.layout();
-  }
-
-  /** Whether a point is on the name of a lane that folds. */
-  private foldableAt(p: { x: number; y: number }): boolean {
-    const tree = this.spec?.lanes.tree;
-    const plot = this.plot();
-    if (!tree || p.x >= plot.x || p.y < plot.y || p.y > plot.y + plot.h) return false;
-    const l = this.laneAtY(p.y);
-    return l >= 0 && l < tree.size.length && tree.size[l] > 1;
-  }
-
-  /** The lane on the row at y (CSS px in the stage), or -1. */
-  private laneAtY(y: number): number {
-    const r = Math.floor((y - this.plot().y + this.scrollY) / this.laneH);
-    return r >= 0 && r < this.laneAt.length ? this.laneAt[r] : -1;
-  }
-
-  private plot(): { x: number; y: number; w: number; h: number } {
+  plot(): { x: number; y: number; w: number; h: number } {
     return { x: this.gutter, y: this.axisH, w: Math.max(10, this.width - this.gutter - this.padRight), h: Math.max(10, this.height - this.axisH - PAD_BOTTOM) };
-  }
-
-  private clampScroll(): void {
-    const max = Math.max(0, this.laneAt.length * this.laneH - this.plot().h);
-    this.scrollY = Math.max(0, Math.min(max, this.scrollY));
   }
 
   // ------------------------------------------------------------------ theme
@@ -996,538 +856,21 @@ export class TimelineView {
     else requestAnimationFrame(run);
   }
 
-  private renderFrame(): void {
-    const t0 = performance.now();
-    this.info.textContent = [this.infoText, this.renderer?.kind ?? ""].filter(Boolean).join(" · ");
-    const plot = this.plot();
-    const backCtx = this.back.getContext("2d")!;
-    const frontCtx = this.front.getContext("2d")!;
-    backCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    frontCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    backCtx.fillStyle = this.theme.bg;
-    backCtx.fillRect(0, 0, this.width, this.height);
-    frontCtx.clearRect(0, 0, this.width, this.height);
-    if (!this.spec || !this.axis) {
-      this.renderer?.render({ plot, bars: [], segments: [], layers: [], background: [1, 1, 1], selection: [1, 0, 0], hover: [0, 0, 0] });
-      return;
-    }
-    this.rebase();
-    const laneTop = plot.y - this.scrollY;
-    // rows in view (with folded lanes, a row is not the lane of the same number)
-    const l0 = Math.max(0, Math.floor((plot.y - laneTop) / this.laneH));
-    const l1 = Math.min(this.laneAt.length - 1, Math.floor((plot.y + plot.h - laneTop) / this.laneH));
-
-    // lane bands and grid lines
-    backCtx.save();
-    backCtx.beginPath();
-    backCtx.rect(0, plot.y, this.width, plot.h);
-    backCtx.clip();
-    const headers = this.headerSet();
-    for (let l = l0; l <= l1; l++) {
-      if (headers?.has(this.laneAt[l])) {
-        // a group's header: a tinted band with a line above it
-        backCtx.fillStyle = this.theme.grid;
-        backCtx.globalAlpha = 0.55;
-        backCtx.fillRect(0, laneTop + l * this.laneH, this.width, this.laneH);
-        backCtx.globalAlpha = 1;
-        backCtx.fillStyle = this.theme.muted;
-        backCtx.fillRect(0, Math.round(laneTop + l * this.laneH), this.width, 1);
-      } else if (l % 2 === 1) {
-        backCtx.fillStyle = this.theme.band;
-        backCtx.fillRect(0, laneTop + l * this.laneH, this.width, this.laneH);
-      }
-    }
-    const ticks = this.ticks(plot.w);
-    const gaps = this.xscale === "sequence" ? this.visibleGaps(frontCtx, plot, ticks.pinned) : [];
-    if (gaps.length) {
-      backCtx.strokeStyle = this.theme.grid;
-      backCtx.setLineDash([2, 3]);
-      backCtx.beginPath();
-      for (const g of gaps) {
-        backCtx.moveTo(Math.round(g.x) + 0.5, plot.y);
-        backCtx.lineTo(Math.round(g.x) + 0.5, plot.y + plot.h);
-      }
-      backCtx.stroke();
-      backCtx.setLineDash([]);
-    }
-    backCtx.strokeStyle = this.theme.grid;
-    backCtx.lineWidth = 1;
-    backCtx.beginPath();
-    for (const t of ticks.minor) {
-      const x = Math.round(plot.x + this.camera.toPx(t.x)) + 0.5;
-      backCtx.moveTo(x, plot.y);
-      backCtx.lineTo(x, plot.y + plot.h);
-    }
-    backCtx.stroke();
-    if (this.layers.some(isStems)) {
-      // a story's line through the middle of each lane
-      backCtx.fillStyle = this.theme.muted;
-      backCtx.globalAlpha = 0.5;
-      for (let r = l0; r <= l1; r++) backCtx.fillRect(plot.x, Math.round(laneTop + (r + 0.5) * this.laneH) - 1, plot.w, 2);
-      backCtx.globalAlpha = 1;
-    }
-    if (this.values.length) {
-      const vv = this.valueView(plot);
-      for (const v of this.values) v.draw(backCtx, vv, l0, l1);
-    }
-    backCtx.restore();
-
-    // cull, dodge, routes
-    const frame: FrameDraw = {
-      plot,
-      bars: [],
-      segments: [],
-      layers: [],
-      background: rgb01(this.theme.bg),
-      selection: rgb01(this.theme.select),
-      hover: rgb01(this.theme.text),
-    };
-    const fade = Object.values(this.marks).some((m) => m.length > 0);
-    let inView = 0;
-    const bv = this.barView(plot);
-    const seqScale = this.xscale === "sequence";
-    for (const b of this.bars) {
-      b.cull(this.laneAt, l0, l1, this.camera.left - 2 / this.camera.scale, this.camera.right + 2 / this.camera.scale, seqScale);
-      inView += b.draw.visibleCount;
-      const d = b.draw;
-      d.offset = this.camera.left - this.base;
-      d.scale = this.camera.scale;
-      d.laneTop = laneTop;
-      d.laneHeight = this.laneH;
-      d.maxBar = b.maxBar(bv.maxBar);
-      d.fade = fade;
-      frame.bars.push(d);
-    }
-    for (const l of this.layers) {
-      this.cull(l, l0, l1, plot.w);
-      inView += l.draw.visibleCount;
-      if (l.data.spec.overlap === "dodge" && this.dodgeOn && !isStems(l)) this.dodgeLayer(l, l0, l1);
-      const d = l.draw;
-      d.offset = this.camera.left - this.base;
-      d.scale = this.camera.scale;
-      d.laneTop = laneTop;
-      d.laneHeight = this.laneH;
-      d.fade = fade;
-      frame.layers.push(d);
-      const seg = this.segments(l, plot, laneTop, l0, l1);
-      if (seg) frame.segments.push(seg);
-    }
-    this.renderer?.render(frame);
-
-    // front: axis, lane names, labels, gaps, hover, box
-    this.drawAxis(frontCtx, plot, ticks);
-    this.drawLanes(frontCtx, plot, laneTop, l0, l1);
-    this.drawBarText(frontCtx, bv, l0, l1, inView <= LABEL_BUDGET);
-    this.drawStems(frontCtx, plot, laneTop, l0, l1);
-    if (inView <= LABEL_BUDGET) this.drawLabels(frontCtx, plot, laneTop);
-    this.drawMarkers(frontCtx, plot);
-    this.drawValueScales(frontCtx, plot, l0, l1);
-    this.drawLinkedCursor(frontCtx, plot);
-    if (gaps.length) this.drawGaps(frontCtx, plot, gaps);
-    this.drawHover(frontCtx, plot, laneTop);
-    if (this.box) this.drawBox(frontCtx, plot, this.box);
-    this.callbacks.onPerf?.({ frame_ms: Math.round((performance.now() - t0) * 100) / 100, in_view: inView });
-  }
-
-  private ticks(width: number) {
-    if (this.xscale === "sequence" || !this.axis) {
-      const order = new TimeAxis({ kind: "order", unit: "", origin_ns: "0", origin: 0, timezone: "UTC", extent: [0, 1] });
-      const t = order.ticks(this.camera.left, this.camera.right, (width * 11) / (this.fs - 1));
-      // the time of the first event in view gives the context
-      if (this.seqTimes?.length && this.axis && this.spec?.time.kind !== "order") {
-        const i = Math.max(0, Math.min(this.seqTimes.length - 1, Math.ceil(this.camera.left)));
-        t.pinned = `from ${this.axis.formatFull(this.seqTimes[i])}`;
-      }
-      return t;
-    }
-    return this.axis.ticks(this.camera.left, this.camera.right, (width * 11) / (this.fs - 1));
-  }
-
-  /** Collect the events in view (lanes l0..l1, x within the view plus a margin). */
-  private cull(l: Layer, l0: number, l1: number, width: number): void {
-    const src = this.xsrc(l);
-    const starts = l.data.laneStarts;
-    const margin = 12 / this.camera.scale;
-    const a = this.camera.left - margin;
-    const b = this.camera.left + width / this.camera.scale + margin;
-    const vis = l.draw.visible;
-    let n = 0;
-    for (let r = l0; r <= l1 && r < this.laneAt.length; r++) {
-      const lane = this.laneAt[r];
-      if (lane + 1 >= starts.length) continue;
-      const i0 = lowerBound(src, a, starts[lane], starts[lane + 1]);
-      const i1 = upperBound(src, b, i0, starts[lane + 1]);
-      for (let i = i0; i < i1; i++) {
-        vis[n++] = i;
-        l.xs[i] = (src[i] - this.camera.left) * this.camera.scale;
-      }
-    }
-    l.draw.visibleCount = n;
-  }
-
-  /** Spread overlapping events of each lane over sub-rows; only when the scale or range changed. */
-  private dodgeLayer(l: Layer, l0: number, l1: number): void {
-    const cam = this.camera;
-    const d = l.dodged;
-    if (d && d.scale === cam.scale && d.laneH === this.laneH && cam.left >= d.left && cam.right <= d.right) return;
-    const src = this.xsrc(l);
-    const starts = l.data.laneStarts;
-    const span = cam.span;
-    const a = cam.left - span;
-    const b = cam.right + span;
-    const sizes = l.data.size;
-    let maxSize = 1;
-    const dy = l.draw.dy.data;
-    dy.fill(0);
-    const order: number[] = [];
-    // dodge every lane in a wider range than the view, so panning needs no new pass
-    for (let r = Math.max(0, l0 - 2); r <= l1 + 2 && r < this.laneAt.length; r++) {
-      const lane = this.laneAt[r];
-      if (lane + 1 >= starts.length) continue;
-      const i0 = lowerBound(src, a, starts[lane], starts[lane + 1]);
-      const i1 = upperBound(src, b, i0, starts[lane + 1]);
-      for (let i = i0; i < i1; i++) {
-        l.xs[i] = (src[i] - cam.left) * cam.scale;
-        maxSize = Math.max(maxSize, sizes[i]);
-      }
-      order.push(i0, i1);
-    }
-    // the most sub-rows the lanes hold (at the closest spacing); dodge in sub-rows, then space
-    // the rows the events needed as far apart as the lanes allow (one spacing for all lanes,
-    // so a column's height still compares between lanes)
-    const rows = rowsFor(this.laneH, maxSize, spacing(this.laneH, maxSize, Infinity));
-    for (let k = 0; k < order.length; k += 2) dodge(l.xs, order[k], order[k + 1], maxSize * 0.85, rows, 1, dy);
-    let pairs = 0;
-    for (let k = 0; k < order.length; k += 2) for (let i = order[k]; i < order[k + 1]; i++) pairs = Math.max(pairs, Math.abs(dy[i]));
-    const step = spacing(this.laneH, maxSize, pairs);
-    for (let k = 0; k < order.length; k += 2) for (let i = order[k]; i < order[k + 1]; i++) dy[i] *= step;
-    l.draw.dy.version++;
-    l.dodged = { left: a, right: b, scale: cam.scale, laneH: this.laneH };
-  }
-
-  private segments(l: Layer, plot: { x: number; y: number; w: number; h: number }, laneTop: number, l0: number, l1: number): SegmentDraw | null {
-    const route = l.data.spec.route;
-    const seg = l.data.segments;
-    if (!route || !seg || !route.count) return null;
-    const src = this.xsrc(l);
-    const lane = l.data.lane;
-    const dy = l.draw.dy.data;
-    const color = l.data.color;
-    const solid = route.color ? (route.color === "theme" ? parseHex(this.theme.text) : parseHex(route.color)) : null;
-    const coords = new Float32Array(Math.min(route.count, ROUTE_BUDGET) * 4);
-    const colors = new Uint8Array(coords.length);
-    const cam = this.camera;
-    let n = 0;
-    const right = cam.left + plot.w / cam.scale;
-    for (let k = 0; k < route.count && n < ROUTE_BUDGET; k++) {
-      const i = seg[2 * k];
-      const j = seg[2 * k + 1];
-      const xa = src[i];
-      const xb = src[j];
-      if ((xa < cam.left && xb < cam.left) || (xa > right && xb > right)) continue;
-      const la = this.slot[lane[i]];
-      const lb = this.slot[lane[j]];
-      if (la < 0 || lb < 0) continue; // a folded lane
-      if ((la < l0 && lb < l0) || (la > l1 && lb > l1)) continue;
-      coords[4 * n] = plot.x + (xa - cam.left) * cam.scale;
-      coords[4 * n + 1] = laneTop + (la + 0.5) * this.laneH + dy[i];
-      coords[4 * n + 2] = plot.x + (xb - cam.left) * cam.scale;
-      coords[4 * n + 3] = laneTop + (lb + 0.5) * this.laneH + dy[j];
-      if (solid) {
-        colors[4 * n] = solid[0];
-        colors[4 * n + 1] = solid[1];
-        colors[4 * n + 2] = solid[2];
-      } else {
-        colors[4 * n] = color[4 * i];
-        colors[4 * n + 1] = color[4 * i + 1];
-        colors[4 * n + 2] = color[4 * i + 2];
-      }
-      colors[4 * n + 3] = 140;
-      n++;
-    }
-    return { count: n, coords, colors, width: route.width };
+  renderFrame(): void {
+    return rendering.renderFrame(this);
   }
 
   // ------------------------------------------------------------------ front canvas
 
-  private drawAxis(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, ticks: ReturnType<TimeAxis["ticks"]>): void {
-    ctx.save();
-    ctx.fillStyle = this.theme.bg;
-    ctx.fillRect(0, 0, this.width, this.axisH);
-    ctx.strokeStyle = this.theme.muted;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(plot.x, this.axisH - 0.5);
-    ctx.lineTo(plot.x + plot.w, this.axisH - 0.5);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.rect(plot.x, 0, plot.w, this.axisH);
-    ctx.clip();
-    ctx.font = this.font(-1);
-    ctx.fillStyle = this.theme.text;
-    ctx.textBaseline = "alphabetic";
-    ctx.textAlign = "center";
-    ctx.beginPath();
-    let lastEnd = -Infinity;
-    for (const t of ticks.minor) {
-      const x = plot.x + this.camera.toPx(t.x);
-      ctx.moveTo(Math.round(x) + 0.5, this.axisH - 5);
-      ctx.lineTo(Math.round(x) + 0.5, this.axisH);
-      const w = ctx.measureText(t.label).width;
-      // a label is shown whole: at the edges it moves inward, as long as it still covers its
-      // tick; a tick off the plot gets no label
-      if (x < plot.x || x > plot.x + plot.w) continue;
-      const cx = Math.min(plot.x + plot.w - w / 2, Math.max(plot.x + w / 2, x));
-      if (cx - w / 2 > lastEnd + 6) {
-        ctx.fillText(t.label, cx, this.axisH - Math.round(this.fs * 0.75));
-        lastEnd = cx + w / 2;
-      }
-    }
-    ctx.strokeStyle = this.theme.muted;
-    ctx.stroke();
-    // context row: boundaries, and the unit of the left edge pinned there
-    ctx.font = this.font(-1);
-    ctx.fillStyle = this.theme.muted;
-    ctx.textAlign = "left";
-    const y = Math.round(this.fs * 1.25);
-    let pinnedEnd = plot.x + 4 + ctx.measureText(ticks.pinned).width;
-    const firstBoundary = ticks.context.length ? plot.x + this.camera.toPx(ticks.context[0].x) : Infinity;
-    if (ticks.pinned && firstBoundary > pinnedEnd + 8) ctx.fillText(ticks.pinned, plot.x + 4, y);
-    else pinnedEnd = -Infinity;
-    for (const c of ticks.context) {
-      const x = plot.x + this.camera.toPx(c.x);
-      ctx.fillRect(Math.round(x), 4, 1, Math.round(this.fs * 1.17));
-      ctx.fillText(c.label, x + 4, y);
-    }
-    ctx.restore();
-  }
-
-  private drawLanes(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, laneTop: number, l0: number, l1: number): void {
-    if (this.spec!.lanes.show_names === false) return;
-    const names = this.spec!.lanes.names;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, plot.y, plot.x, plot.h);
-    ctx.clip();
-    ctx.font = this.font(0);
-    ctx.fillStyle = this.theme.text;
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "right";
-    const tree = this.spec!.lanes.tree;
-    const tri = Math.max(3, Math.round(this.fs * 0.32));
-    for (let r = l0; r <= l1; r++) {
-      const l = this.laneAt[r];
-      const y = laneTop + (r + 0.5) * this.laneH;
-      if (!tree || l >= tree.depth.length) {
-        ctx.font = this.font(0);
-        ctx.textAlign = "right";
-        ctx.fillText(ellipsize(ctx, names[l], plot.x - 12), plot.x - 8, y);
-        continue;
-      }
-      // a tree: names indented by depth, a triangle to fold the lanes under them
-      const x = this.treeIndent(tree.depth[l]);
-      if (tree.size[l] > 1) {
-        const cx = x - Math.round(this.fs * 0.6);
-        ctx.beginPath();
-        if (this.open[l]) {
-          ctx.moveTo(cx - tri, y - tri * 0.6);
-          ctx.lineTo(cx + tri, y - tri * 0.6);
-          ctx.lineTo(cx, y + tri * 0.8);
-        } else {
-          ctx.moveTo(cx - tri * 0.6, y - tri);
-          ctx.lineTo(cx + tri * 0.8, y);
-          ctx.lineTo(cx - tri * 0.6, y + tri);
-        }
-        ctx.closePath();
-        ctx.fillStyle = this.theme.muted;
-        ctx.fill();
-        ctx.fillStyle = this.theme.text;
-      }
-      ctx.textAlign = "left";
-      const header = this.headerSet()?.has(l) ?? false;
-      ctx.font = header ? `600 ${this.fs}px ${fontFamily}` : this.font(0);
-      const room = plot.x - 8 - x;
-      let name = ellipsize(ctx, names[l], room);
-      if (!this.open[l] && tree.size[l] > 1) {
-        // folded: how many lanes it hides, when there is room
-        const more = ` +${fmtNumber(tree.size[l] - 1)}`;
-        if (ctx.measureText(name + more).width <= room && name === names[l]) {
-          ctx.fillText(name, x, y);
-          ctx.fillStyle = this.theme.muted;
-          ctx.fillText(more, x + ctx.measureText(name).width, y);
-          ctx.fillStyle = this.theme.text;
-          continue;
-        }
-        name = ellipsize(ctx, names[l], room);
-      }
-      ctx.fillText(name, x, y);
-    }
-    ctx.restore();
-    if (this.spec!.lanes.title) {
-      ctx.save();
-      ctx.font = this.font(-1);
-      ctx.fillStyle = this.theme.muted;
-      ctx.textAlign = "right";
-      ctx.fillText(ellipsize(ctx, this.spec!.lanes.title, plot.x - 12), plot.x - 8, this.axisH - Math.round(this.fs * 0.75));
-      ctx.restore();
-    }
-    // a scroll hint when lanes do not fit
-    const total = this.laneAt.length * this.laneH;
-    if (total > plot.h + 1) {
-      const frac = plot.h / total;
-      const top = plot.y + (this.scrollY / total) * plot.h;
-      ctx.fillStyle = this.theme.grid;
-      ctx.fillRect(this.width - 5, plot.y, 3, plot.h);
-      ctx.fillStyle = this.theme.muted;
-      ctx.fillRect(this.width - 5, top, 3, Math.max(12, frac * plot.h));
-    }
-  }
-
-  private drawLabels(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, laneTop: number): void {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(plot.x, plot.y, plot.w, plot.h);
-    ctx.clip();
-    ctx.font = this.font(-1);
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = this.theme.text;
-    ctx.strokeStyle = this.theme.bg;
-    ctx.lineWidth = 3;
-    ctx.lineJoin = "round";
-    for (const l of this.layers) {
-      if (isStems(l) && this.stemsFit.get(l) !== false) continue; // in boxes on stems
-      const text = l.data.text;
-      if (!text) continue;
-      const vis = l.draw.visible;
-      const order = Array.from(vis.subarray(0, l.draw.visibleCount));
-      const imp = l.data.importance;
-      if (imp) order.sort((a, b) => imp[b] - imp[a] || l.xs[a] - l.xs[b]);
-      const taken: [number, number, number, number][] = [];
-      for (const i of order) {
-        const label = text[i];
-        if (!label) continue;
-        const x = plot.x + l.xs[i] + l.data.size[i] / 2 + 3;
-        const y = laneTop + (this.slot[l.data.lane[i]] + 0.5) * this.laneH + l.draw.dy.data[i];
-        const w = ctx.measureText(label).width;
-        const half = this.fs / 2;
-        const box: [number, number, number, number] = [x, y - half, x + w, y + half];
-        if (taken.some((t) => box[0] < t[2] + 2 && box[2] + 2 > t[0] && box[1] < t[3] && box[3] > t[1])) continue;
-        taken.push(box);
-        ctx.strokeText(label, x, y);
-        ctx.fillText(label, x, y);
-        if (taken.length > LABEL_BUDGET) break;
-      }
-    }
-    ctx.restore();
-  }
-
-  /**
-   * The long gaps to show (Order scale): the longest first, their break marks at least
-   * GAP_PX apart; a label (the time the gap skips) only where it fits in the axis' top row,
-   * right of the pinned "from …" label and apart from the other labels.
-   */
-  private visibleGaps(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, pinned: string): { x: number; label: string | null }[] {
-    if (!this.gaps.length || !this.axis) return [];
-    const i0 = lowerBoundBy(this.gaps, this.camera.left);
-    const candidates: { x: number; span: number }[] = [];
-    for (let k = i0; k < this.gaps.length && this.gaps[k].at <= this.camera.right; k++) {
-      const x = plot.x + this.camera.toPx(this.gaps[k].at);
-      if (x > plot.x + 4 && x < plot.x + plot.w - 4) candidates.push({ x, span: this.gaps[k].span });
-    }
-    candidates.sort((a, b) => b.span - a.span);
-    ctx.save();
-    ctx.font = this.font(-1);
-    const labelsFrom = pinned ? plot.x + 4 + ctx.measureText(pinned).width + 12 : plot.x;
-    const shown: { x: number; label: string | null }[] = [];
-    const labelled: [number, number][] = [];
-    for (const c of candidates) {
-      if (shown.some((g) => Math.abs(g.x - c.x) < GAP_PX)) continue;
-      const text = this.axis.formatSpan(c.span);
-      const half = ctx.measureText(text).width / 2 + 4;
-      const fits = c.x - half >= labelsFrom && c.x + half <= plot.x + plot.w && !labelled.some(([a, b]) => c.x - half < b && c.x + half > a);
-      if (fits) labelled.push([c.x - half, c.x + half]);
-      shown.push({ x: c.x, label: fits ? text : null });
-      if (shown.length >= 60) break;
-    }
-    ctx.restore();
-    return shown;
-  }
-
-  /** Break marks on the axis line, and the gaps' labels in the axis' top row. */
-  private drawGaps(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, gaps: { x: number; label: string | null }[]): void {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(plot.x, 0, plot.w, this.axisH + 4);
-    ctx.clip();
-    ctx.strokeStyle = this.theme.muted;
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    const y = this.axisH - 1;
-    for (const { x } of gaps) {
-      ctx.moveTo(x - 4, y + 3);
-      ctx.lineTo(x - 1, y - 3);
-      ctx.moveTo(x + 1, y + 3);
-      ctx.lineTo(x + 4, y - 3);
-    }
-    ctx.stroke();
-    ctx.font = this.font(-1);
-    ctx.textAlign = "center";
-    ctx.fillStyle = this.theme.muted;
-    const top = Math.round(this.fs * 1.25);
-    for (const g of gaps) if (g.label) ctx.fillText(g.label, g.x, top);
-    ctx.restore();
-  }
-
-  /** A zoom range (a band in the text colour) or a selection (dashed, in the selection colour). */
-  private drawBox(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, b: Box): void {
-    const x0 = Math.max(plot.x, Math.min(b.x0, b.x1));
-    const x1 = Math.min(plot.x + plot.w, Math.max(b.x0, b.x1));
-    ctx.save();
-    if (b.kind === "select") {
-      const y0 = Math.max(plot.y, Math.min(b.y0, b.y1));
-      const y1 = Math.min(plot.y + plot.h, Math.max(b.y0, b.y1));
-      ctx.strokeStyle = this.theme.select;
-      ctx.setLineDash([4, 3]);
-      ctx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, x1 - x0, y1 - y0);
-    } else {
-      const color = b.kind === "range-select" ? this.theme.select : this.theme.text;
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.08;
-      ctx.fillRect(x0, 0, x1 - x0, plot.y + plot.h);
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = color;
-      ctx.beginPath();
-      for (const x of [x0, x1]) {
-        ctx.moveTo(Math.round(x) + 0.5, 0);
-        ctx.lineTo(Math.round(x) + 0.5, plot.y + plot.h);
-      }
-      ctx.stroke();
-      if (this.axis && x1 - x0 >= MIN_BOX) {
-        // how long the range is
-        const span = this.camera.fromPx(x1 - plot.x) - this.camera.fromPx(x0 - plot.x);
-        const label = this.xscale === "sequence" ? `${fmtNumber(Math.round(span))} events` : this.axis.formatSpan(span);
-        ctx.font = this.font(-1);
-        ctx.textAlign = "center";
-        ctx.fillStyle = this.theme.bg;
-        const w = ctx.measureText(label).width + 8;
-        const cx = (x0 + x1) / 2;
-        ctx.fillRect(cx - w / 2, plot.y + 4, w, this.fs + 5);
-        ctx.fillStyle = color;
-        ctx.fillText(label, cx, plot.y + 4 + this.fs);
-      }
-    }
-    ctx.restore();
-  }
-
   /** Boxes of stem labels as drawn in the last frame (for picking). */
-  private stemHits: { layer: number; index: number; x0: number; y0: number; x1: number; y1: number }[] = [];
+  stemHits: { layer: number; index: number; x0: number; y0: number; x1: number; y1: number }[] = [];
   /** Badges ("+N") of events without a box, as drawn in the last frame: a click zooms in. */
-  private badgeHits: { x0: number; y0: number; x1: number; y1: number; a: number; b: number; n: number }[] = [];
+  badgeHits: { x0: number; y0: number; x1: number; y1: number; a: number; b: number; n: number }[] = [];
   /** Per stems layer: whether its lanes have room for a level of boxes (else its text goes
    * beside the marks). */
-  private stemsFit = new WeakMap<Layer, boolean>();
+  stemsFit = new WeakMap<Layer, boolean>();
   /** Per stems layer: the boxes laid out for a view (kept while only panning). */
-  private stemCache = new WeakMap<
+  stemCache = new WeakMap<
     Layer,
     {
       key: string;
@@ -1547,631 +890,14 @@ export class TimelineView {
     }
   >();
 
-  /**
-   * The text of stems layers in boxes above and below their lanes' lines, joined to the events
-   * by stems in their colour; no stem passes behind a box. Laid out again when the zoom, lane
-   * height or text changes, over three view widths so panning keeps the boxes where they are.
-   * Events without room for a box are counted in badges ("+N") that zoom in when clicked.
-   */
-  private drawStems(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, laneTop: number, l0: number, l1: number): void {
-    this.stemHits = [];
-    this.badgeHits = [];
-    const cam = this.camera;
-    const bg = parseHex(this.theme.bg);
-    const ink = parseHex(this.theme.text);
-    this.layers.forEach((l, li) => {
-      if (!isStems(l) || !l.data.text) return;
-      const text = l.data.text;
-      const spec = l.data.spec;
-      const shape: StemShape = spec.stem_shape === "curved" ? "curved" : "straight";
-      const lineH = Math.round(this.fs * 1.3);
-      const padX = 9;
-      const padY = 5;
-      const gap = 7;
-      let markR = 2;
-      for (let i = 0; i < Math.min(l.data.count, 1000); i++) markR = Math.max(markR, l.data.size[i] / 2);
-      // curved stems bend in the band between the line and the first level: give it room
-      const start = markR + (shape === "curved" ? 26 : 12);
-      const titleFont = `500 ${Math.max(6, this.fs - 1)}px ${fontFamily}`;
-      const timeFont = `500 ${Math.max(6, this.fs - 2.5)}px ${fontFamily}`;
-      const badgeFont = `600 ${Math.max(6, this.fs - 2)}px ${fontFamily}`;
-      // the widest a box gets: label_width, or 16 × the text size; 0: no limit
-      const maxW = spec.label_width === 0 ? Infinity : spec.label_width ?? 16 * this.fs;
-      const src = this.xsrc(l);
-      const key = [cam.scale, this.laneH, this.fs, this.xscale, shape, maxW, this.laneAt.length, l0, l1].join(":");
-      let cache = this.stemCache.get(l);
-      if (!cache || cache.key !== key || cam.left < cache.a || cam.right > cache.b) {
-        const span = cam.span;
-        const a = cam.left - span;
-        const b = cam.right + span;
-        const rows = new Map<number, { text: string; head: boolean }[]>();
-        const perRow = new Map<number, StemItem[]>();
-        const starts = l.data.laneStarts;
-        const measure = (font: string) => (t: string) => {
-          ctx.font = font;
-          return ctx.measureText(t).width;
-        };
-        let most = 1;
-        for (let r = Math.max(0, l0 - 1); r <= l1 + 1 && r < this.laneAt.length; r++) {
-          const lane = this.laneAt[r];
-          if (lane + 1 >= starts.length) continue;
-          const i0 = lowerBound(src, a, starts[lane], starts[lane + 1]);
-          const i1 = upperBound(src, b, i0, starts[lane + 1]);
-          const items: StemItem[] = [];
-          for (let i = i0; i < i1; i++) {
-            if (!text[i]) continue;
-            // a first line of two or more is the box's head (e.g. the time); the rest is the
-            // title, wrapped to at most two lines within the box's width
-            const parts = text[i].split("\n");
-            const head = parts.length > 1 ? parts[0] : null;
-            const body = (head === null ? parts : parts.slice(1)).join(" ");
-            const inner = maxW - 2 * padX;
-            const lines = [
-              ...(head === null ? [] : wrapText(head, inner, 1, measure(timeFont)).map((t) => ({ text: t, head: true }))),
-              ...wrapText(body, inner, 2, measure(titleFont)).map((t) => ({ text: t, head: false })),
-            ];
-            rows.set(i, lines);
-            most = Math.max(most, lines.length);
-            const w = Math.max(...lines.map((ln) => measure(ln.head ? timeFont : titleFont)(ln.text)));
-            items.push({ index: i, x: (src[i] - cam.left) * cam.scale, w: Math.ceil(w) + 2 * padX, importance: l.data.importance?.[i] ?? 0 });
-          }
-          perRow.set(r, items);
-        }
-        // one height for all boxes of the layer, so levels are rows
-        const boxH = most * lineH + 2 * padY;
-        const levels = levelsFor(this.laneH, boxH, gap, start);
-        const placed = new Map<number, StemPlaced[]>();
-        const clusters = new Map<number, { n: number; a: number; b: number; row: number; px0: number; px1: number }>();
-        const onLine: number[] = [];
-        if (levels > 0) {
-          // boxes may reach past the view (laid out wider than it), not past the data
-          const ext = this.xscale === "sequence" ? [-0.5, (this.seqTimes?.length ?? 1) - 0.5] : this.spec!.time.extent;
-          const left = (Math.max(a, ext[0]) - cam.left) * cam.scale;
-          const right = Math.max(left, (Math.min(b, ext[1]) - cam.left) * cam.scale);
-          const space = { levels, gap, inset: 12, left, right, shape };
-          let badgeIndex = -1;
-          for (const [r, items] of perRow) {
-            const first = placeStems(items, space);
-            const boxed = new Set(first.map((p) => p.index));
-            const hidden = items.filter((it) => !boxed.has(it.index));
-            if (!hidden.length) {
-              placed.set(r, first);
-              continue;
-            }
-            // a badge per group of events without a box, placed after the boxes
-            const badges: StemItem[] = [];
-            const boxedXs = items.filter((it) => boxed.has(it.index)).map((it) => it.x);
-            for (const c of clusterHidden(hidden, 48, boxedXs)) {
-              const index = badgeIndex--;
-              const label = `+${c.indices.length}`;
-              const w = Math.ceil(measure(badgeFont)(label)) + 16;
-              badges.push({ index, x: (c.x0 + c.x1) / 2, w, importance: -Infinity, badge: true });
-              const xs = c.indices.map((i) => src[i]);
-              clusters.set(index, { n: c.indices.length, a: Math.min(...xs), b: Math.max(...xs), row: r, px0: c.x0, px1: c.x1 });
-            }
-            const all = placeStems([...items, ...badges], space);
-            placed.set(r, all);
-            // badges that found no place go on the line, around their events
-            const put = new Set(all.map((p) => p.index));
-            for (const bdg of badges) if (!put.has(bdg.index)) onLine.push(bdg.index);
-          }
-        }
-        this.stemsFit.set(l, levels > 0);
-        cache = { key, left: cam.left, a, b, boxH, start, placed, rows, clusters, onLine };
-        this.stemCache.set(l, cache);
-      }
-      if (!this.stemsFit.get(l)) return; // too little room: the text goes beside the marks
-      const { boxH } = cache;
-      const shift = (cache.left - cam.left) * cam.scale;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(plot.x, plot.y, plot.w, plot.h);
-      ctx.clip();
-      ctx.textBaseline = "middle";
-      ctx.textAlign = "left";
-      const sf = l.draw.sf.data;
-      const color = l.data.color;
-      const muted = parseHex(this.theme.muted);
-      const rgb = (i: number): number[] => (i < 0 ? muted : [color[4 * i], color[4 * i + 1], color[4 * i + 2]]);
-      const css = (c: number[], alpha = 1) => `rgba(${c.map((v) => Math.round(v)).join(",")},${alpha})`;
-      const mix = (x: number[], y: number[], t: number) => x.map((v, k) => v + (y[k] - v) * t);
-      const shown: { p: StemPlaced; cy: number; x0: number; top: number }[] = [];
-      for (const [r, boxes] of cache.placed) {
-        if (r < l0 || r > l1) continue;
-        const cy = laneTop + (r + 0.5) * this.laneH;
-        for (const p of boxes) {
-          const x0 = plot.x + p.x0 + shift;
-          if (x0 > plot.x + plot.w || x0 + p.w < plot.x) continue;
-          shown.push({ p, cy, x0, top: cy + levelOffset(p.level, boxH, gap, cache.start) - boxH / 2 });
-        }
-      }
-      // the stems first, in their event's colour (a badge's dashed, to the middle of its
-      // events); no stem passes behind a box (corridors)
-      ctx.lineCap = "round";
-      for (const { p, cy, top } of shown) {
-        const up = p.level > 0;
-        const badge = p.index < 0;
-        const x = plot.x + p.x + shift;
-        const cx = plot.x + p.cx + shift;
-        const y0 = cy + (up ? -markR - 2 : markR + 2);
-        const badgeH = lineH + 4;
-        const y1 = badge ? top + boxH / 2 + (up ? badgeH / 2 : -badgeH / 2) : up ? top + boxH : top;
-        ctx.strokeStyle = css(rgb(p.index), badge ? 0.7 : 0.85);
-        ctx.lineWidth = badge ? 1 : 1.4;
-        ctx.setLineDash(badge ? [2, 3] : []);
-        ctx.beginPath();
-        ctx.moveTo(x, y0);
-        if (Math.abs(cx - x) > 0.5) {
-          // an S-curve in the band next to the line, then straight up (or down) to the box
-          const bend = cy + (up ? -cache.start + 4 : cache.start - 4);
-          const mid = (y0 + bend) / 2;
-          ctx.bezierCurveTo(x, mid, cx, mid, cx, bend);
-        }
-        ctx.lineTo(cx, y1);
-        ctx.stroke();
-      }
-      ctx.setLineDash([]);
-      // a ring around each event that has a box, so the dot stands off the line
-      ctx.strokeStyle = this.theme.bg;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (const { p, cy } of shown) {
-        if (p.index < 0) continue;
-        const x = plot.x + p.x + shift;
-        ctx.moveTo(x + markR + 1, cy);
-        ctx.arc(x, cy, markR + 1, 0, Math.PI * 2);
-      }
-      ctx.stroke();
-      // the boxes: tinted with their event's colour, a soft shadow, the time in that colour
-      for (const { p, x0, top } of shown) {
-        const i = p.index;
-        if (i < 0) {
-          // a badge: "+N" events without a box here; a click zooms in on them
-          const c = cache.clusters.get(i);
-          if (!c) continue;
-          const badgeH = lineH + 4;
-          const by = Math.round(top + boxH / 2 - badgeH / 2) + 0.5;
-          const bx = Math.round(x0) + 0.5;
-          ctx.beginPath();
-          if (ctx.roundRect) ctx.roundRect(bx, by, p.w, badgeH, badgeH / 2);
-          else ctx.rect(bx, by, p.w, badgeH);
-          ctx.fillStyle = css(mix(bg, muted, 0.12));
-          ctx.fill();
-          ctx.strokeStyle = css(mix(bg, muted, 0.5));
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          ctx.font = badgeFont;
-          ctx.fillStyle = this.theme.muted;
-          ctx.textAlign = "center";
-          ctx.fillText(`+${c.n}`, x0 + p.w / 2, by + badgeH / 2);
-          ctx.textAlign = "left";
-          this.badgeHits.push({ x0, y0: by, x1: x0 + p.w, y1: by + badgeH, a: c.a, b: c.b, n: c.n });
-          continue;
-        }
-        const c = rgb(i);
-        const selected = (sf[4 * i + 1] & FLAG_SELECTED) !== 0;
-        const hovered = this.hovered && !this.hovered.bar && !this.hovered.val && this.hovered.layer === li && this.hovered.index === i;
-        const bx = Math.round(x0) + 0.5;
-        const by = Math.round(top) + 0.5;
-        ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(bx, by, p.w, boxH, 6);
-        else ctx.rect(bx, by, p.w, boxH);
-        ctx.save();
-        ctx.shadowColor = "rgba(15, 23, 42, 0.14)";
-        ctx.shadowBlur = hovered ? 10 : 6;
-        ctx.shadowOffsetY = 1.5;
-        ctx.fillStyle = css(mix(bg, c, 0.09));
-        ctx.fill();
-        ctx.restore();
-        ctx.strokeStyle = selected ? this.theme.select : hovered ? css(mix(c, ink, 0.3)) : css(mix(bg, c, 0.45));
-        ctx.lineWidth = selected ? 2 : 1;
-        ctx.stroke();
-        (cache.rows.get(i) ?? []).forEach((line, k) => {
-          ctx.font = line.head ? timeFont : titleFont;
-          ctx.fillStyle = line.head ? css(mix(c, ink, 0.35)) : this.theme.text;
-          ctx.fillText(line.text, x0 + padX, top + padY + lineH * (k + 0.5));
-        });
-        this.stemHits.push({ layer: li, index: i, x0, y0: top, x1: x0 + p.w, y1: top + boxH });
-      }
-      // badges on the line: a capsule around their events, "+N" at its right end
-      for (const index of cache.onLine) {
-        const c = cache.clusters.get(index);
-        if (!c || c.row < l0 || c.row > l1) continue;
-        const cy = laneTop + (c.row + 0.5) * this.laneH;
-        ctx.font = badgeFont;
-        const label = `+${c.n}`;
-        const tw = ctx.measureText(label).width;
-        const h = Math.max(2 * markR + 8, this.fs + 4);
-        const x0 = plot.x + c.px0 + shift - markR - 5;
-        const x1 = plot.x + c.px1 + shift + markR + 7 + tw + 6;
-        if (x1 < plot.x || x0 > plot.x + plot.w) continue;
-        ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(Math.round(x0) + 0.5, Math.round(cy - h / 2) + 0.5, x1 - x0, h, h / 2);
-        else ctx.rect(x0, cy - h / 2, x1 - x0, h);
-        ctx.strokeStyle = css(mix(bg, muted, 0.6));
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.fillStyle = this.theme.muted;
-        ctx.textAlign = "right";
-        ctx.fillText(label, x1 - 6, cy + 0.5);
-        ctx.textAlign = "left";
-        this.badgeHits.push({ x0, y0: cy - h / 2, x1, y1: cy + h / 2, a: c.a, b: c.b, n: c.n });
-      }
-      ctx.restore();
-    });
-  }
-
-  /** The badge under a point (CSS px in the stage), or null. */
-  private badgeAt(p: { x: number; y: number }): { a: number; b: number; n: number } | null {
-    for (const h of this.badgeHits) if (p.x >= h.x0 && p.x <= h.x1 && p.y >= h.y0 && p.y <= h.y1) return h;
-    return null;
-  }
-
-  /** Zoom in on the events a badge stands for, far enough that they get boxes (about 110 px
-   * of time per event, at most most of the plot). */
-  private zoomToBadge(h: { a: number; b: number; n: number }): void {
-    const plot = this.plot();
-    const want = Math.min(plot.w * 0.7, Math.max(240, h.n * 110));
-    const center = (h.a + h.b) / 2;
-    const now = this.camera.span;
-    const spanPx = (h.b - h.a) * this.camera.scale;
-    const span = spanPx > 1 ? ((h.b - h.a) * plot.w) / want : now / 4;
-    this.pushHistory();
-    this.camera.fit(center - span / 2, center + span / 2, 0);
-    this.afterMove();
-  }
-
-  /** What the values layers need of the frame. */
-  private valueView(plot = this.plot()): ValueView {
-    return {
-      left: this.camera.left,
-      scale: this.camera.scale,
-      plot,
-      laneTop: plot.y - this.scrollY,
-      laneH: this.laneH,
-      slot: this.slot,
-      sequence: this.xscale === "sequence",
-      seqTimes: this.seqTimes,
-    };
-  }
-
-  /** Each values lane's high and low, small at the left of its band. */
-  private drawValueScales(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, l0: number, l1: number): void {
-    if (!this.values.length) return;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(plot.x, plot.y, plot.w, plot.h);
-    ctx.clip();
-    ctx.font = this.font(-3);
-    ctx.fillStyle = this.theme.muted;
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "left";
-    const vv = this.valueView(plot);
-    for (const v of this.values) v.drawScales(ctx, vv, l0, l1, (x) => fmtNumber(x, 3), this.fs * 3);
-    ctx.restore();
-  }
-
-  /** What the bars need of the frame. */
-  private barView(plot = this.plot()): BarView {
-    return {
-      left: this.camera.left,
-      scale: this.camera.scale,
-      plot,
-      laneTop: plot.y - this.scrollY,
-      laneH: this.laneH,
-      maxBar: Math.max(16, Math.round(this.fs * 2.2)),
-      sequence: this.xscale === "sequence",
-      slot: this.slot,
-    };
-  }
-
-  /** The arrows of dependencies, and text in the bars (when not too many are in view). */
-  private drawBarText(ctx: CanvasRenderingContext2D, v: BarView, l0: number, l1: number, labels: boolean): void {
-    if (!this.bars.length) return;
-    const { plot } = v;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(plot.x, plot.y, plot.w, plot.h);
-    ctx.clip();
-    for (const b of this.bars) b.drawLinks(ctx, v, l0, l1, this.theme.muted);
-    for (const b of this.bars) b.drawCritical(ctx, v, l0, l1, this.theme.text);
-    ctx.font = this.font(-1);
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "left";
-    const span = (t: number) => (this.axis ? this.axis.formatSpan(t) : fmtNumber(t));
-    if (labels) for (const b of this.bars) b.drawLabels(ctx, v, this.theme.text, this.theme.bg, this.theme.muted, span);
-    ctx.restore();
-  }
-
-  /** Vertical lines at times set in Python (Timeline.marker), labelled at the top. */
-  private drawMarkers(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }): void {
-    const markers = this.spec?.markers ?? [];
-    if (!markers.length) return;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(plot.x, 0, plot.w, plot.y + plot.h);
-    ctx.clip();
-    ctx.font = this.font(-1);
-    ctx.textBaseline = "alphabetic";
-    for (const m of markers) {
-      let at = m.x;
-      if (this.xscale === "sequence") {
-        if (!this.seqTimes?.length) continue;
-        at = lowerBound(this.seqTimes, m.x) - 0.5;
-      }
-      const x = Math.round(plot.x + this.camera.toPx(at)) + 0.5;
-      if (x < plot.x - 1 || x > plot.x + plot.w + 1) continue;
-      const color = m.color ?? this.theme.select;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([5, 3]);
-      ctx.beginPath();
-      ctx.moveTo(x, plot.y);
-      ctx.lineTo(x, plot.y + plot.h);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      if (m.label) {
-        const w = ctx.measureText(m.label).width + 8;
-        const lx = Math.min(x + 3, plot.x + plot.w - w);
-        const y = plot.y + 3;
-        ctx.fillStyle = this.theme.bg;
-        ctx.fillRect(lx, y, w, this.fs + 4);
-        ctx.fillStyle = color;
-        ctx.fillText(m.label, lx + 4, y + this.fs);
-      }
-    }
-    ctx.restore();
-  }
-
-  private drawHover(ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, laneTop: number): void {
-    const h = this.hovered;
-    if (!h) return;
-    if (h.val) {
-      const v = this.values[h.layer];
-      if (!v) return;
-      const p = v.position(h.index, this.valueView(plot));
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(plot.x, plot.y, plot.w, plot.h);
-      ctx.clip();
-      ctx.strokeStyle = this.theme.muted;
-      ctx.setLineDash([2, 3]);
-      ctx.beginPath();
-      ctx.moveTo(Math.round(p.x) + 0.5, p.y - this.laneH / 2);
-      ctx.lineTo(Math.round(p.x) + 0.5, p.y + this.laneH / 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = p.color;
-      ctx.strokeStyle = this.theme.bg;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-      return;
-    }
-    if (h.bar) {
-      const b = this.bars[h.layer];
-      if (!b) return;
-      const box = b.box(h.index, this.barView(plot));
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(plot.x, plot.y, plot.w, plot.h);
-      ctx.clip();
-      ctx.strokeStyle = this.theme.text;
-      ctx.lineWidth = 1.5;
-      if (box.milestone) {
-        const r = box.h * 0.62 + 3;
-        ctx.beginPath();
-        ctx.moveTo(box.x0, box.cy - r);
-        ctx.lineTo(box.x0 + r, box.cy);
-        ctx.lineTo(box.x0, box.cy + r);
-        ctx.lineTo(box.x0 - r, box.cy);
-        ctx.closePath();
-        ctx.stroke();
-      } else {
-        const a = Math.max(box.x0, plot.x - 4);
-        const e = Math.min(box.x1, plot.x + plot.w + 4);
-        ctx.strokeRect(a - 2, box.cy - box.h / 2 - 2, Math.max(1, e - a) + 4, box.h + 4);
-      }
-      ctx.restore();
-      return;
-    }
-    const l = this.layers[h.layer];
-    if (!l) return;
-    const x = plot.x + (this.xsrc(l)[h.index] - this.camera.left) * this.camera.scale;
-    const y = laneTop + (this.slot[l.data.lane[h.index]] + 0.5) * this.laneH + l.draw.dy.data[h.index];
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(plot.x, plot.y, plot.w, plot.h);
-    ctx.clip();
-    ctx.strokeStyle = this.theme.text;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(x, y, l.data.size[h.index] / 2 + 3, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
+  valueView(plot = this.plot()): ValueView {
+    return drawing.valueView(this, plot);
   }
 
   // ------------------------------------------------------------------ picking
 
-  /** The event nearest to a point (CSS px in the stage), within HOVER_PX. */
-  private pick(px: number, py: number): Hit | null {
-    if (!this.spec) return null;
-    const plot = this.plot();
-    if (px < plot.x || px > plot.x + plot.w || py < plot.y || py > plot.y + plot.h) return null;
-    // a story's box stands for its event
-    for (let k = this.stemHits.length - 1; k >= 0; k--) {
-      const b = this.stemHits[k];
-      if (px >= b.x0 && px <= b.x1 && py >= b.y0 && py <= b.y1) return { layer: b.layer, index: b.index };
-    }
-    const laneTop = plot.y - this.scrollY;
-    const at = Math.floor((py - laneTop) / this.laneH);
-    let best: { layer: number; index: number } | null = null;
-    let bestD = HOVER_PX * HOVER_PX;
-    this.layers.forEach((l, li) => {
-      if (!l.data.spec.hover && !l.data.spec.select) return;
-      const src = this.xsrc(l);
-      const starts = l.data.laneStarts;
-      const reach = (HOVER_PX + 12) / this.camera.scale;
-      const x = this.camera.fromPx(px - plot.x);
-      for (let r = Math.max(0, at - 1); r <= at + 1 && r < this.laneAt.length; r++) {
-        const lane = this.laneAt[r];
-        if (lane + 1 >= starts.length) continue;
-        const i0 = lowerBound(src, x - reach, starts[lane], starts[lane + 1]);
-        const i1 = upperBound(src, x + reach, i0, starts[lane + 1]);
-        for (let i = i0; i < i1; i++) {
-          const ex = plot.x + (src[i] - this.camera.left) * this.camera.scale;
-          const ey = laneTop + (r + 0.5) * this.laneH + l.draw.dy.data[i];
-          const radius = l.data.size[i] / 2;
-          const d = Math.max(0, Math.hypot(ex - px, ey - py) - radius);
-          if (d * d <= bestD) {
-            bestD = d * d;
-            best = { layer: li, index: i };
-          }
-        }
-      }
-    });
-    if (best) return best;
-    // samples of values layers near the pointer: a line is a small target, a bar (a state
-    // filling its lane) a large one, so the line goes first
-    const vv = this.valueView(plot);
-    for (let k = this.values.length - 1; k >= 0; k--) {
-      const layer = this.values[k];
-      if (!layer.data.spec.hover) continue;
-      const i = layer.pick(px, py, at, this.laneAt, vv, HOVER_PX);
-      if (i >= 0) return { layer: k, index: i, val: true };
-    }
-    // bars, top layer first
-    const v = this.barView(plot);
-    for (let k = this.bars.length - 1; k >= 0; k--) {
-      const b = this.bars[k];
-      if (!b.data.spec.hover && !b.data.spec.select) continue;
-      const i = b.pick(px, py, at, this.laneAt, v);
-      if (i >= 0) return { layer: k, index: i, bar: true };
-    }
-    return null;
-  }
-
-  /** The spec of the layer a hit is in. */
-  private specOf(h: Hit): EventsLayerSpec | IntervalsLayerSpec | ValuesLayerSpec | undefined {
-    if (h.val) return this.values[h.layer]?.data.spec;
-    return h.bar ? this.bars[h.layer]?.data.spec : this.layers[h.layer]?.data.spec;
-  }
-
-  private setHovered(h: Hit | null): void {
-    const same = h && this.hovered && h.layer === this.hovered.layer && h.index === this.hovered.index && !!h.bar === !!this.hovered.bar && !!h.val === !!this.hovered.val;
-    if (same || (!h && !this.hovered)) return;
-    this.hovered = h;
-    this.requestRender();
-    this.showTooltip();
-  }
-
-  private showTooltip(): void {
-    const h = this.hovered;
-    const spec = h ? this.specOf(h) : undefined;
-    if (!h || !spec || !this.pointer || !this.axis || !this.spec || !spec.hover) {
-      this.tooltip.classList.remove("atl-show");
-      this.tooltipKey = "";
-      return;
-    }
-    const key = `${h.val ? "v" : h.bar ? "b" : "e"}${h.layer}:${h.index}`;
-    // the same mark again (a states tooltip follows the pointer): what Python sent stays
-    const again = key === this.tooltipKey;
-    this.tooltipKey = key;
-    if (!again) this.tooltipExtra = [];
-    /** [key, value], and a class for the row. */
-    const rows: [string, string, string?][] = [];
-    if (this.layers.length + this.bars.length + this.values.length > 1) rows.push(["layer", spec.name]);
-    if (h.bar && this.bars[h.layer].data.states) rows.push(...this.statesAt(h));
-    if (h.val) {
-      const v = this.values[h.layer];
-      const d = v.data;
-      rows.push([this.spec.lanes.title || "lane", this.spec.lanes.names[v.laneOf(h.index)] ?? ""]);
-      const series = v.seriesOf(h.index);
-      if (series) rows.push([d.spec.series_title || "series", series]);
-      rows.push(["time", this.axis.formatFull(d.time[h.index])]);
-      rows.push(["value", fmtNumber(d.value[h.index], 6)]);
-    } else if (h.bar) {
-      const d = this.bars[h.layer].data;
-      const i = h.index;
-      // (a states layer's rows above name the lanes)
-      if (!d.states) rows.push([this.spec.lanes.title || "lane", this.spec.lanes.names[d.lane[i]] ?? ""]);
-      if (d.kind[i] === 1) rows.push(["at", this.axis.formatFull(d.start[i])], ["", "milestone"]);
-      else {
-        rows.push(["start", this.axis.formatFull(d.start[i])]);
-        rows.push(["end", d.kind[i] === 2 ? "open (not ended)" : this.axis.formatFull(d.end[i])]);
-        if (d.kind[i] !== 2) rows.push(["duration", this.axis.formatSpan(d.end[i] - d.start[i])]);
-      }
-      if (d.progress && d.progress[i] >= 0) rows.push(["progress", `${Math.round(d.progress[i] * 100)}%`]);
-      if (d.text?.[i] && d.text[i] !== d.states?.[i]) rows.push(["text", d.text[i]]);
-    } else {
-      const l = this.layers[h.layer];
-      if (this.spec.lanes.show_names !== false) rows.push([this.spec.lanes.title || "lane", this.spec.lanes.names[l.data.lane[h.index]] ?? ""]);
-      if (l.data.spec.has_time) rows.push(["time", this.axis.formatFull(l.data.time[h.index])]);
-      rows.push(["order", `#${fmtNumber(l.data.rank[h.index] + 1)}`]);
-      if (l.data.text?.[h.index]) rows.push(["text", l.data.text[h.index]]);
-    }
-    const render = (extra: string[][]) => {
-      if (this.tooltipKey !== key) return;
-      this.tooltipExtra = extra;
-      this.tooltip.replaceChildren(
-        ...[...rows, ...extra].map(([k, v, cls]) => {
-          const row = div(cls ? `atl-tip-row ${cls}` : "atl-tip-row");
-          const kk = document.createElement("span");
-          kk.className = "atl-tip-key";
-          kk.textContent = k;
-          const vv = document.createElement("span");
-          vv.textContent = v;
-          row.append(kk, vv);
-          return row;
-        }),
-      );
-      this.placeTooltip();
-    };
-    render(this.tooltipExtra);
-    this.tooltip.classList.add("atl-show");
-    if (!again && spec.tooltip.length && this.callbacks.onTooltip) {
-      this.callbacks.onTooltip(spec.name, h.index).then(render, () => {});
-    }
-  }
-
-  /** A states layer's tooltip: the time at the pointer, and every lane's state then (the
-   * hovered lane's marked), so lanes compare at one moment; at most STATE_TIP_LANES lanes,
-   * those around the hovered one. Under them, the hovered state's own rows. */
-  private statesAt(h: Hit): [string, string, string?][] {
-    const b = this.bars[h.layer];
-    const d = b.data;
-    const sequence = this.xscale === "sequence";
-    const x = this.pointer ? this.camera.fromPx(this.pointer.x - this.plot().x) : d.start[h.index];
-    const rows: [string, string, string?][] = [];
-    if (!sequence && this.axis) rows.push(["time", this.axis.formatFull(x)]);
-    const lanes = [...this.laneAt].filter((l) => l + 1 < d.laneStarts.length && d.laneStarts[l + 1] > d.laneStarts[l]);
-    const here = lanes.indexOf(d.lane[h.index]);
-    const from = Math.max(0, Math.min(here - (STATE_TIP_LANES >> 1), lanes.length - STATE_TIP_LANES));
-    const shown = lanes.slice(from, from + STATE_TIP_LANES);
-    if (from > 0) rows.push(["", `… ${fmtNumber(from)} lanes above`]);
-    for (const l of shown) {
-      const i = b.at(x, l, sequence);
-      const state = i >= 0 ? d.states![i] : "–";
-      rows.push([this.spec!.lanes.names[l] ?? "", state, l === d.lane[h.index] ? "atl-tip-here" : undefined]);
-    }
-    const below = lanes.length - from - shown.length;
-    if (below > 0) rows.push(["", `… ${fmtNumber(below)} lanes below`]);
-    rows.push(["", "", "atl-tip-gap"]);
-    return rows;
-  }
-
-  private placeTooltip(): void {
-    if (!this.pointer) return;
-    const tw = this.tooltip.offsetWidth;
-    const th = this.tooltip.offsetHeight;
-    let x = this.pointer.x + 14;
-    let y = this.pointer.y + 14;
-    if (x + tw > this.width - 4) x = this.pointer.x - tw - 14;
-    if (y + th > this.height - 4) y = this.pointer.y - th - 14;
-    this.tooltip.style.transform = `translate(${Math.max(4, x)}px, ${Math.max(4, y)}px)`;
+  pick(px: number, py: number): Hit | null {
+    return picking.pick(this, px, py);
   }
 
   // ------------------------------------------------------------------ tools and input
@@ -2183,7 +909,7 @@ export class TimelineView {
     if (next === this.tool) return;
     this.tool = next;
     this.stage.dataset.tool = next;
-    this.cancelDrag();
+    input.cancelDrag(this);
     this.updateToolbar();
     if (fromUser) this.callbacks.onTool?.(next);
   }
@@ -2216,14 +942,14 @@ export class TimelineView {
   /** Whether the view differs from the whole timeline (Home has something to do). */
   private isZoomed(): boolean {
     if (!this.spec) return false;
-    const [a, b] = this.xscale === "sequence" ? [-0.5, Math.max(0.5, (this.spec.sequence?.count ?? 1) - 0.5)] : this.spec.time.extent;
+    const [a, b] = this.xscale === "order" ? [-0.5, Math.max(0.5, (this.spec.sequence?.count ?? 1) - 0.5)] : this.spec.time.extent;
     const span = (b - a) * 1.06 || 1;
     const tol = span * 1e-3;
     return Math.abs(this.camera.span - span) > tol || Math.abs(this.camera.left - (a - (b - a) * 0.03)) > tol || this.scrollY > 0.5;
   }
 
   /** Remember the view before a navigation, for Back (Backspace). */
-  private pushHistory(): void {
+  pushHistory(): void {
     const s = { left: this.camera.left, span: this.camera.span, scrollY: this.scrollY, xscale: this.xscale };
     const last = this.history[this.history.length - 1];
     const eps = s.span * 1e-6;
@@ -2239,7 +965,7 @@ export class TimelineView {
     if (s) {
       this.camera.fit(s.left, s.left + s.span, 0);
       this.scrollY = s.scrollY;
-      this.clampScroll();
+      folding.clampScroll(this);
       this.afterMove();
     }
     this.updateToolbar();
@@ -2260,7 +986,7 @@ export class TimelineView {
     done?.catch((err: unknown) => this.flashNotice(`Full screen is not available here (${err instanceof Error ? err.message : String(err)})`));
   }
 
-  private onFullscreenChange = (): void => {
+  onFullscreenChange = (): void => {
     const full = this.isFullscreen();
     this.root.classList.toggle("atl-fullscreen", full);
     this.layout();
@@ -2280,201 +1006,9 @@ export class TimelineView {
     this.helpEl.focus({ preventScroll: true });
   }
 
-  private toggleLegend(): void {
+  toggleLegend(): void {
     this.setLegend(!this.showLegend);
     this.callbacks.onLegend?.(this.showLegend);
-  }
-
-  private cancelDrag(): void {
-    this.drag = null;
-    this.box = null;
-    this.stage.classList.remove("atl-panning");
-    this.requestRender();
-  }
-
-  private bindInput(): void {
-    const stage = this.stage;
-    const local = (e: MouseEvent) => {
-      const r = stage.getBoundingClientRect();
-      return { x: e.clientX - r.left, y: e.clientY - r.top };
-    };
-    stage.addEventListener("wheel", (e) => {
-      const active = this.root.contains(document.activeElement) || this.isFullscreen() || this.root.matches(":focus-within");
-      if (!active && !e.ctrlKey && !e.metaKey) {
-        this.flashNotice("Click the plot, then scroll to zoom");
-        return;
-      }
-      e.preventDefault();
-      const now = performance.now();
-      if (now - this.lastWheel > 500) this.pushHistory();
-      this.lastWheel = now;
-      const p = local(e);
-      const plot = this.plot();
-      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
-      if (e.shiftKey) {
-        this.scrollY += (e.deltaY || e.deltaX) * unit;
-        this.clampScroll();
-      } else {
-        if (e.deltaY) this.camera.zoomAt(Math.max(0, Math.min(plot.w, p.x - plot.x)), Math.exp(-e.deltaY * unit * 0.0022));
-        if (e.deltaX) this.camera.pan(-e.deltaX * unit);
-      }
-      this.afterMove();
-    }, { passive: false });
-
-    stage.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0) return;
-      this.root.focus({ preventScroll: true });
-      const p = local(e);
-      const plot = this.plot();
-      stage.setPointerCapture(e.pointerId);
-      let mode: DragMode;
-      if (this.spaceDown) mode = "pan";
-      else if (p.y < plot.y && p.x >= plot.x) mode = "axis";
-      else if (this.tool === "zoom") mode = "zoom";
-      else if (this.tool === "select") mode = "select";
-      else mode = e.shiftKey ? "zoom" : "pan";
-      this.drag = { x: p.x, y: p.y, left: this.camera.left, scrollY: this.scrollY, mode, moved: false };
-    });
-
-    stage.addEventListener("pointermove", (e) => {
-      const p = local(e);
-      this.pointer = p;
-      const d = this.drag;
-      if (d) {
-        const dx = p.x - d.x;
-        const dy = p.y - d.y;
-        if (!d.moved && Math.abs(dx) + Math.abs(dy) > 4) {
-          d.moved = true;
-          if (d.mode === "pan") {
-            this.pushHistory();
-            stage.classList.add("atl-panning");
-          }
-          this.setHovered(null);
-        }
-        if (!d.moved) return;
-        if (d.mode === "pan") {
-          this.camera.left = d.left;
-          this.camera.pan(dx);
-          this.scrollY = d.scrollY - dy;
-          this.clampScroll();
-          this.afterMove();
-        } else {
-          this.box = { x0: d.x, y0: d.y, x1: p.x, y1: p.y, kind: this.boxKind(d.mode) };
-          this.requestRender();
-        }
-        return;
-      }
-      if (this.hoverEnabled) this.setHovered(this.pick(p.x, p.y));
-      const plotNow = this.plot();
-      this.shareCursor(p.x >= plotNow.x && p.x <= plotNow.x + plotNow.w ? p.x : null);
-      this.stage.classList.toggle("atl-foldable", this.foldableAt(p) || !!this.badgeAt(p));
-      // a states tooltip shows the lanes at the pointer's time: it changes with the pointer
-      if (this.hovered?.bar && this.bars[this.hovered.layer]?.data.states) this.showTooltip();
-      else if (this.hovered) this.placeTooltip();
-    });
-
-    const end = (e: PointerEvent) => {
-      const d = this.drag;
-      const box = this.box;
-      this.drag = null;
-      this.box = null;
-      stage.classList.remove("atl-panning");
-      if (!d) return;
-      const p = local(e);
-      const wide = box && Math.abs(box.x1 - box.x0) >= MIN_BOX;
-      if (d.moved && box && d.mode !== "pan") {
-        if (box.kind === "select" || box.kind === "range-select") {
-          if (wide || box.kind === "select") this.selectBox(box, boxMode(e));
-        } else if (wide) {
-          this.zoomToBox(box);
-        }
-        this.requestRender();
-        return;
-      }
-      if (d.moved) return;
-      this.click(p, e, d.mode);
-    };
-    stage.addEventListener("pointerup", end);
-    stage.addEventListener("pointercancel", () => this.cancelDrag());
-    stage.addEventListener("pointerleave", () => {
-      this.pointer = null;
-      this.shareCursor(null);
-      if (!this.drag) this.setHovered(null);
-    });
-
-    this.root.addEventListener("keydown", (e) => this.key(e));
-    this.root.addEventListener("keyup", (e) => {
-      if (e.key === " ") {
-        this.spaceDown = false;
-        this.root.classList.remove("atl-space");
-      }
-    });
-    this.root.addEventListener("blur", () => {
-      this.spaceDown = false;
-      this.root.classList.remove("atl-space");
-    });
-    document.addEventListener("fullscreenchange", this.onFullscreenChange);
-  }
-
-  private boxKind(mode: DragMode): BoxKind {
-    if (mode === "select") return "select";
-    if (mode === "axis") return this.tool === "select" ? "range-select" : "range";
-    return "range";
-  }
-
-  /** A click (a press that did not move) with the drag mode it started in. */
-  private click(p: { x: number; y: number }, e: MouseEvent, mode: DragMode): void {
-    const plot = this.plot();
-    const inPlot = p.x >= plot.x && p.x <= plot.x + plot.w && p.y >= plot.y && p.y <= plot.y + plot.h;
-    if (mode !== "axis" && p.x < plot.x && p.y >= plot.y && p.y <= plot.y + plot.h) {
-      // a lane's name: a click folds or unfolds it, a double-click shows all of it
-      const lane = this.laneAtY(p.y);
-      const now = performance.now();
-      if (now - this.lastNameTap.at < DOUBLE_CLICK_MS && lane === this.lastNameTap.lane) {
-        this.lastNameTap = { at: 0, lane: -1 };
-        this.toggleLane(lane, e.altKey); // undo the first click's fold
-        this.zoomToLane(lane);
-      } else {
-        this.lastNameTap = { at: now, lane };
-        this.toggleLane(lane, e.altKey);
-      }
-      return;
-    }
-    if (mode === "axis" || !inPlot) return;
-    const badge = this.badgeAt(p);
-    if (badge) {
-      this.zoomToBadge(badge);
-      return;
-    }
-    const selecting = this.selectionMode !== "none";
-    const hit = selecting ? this.pick(p.x, p.y) : null;
-    const select = (m: SelectMode) => {
-      const spec = hit ? this.specOf(hit) : undefined;
-      if (hit && spec?.select) this.callbacks.onGesture?.({ kind: "click", layer: spec.name, index: hit.index, mode: m });
-    };
-    if (this.tool === "zoom" && mode === "zoom") {
-      this.pushHistory();
-      this.camera.zoomAt(p.x - plot.x, e.altKey ? 0.5 : 2);
-      this.afterMove();
-      return;
-    }
-    if (this.tool === "select") {
-      select(clickMode(e)); // a miss changes nothing
-      return;
-    }
-    // Pan: a plain click does nothing (it may be a click to focus, or a stray one); modifier
-    // clicks add and remove; a double-click shows the whole timeline
-    if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) {
-      select(clickMode(e));
-      return;
-    }
-    const now = performance.now();
-    if (now - this.lastTap < DOUBLE_CLICK_MS) {
-      this.lastTap = 0;
-      this.resetView();
-      return;
-    }
-    this.lastTap = now;
   }
 
   /**
@@ -2563,7 +1097,7 @@ export class TimelineView {
     const tree = this.spec?.lanes.tree;
     if (lane < 0 || !this.spec) return;
     const last = lane + (tree && lane < tree.size.length ? tree.size[lane] : 1);
-    const seq = this.xscale === "sequence";
+    const seq = this.xscale === "order";
     let a = Infinity;
     let b = -Infinity;
     for (const bar of this.bars) {
@@ -2594,111 +1128,11 @@ export class TimelineView {
     this.pushHistory();
     this.camera.fit(a, b, 0.04);
     if (this.slot[lane] >= 0) this.scrollY = this.slot[lane] * this.laneH;
-    this.clampScroll();
+    folding.clampScroll(this);
     this.afterMove();
   }
 
-  private zoomToBox(b: Box): void {
-    const plot = this.plot();
-    const xa = this.camera.fromPx(Math.min(b.x0, b.x1) - plot.x);
-    const xb = this.camera.fromPx(Math.max(b.x0, b.x1) - plot.x);
-    this.pushHistory();
-    this.camera.fit(xa, xb, 0);
-    this.afterMove();
-  }
-
-  private key(e: KeyboardEvent): void {
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (this.helpEl && e.key !== "?" && e.key !== "Escape") return;
-    const plot = this.plot();
-    const move = (fn: () => void) => {
-      this.pushHistory();
-      fn();
-    };
-    let handled = true;
-    switch (e.key) {
-      case "p":
-        this.setTool("pan", true);
-        break;
-      case "z":
-        this.setTool("zoom", true);
-        break;
-      case "s":
-        this.setTool("select", true);
-        break;
-      case "t":
-      case "T":
-        this.setXScale(this.xscale === "time" ? "sequence" : "time", true);
-        break;
-      case "[":
-      case "]":
-        if (!this.spec?.lanes.tree) return;
-        this.expandAll(e.key === "]");
-        break;
-      case "0":
-      case "Home":
-        this.resetView();
-        break;
-      case "Backspace":
-        this.previousView();
-        break;
-      case "+":
-      case "=":
-        move(() => this.camera.zoomAt(plot.w / 2, 2));
-        break;
-      case "-":
-      case "_":
-        move(() => this.camera.zoomAt(plot.w / 2, 0.5));
-        break;
-      case "ArrowLeft":
-        this.camera.pan(plot.w * 0.2);
-        break;
-      case "ArrowRight":
-        this.camera.pan(-plot.w * 0.2);
-        break;
-      case "ArrowUp":
-        this.scrollY -= this.laneH * 3;
-        break;
-      case "ArrowDown":
-        this.scrollY += this.laneH * 3;
-        break;
-      case "d":
-        if (!this.layers.some((l) => l.data.spec.overlap === "dodge")) return;
-        this.setDodge(!this.dodgeOn);
-        this.callbacks.onDodge?.(this.dodgeOn);
-        break;
-      case "l":
-        if (this.legendEl) this.toggleLegend();
-        break;
-      case "f":
-        this.toggleFullscreen();
-        break;
-      case "?":
-        this.toggleHelp();
-        break;
-      case " ":
-        this.spaceDown = true;
-        this.root.classList.add("atl-space");
-        break;
-      case "Escape":
-        if (this.helpEl) this.toggleHelp();
-        else if (this.drag) this.cancelDrag();
-        else if (Object.values(this.marks).some((m) => m.length)) this.callbacks.onGesture?.({ kind: "clear" });
-        else handled = false;
-        break;
-      default:
-        handled = false;
-    }
-    if (handled) {
-      // keep the key from the notebook (JupyterLab's command-mode shortcuts) and the page
-      e.preventDefault();
-      e.stopPropagation();
-      this.clampScroll();
-      this.afterMove();
-    }
-  }
-
-  private afterMove(): void {
+  afterMove(): void {
     this.shareRange();
     this.requestRender();
     this.reportView();
@@ -2718,7 +1152,7 @@ export class TimelineView {
 
   private noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
-  private flashNotice(text: string): void {
+  flashNotice(text: string): void {
     if (this.status) return;
     this.notice.textContent = text;
     this.notice.classList.add("atl-show");
@@ -2726,27 +1160,6 @@ export class TimelineView {
     this.noticeTimer = setTimeout(() => {
       if (!this.status) this.notice.classList.remove("atl-show");
     }, 1600);
-  }
-
-  private selectBox(b: Box, mode: SelectMode): void {
-    const plot = this.plot();
-    const laneTop = plot.y - this.scrollY;
-    const xa = this.camera.fromPx(Math.min(b.x0, b.x1) - plot.x);
-    const xb = this.camera.fromPx(Math.max(b.x0, b.x1) - plot.x);
-    const rows = this.laneAt.length;
-    let ra = 0;
-    let rb = rows - 1;
-    if (b.kind === "select") {
-      ra = Math.floor((Math.max(plot.y, Math.min(b.y0, b.y1)) - laneTop) / this.laneH);
-      rb = Math.floor((Math.min(plot.y + plot.h, Math.max(b.y0, b.y1)) - laneTop) / this.laneH);
-    }
-    ra = Math.max(0, Math.min(rows - 1, ra));
-    rb = Math.max(0, Math.min(rows - 1, rb));
-    const lanes: [number, number] = [this.laneAt[ra] ?? 0, this.laneAt[rb] ?? 0];
-    // with folded lanes, the rows in the box are not one range of lanes: list them
-    const folded = this.laneAt.length < (this.spec?.lanes.names.length ?? 0);
-    const shown = folded ? Array.from(this.laneAt.subarray(ra, rb + 1)) : undefined;
-    this.callbacks.onGesture?.({ kind: "box", x: [xa, xb], lanes, shown, xscale: this.xscale, mode });
   }
 
   /** Where event `index` of layer `layer` is drawn (CSS px in the stage), or null. */
@@ -2764,7 +1177,7 @@ export class TimelineView {
   barPosition(layer: number, index: number): { x: number; y: number } | null {
     const b = this.bars[layer];
     if (!b || index < 0 || index >= b.data.count) return null;
-    const box = b.box(index, this.barView());
+    const box = b.box(index, drawing.barView(this));
     return { x: box.milestone ? box.x0 : (box.x0 + box.x1) / 2, y: box.cy };
   }
 
@@ -2800,111 +1213,4 @@ export class TimelineView {
     this.renderer?.destroy();
     this.root.remove();
   }
-}
-
-// ---------------------------------------------------------------------- helpers
-
-/** Attributes by which hosts switch light and dark: JupyterLab (data-jp-theme-light), VS Code
- * (class vscode-dark, data-vscode-theme-kind), marimo and others (class dark, data-theme),
- * Material for MkDocs / Zensical (data-md-color-scheme). */
-const THEME_ATTRIBUTES = ["class", "data-jp-theme-light", "data-vscode-theme-kind", "data-theme", "data-md-color-scheme"];
-
-const fontFamily = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-
-function div(cls: string): HTMLDivElement {
-  const d = document.createElement("div");
-  d.className = cls;
-  return d;
-}
-
-function canvas(cls: string): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.className = `atl-canvas ${cls}`;
-  return c;
-}
-
-function rgb01(css: string): [number, number, number] {
-  const m = css.match(/rgba?\(([^)]+)\)/);
-  if (m) {
-    const [r, g, b] = m[1].split(/[ ,/]+/).map(Number);
-    return [r / 255, g / 255, b / 255];
-  }
-  const [r, g, b] = parseHex(css);
-  return [r / 255, g / 255, b / 255];
-}
-
-function ellipsize(ctx: CanvasRenderingContext2D, text: string, width: number): string {
-  if (ctx.measureText(text).width <= width) return text;
-  let lo = 0;
-  let hi = text.length;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (ctx.measureText(text.slice(0, mid) + "…").width <= width) lo = mid;
-    else hi = mid - 1;
-  }
-  return text.slice(0, lo) + "…";
-}
-
-/** A click: Shift/Ctrl/⌘ add or remove the event, Alt removes it, else it replaces. */
-function clickMode(e: MouseEvent): SelectMode {
-  if (e.altKey) return "remove";
-  if (e.shiftKey || e.ctrlKey || e.metaKey) return "toggle";
-  return "replace";
-}
-
-/** A box: Shift/Ctrl/⌘ add what is inside, Alt removes it, else it replaces. */
-function boxMode(e: MouseEvent): SelectMode {
-  if (e.altKey) return "remove";
-  if (e.shiftKey || e.ctrlKey || e.metaKey) return "add";
-  return "replace";
-}
-
-/**
- * Long gaps between consecutive events (sequence scale): at rank k + 0.5 when the time
- * from event k to k + 1 is over 20× the median gap; at most one gap per 50 events (the
- * longest).
- */
-export function findGaps(times: Float64Array | null): { at: number; span: number }[] {
-  if (!times || times.length < 3) return [];
-  const diffs = new Float64Array(times.length - 1);
-  for (let i = 0; i < diffs.length; i++) diffs[i] = times[i + 1] - times[i];
-  const sorted = Float64Array.from(diffs).sort();
-  const median = sorted[Math.floor(sorted.length / 2)];
-  const mean = sorted.reduce((a, b) => a + b, 0) / sorted.length;
-  let threshold = median > 0 ? median * 20 : mean * 10;
-  const most = Math.max(1, Math.floor(diffs.length / 50));
-  if (sorted.length > most) threshold = Math.max(threshold, sorted[sorted.length - most - 1]);
-  if (!(threshold > 0)) return [];
-  const out: { at: number; span: number }[] = [];
-  for (let i = 0; i < diffs.length; i++) if (diffs[i] > threshold) out.push({ at: i + 0.5, span: diffs[i] });
-  return out;
-}
-
-function lowerBoundBy(a: { at: number }[], x: number): number {
-  let lo = 0;
-  let hi = a.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if (a[mid].at < x) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo;
-}
-
-/** The row of each event's lane (a float per event, for the GPU); -1 for hidden lanes. */
-function rowsOf(lane: Uint32Array, slot: Int32Array): Float32Array {
-  const out = new Float32Array(lane.length);
-  for (let i = 0; i < lane.length; i++) out[i] = slot[lane[i]] ?? -1;
-  return out;
-}
-
-/** What identifies a plot's lanes: when it is the same, folding is kept. */
-function treeKey(spec: SceneSpec): string {
-  const t = spec.lanes.tree;
-  return t ? `${spec.lanes.names.length}:${t.depth.length}:${spec.lanes.names.slice(0, 50).join("\u0001")}` : "";
-}
-
-/** Whether an events layer puts its text in boxes on stems (a story timeline). */
-function isStems(l: Layer): boolean {
-  return l.data.spec.labels === "stems";
 }

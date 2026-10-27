@@ -40,7 +40,7 @@ print(plot._embed_html())
 
 ## Labels in boxes on stems
 
-When the text matters more than the pattern, `labels="stems"` puts each event's text in a box
+When the text matters more than the pattern, `stems=True` puts each event's text in a box
 above or below its lane's line, at as many levels as needed so none overlap, joined to the
 event by a line: a [story timeline](story.md).
 

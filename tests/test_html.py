@@ -2,12 +2,11 @@ import json
 import re
 
 import pytest
-import traitlets
 from kinds import every_kind
 
 from anytimeline import Timeline
+from anytimeline.page import HTML_WARN_BYTES
 from anytimeline.synthetic import service_log
-from anytimeline.widget import HTML_WARN_BYTES
 
 LOG = service_log(30)
 N = f"{len(LOG['request']):,}"
@@ -50,7 +49,7 @@ def test_display_html_shows_the_plot_as_an_output_that_runs_without_a_kernel():
     version = re.search(r'r\["([0-9a-f]{16})"\]', out)
     assert version is not None
     assert payload(out)["title"] == "Log"
-    with pytest.raises(traitlets.TraitError):
+    with pytest.raises(ValueError, match="display must be one of"):
         plot.display = "png"
 
 

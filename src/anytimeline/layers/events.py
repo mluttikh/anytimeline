@@ -9,43 +9,21 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 import numpy as np
 
 from anytimeline import data as tables
 from anytimeline import styling
 from anytimeline.codec import Encoded, encode, encode_strings
+from anytimeline.layers.common import numbers, texts
+from anytimeline.parts import STEM_SHAPES, Route
 from anytimeline.timebase import TimeBase, Times, times
+from anytimeline.types import EventOverlap, StemShape
 
-Overlap = Literal["dodge", "overlay"]
 Labels = Literal["beside", "stems"]
-StemShape = Literal["straight", "curved"]
-LABELS = ("beside", "stems")
-
-
-@dataclass(frozen=True)
-class Route:
-    """Lines joining the events of one group in the order they happened.
-
-    Args:
-        group: The column that names a group (a request, a user, a process).
-        color: ``None``: each segment in the colour of the event it starts at; or one
-            colour (``"theme"`` follows the plot's text colour).
-        width: Line width in CSS pixels.
-    """
-
-    group: str
-    color: str | None = None
-    width: float = 1.5
-
-    @classmethod
-    def of(cls, value: Route | str | None) -> Route | None:
-        if value is None or isinstance(value, Route):
-            return value
-        if isinstance(value, str):
-            return cls(group=value)
-        raise TypeError(f"route must be a column name or a Route, got {type(value).__name__}")
+LABELS = get_args(Labels)
+OVERLAPS = get_args(EventOverlap)
 
 
 @dataclass
@@ -66,7 +44,7 @@ class EventsRecord:
     tooltip: dict[str, np.ndarray]
     route: Route | None
     groups: np.ndarray | None
-    overlap: Overlap
+    overlap: EventOverlap
     importance: np.ndarray | None
     labels: Labels
     stem_shape: StemShape
@@ -103,7 +81,7 @@ def build(
     text: str | None,
     tooltip: Sequence[str] | None,
     route: Route | str | None,
-    overlap: Overlap,
+    overlap: EventOverlap,
     labels: Labels = "beside",
     stem_shape: StemShape = "straight",
     label_width: float | None = None,
@@ -115,12 +93,12 @@ def build(
     """Read an events layer from a table."""
     if time is None and order is None:
         raise ValueError("pass time= (a column of datetimes, durations or numbers) or order=")
-    if overlap not in ("dodge", "overlay"):
-        raise ValueError(f"overlap must be 'dodge' or 'overlay', got {overlap!r}")
+    if overlap not in OVERLAPS:
+        raise ValueError(f"overlap must be one of {OVERLAPS}, got {overlap!r}")
     if labels not in LABELS:
         raise ValueError(f"labels must be one of {LABELS}, got {labels!r}")
-    if stem_shape not in ("straight", "curved"):
-        raise ValueError(f"stem_shape must be 'straight' or 'curved', got {stem_shape!r}")
+    if stem_shape not in STEM_SHAPES:
+        raise ValueError(f"stem_shape must be one of {STEM_SHAPES}, got {stem_shape!r}")
     if label_width is not None and not label_width >= 0:
         raise ValueError(f"label_width is a width in pixels (0: no limit), got {label_width!r}")
     if labels == "stems" and text is None:
@@ -145,7 +123,7 @@ def build(
         keep &= t.valid
     order_values = None
     if order is not None:
-        order_values = _numbers(tables.column(table, order), order)
+        order_values = numbers(tables.column(table, order), order)
         keep &= np.isfinite(order_values)
     rows = np.flatnonzero(keep)
     if t is not None:
@@ -186,7 +164,7 @@ def build(
     )
     if isinstance(size, str):
         size_enc = styling.sizes(
-            _numbers(pick(col(size)), size),  # ty: ignore[invalid-argument-type]
+            numbers(pick(col(size)), size),  # ty: ignore[invalid-argument-type]
             solid=styling.DEFAULT_SIZE,
             title=size,
             size_range=size_range,
@@ -196,7 +174,7 @@ def build(
             None, solid=float(size) if size is not None else styling.DEFAULT_SIZE, title=""
         )
 
-    text_values = _texts(table, text, rows) if text is not None else None
+    text_values = texts(table, text, rows) if text is not None else None
     tip_cols = list(tooltip) if tooltip is not None else []
     tables.check(table, tip_cols)
     tips = {c: tables.column(table, c)[rows] for c in tip_cols}
@@ -223,46 +201,11 @@ def build(
         labels=labels,
         stem_shape=stem_shape,
         label_width=label_width,
-        importance=_numbers(imp, importance or "") if imp is not None else None,
+        importance=numbers(imp, importance or "") if imp is not None else None,
         hover=hover,
         select=select,
         dropped=int(n - len(rows)),
     )
-
-
-def _numbers(values: np.ndarray, name: str) -> np.ndarray:
-    if values.dtype.kind in "iufb":
-        return values.astype(np.float64)
-    if values.dtype.kind == "O":
-        try:
-            return np.array([np.nan if v is None else float(v) for v in values])
-        except (TypeError, ValueError):
-            pass
-    raise TypeError(f"column {name!r} must hold numbers, got {values.dtype}")
-
-
-def _texts(table: Any, template: str, rows: np.ndarray) -> list[str]:
-    """A column name, or a template such as ``"{event} ({user})"``, per kept row."""
-    names = tables.column_names(table)
-    if template in names:
-        return [
-            styling.label(v) if v is not None else "" for v in tables.column(table, template)[rows]
-        ]
-    used = [n for n in names if "{" + n in template]
-    if not used:
-        raise tables.NotFoundError(
-            f"text={template!r} names no column; use a column name or a template such as "
-            f"'{{{names[0] if names else 'column'}}}'; columns: {names}"
-        )
-    cols = {n: tables.column(table, n)[rows] for n in used}
-    for n, col in cols.items():
-        if col.dtype.kind == "M":  # datetimes: Python's, so "{time:%H:%M}" formats them
-            cols[n] = col.astype("datetime64[us]").astype(object)
-    out = []
-    for i in range(len(rows)):
-        values = {n: ("–" if cols[n][i] is None else cols[n][i]) for n in used}
-        out.append(template.format_map(values))
-    return out
 
 
 @dataclass

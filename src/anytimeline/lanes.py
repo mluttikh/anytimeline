@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any, get_args
 
 import numpy as np
 
 from anytimeline.styling import label, natural_key
+from anytimeline.types import LaneSort
 
-LaneSort = Literal["name", "first", "last", "count", "table"]
-LANE_SORTS = ("name", "first", "last", "count", "table")
+LANE_SORTS = get_args(LaneSort)
 
 
 def lane_order(

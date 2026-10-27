@@ -61,7 +61,7 @@ test.describe("in marimo", () => {
     await page.mouse.click(box.x + pos.x, box.y + pos.y);
     await expect.poll(async () => (await python()).selected.events).toBe(1);
     await page.locator('.atl-toolbar button[aria-label="Order"]').click();
-    await expect.poll(async () => (await python()).xscale).toBe("sequence");
+    await expect.poll(async () => (await python()).xscale).toBe("order");
   });
 
   test("a cell of anytimeline.marimo.selection runs again on a selection, and on nothing else", async ({ page }) => {
@@ -72,7 +72,7 @@ test.describe("in marimo", () => {
     await page.locator('.atl-toolbar button[aria-label="Select"]').click();
     await expect.poll(async () => (await python()).tool).toBe("select");
     await page.locator('.atl-toolbar button[aria-label="Order"]').click();
-    await expect.poll(async () => (await python()).xscale).toBe("sequence");
+    await expect.poll(async () => (await python()).xscale).toBe("order");
     expect((await runs()).runs).toEqual([0]);
     const pos = await page.locator(".atl-root").evaluate((root) => {
       const view = (root as any).__view;

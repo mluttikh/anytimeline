@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from anytimeline import Route, Timeline, gantt, story
+from anytimeline import Route, Stem, Timeline, gantt, story
 from anytimeline.synthetic import (
     incident,
     service_health,
@@ -37,7 +37,7 @@ def every_kind() -> dict[str, Timeline]:
         tooltip=["request", "user"],
         route=Route("request", color="theme", width=2),
     )
-    plots["events_numeric_color"] = Timeline(xscale="sequence", sort="count").events(
+    plots["events_numeric_color"] = Timeline(xscale="order", sort="count").events(
         log, lane="service", color="bytes", colormap="viridis", clim="robust", size=6
     )
     plots["events_solid"] = Timeline(dodge=False, mark_scale=2).events(
@@ -60,13 +60,10 @@ def every_kind() -> dict[str, Timeline]:
         "{time:%H:%M}\n{title}",
         color="kind",
         importance="importance",
-        stem_shape="curved",
-        label_width=200,
+        stems=Stem(shape="curved", width=200),
         today="2026-10-12T15:00:00",
     )
-    plots["no_lane_names"] = Timeline(lane_names=False).events(
-        incident(), text="title", labels="stems"
-    )
+    plots["no_lane_names"] = Timeline(lane_names=False).events(incident(), text="title", stems=True)
 
     plan = {
         "task": ["Design", "Build", "Review", "Ship", "Support"],
@@ -95,7 +92,7 @@ def every_kind() -> dict[str, Timeline]:
         .events(tr.events, time="time", lane="span_id", symbol="name", name="span events")
     )
     plots["intervals_tree"] = Timeline().intervals(
-        tr.spans, id="span_id", parent="parent_id", label="name", critical_path=True, expand=None
+        tr.spans, id="span_id", parent="parent_id", lane="name", critical_path=True, expand="all"
     )
 
     plots["states_values"] = (
