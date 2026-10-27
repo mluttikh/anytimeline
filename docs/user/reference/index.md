@@ -9,5 +9,6 @@ Every argument, setting and gesture.
 - [save_html](save-html.md): several plots in one page.
 - [anytimeline.marimo](marimo.md): the selection as marimo state.
 - [OpenTelemetry](otel.md): read traces in the OTLP/JSON format.
-- [Route and symbols](styling.md): the look of routes, and the names of symbols.
+- [Parts and views](parts.md): `View`, `Route`, `Stem`, `Marker`, and the names of symbols.
+- [anytimeline.types](types.md): the options of arguments as types, for your own functions.
 - [Example data](synthetic.md): the example logs these pages use.

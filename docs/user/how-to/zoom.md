@@ -15,16 +15,31 @@ Backspace) returns to the view before.
 
 ## What the plot shows
 
-`plot.range` is the visible time range, as your data's kind (NumPy datetime64, timedelta64,
-or numbers). It is updated a quarter of a second after the view stops moving, and is `None`
-until the plot has been shown.
+[`plot.view`][anytimeline.Timeline.view] is what the plot shows: a
+[`View`][anytimeline.View] of the time range in sight (`start`, `end`, as your data's kind:
+NumPy datetime64, timedelta64, or numbers) and the names of the lanes in sight (`lanes`, top
+to bottom). It is updated a quarter of a second after the view stops moving; before the
+plot is shown, it is what was set (`View()`: everything).
 
 ```python
-start, end = plot.range
-df.filter(pl.col("time").is_between(start, end))
+view = plot.view
+df.filter(pl.col("time").is_between(view.start, view.end))
 ```
+
+Set it to show a time range and bring a lane to the top, unfolding the lanes it is under.
+Another plot's view works too, and `None` shows the whole timeline from the top:
+
+```python
+from anytimeline import View
+
+plot.view = View("2026-10-12T08:30", "2026-10-12T08:35", lanes=["db"])
+other.view = plot.view
+plot.view = None
+```
+
+`zoom_to` sets the time range only and keeps the lanes in sight as they are.
 
 ## The scale
 
-`plot.xscale = "sequence"` switches to the Order scale, `"time"` back; the toolbar's
+`plot.xscale = "order"` switches to the Order scale, `"time"` back; the toolbar's
 Time and Order buttons change it too, and Python sees the change.

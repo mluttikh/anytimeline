@@ -4,9 +4,12 @@ layers added, so everything else (more layers, markers, settings) works as usual
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal
+from typing import Any
 
-from anytimeline.widget import Timeline
+from anytimeline.parts import Stem
+from anytimeline.plot import Timeline
+from anytimeline.renamed import renamed
+from anytimeline.types import StemShape
 
 
 def gantt(
@@ -61,10 +64,10 @@ def gantt(
         end=end,
         duration=duration,
         duration_unit=duration_unit,
-        lane=None if parent is not None else task,
+        lane=task,
         id=task,
         parent=parent,
-        expand=None,
+        expand="all",
         depends=depends,
         progress=progress,
         color=color,
@@ -79,6 +82,7 @@ def gantt(
     return plot
 
 
+@renamed(stem_shape="stems=Stem(shape=...), or stems='curved'", label_width="stems=Stem(width=...)")
 def story(
     data: Any,
     text: str,
@@ -89,9 +93,8 @@ def story(
     palette: Mapping[Any, str] | Sequence[str] | None = None,
     symbol: str | None = None,
     importance: str | None = None,
-    stem_shape: Literal["straight", "curved"] = "straight",
-    label_width: float | None = None,
-    tooltip: Sequence[str] | None = None,
+    stems: Stem | StemShape | bool = True,
+    tooltip: str | Sequence[str] | None = None,
     title: str = "",
     height: int = 420,
     today: Any = None,
@@ -112,10 +115,9 @@ def story(
         symbol: A column to give the events' marks shapes by.
         importance: A numeric column: when the boxes do not fit, the more important keep
             theirs.
-        stem_shape: ``"straight"`` stems (each box over its event) or ``"curved"`` ones (a box
-            may move aside, its stem bending), which fits more boxes where events crowd.
-        label_width: The widest a box gets, in pixels; longer titles wrap onto two lines. By
-            default 16 × the text size; 0 for no limit.
+        stems: The boxes' stems: ``True`` (straight: each box over its event), ``"curved"``
+            (a box may move aside, its stem bending, which fits more boxes where events
+            crowd), or a [`Stem`][anytimeline.Stem] with the widest a box gets.
         tooltip: Columns shown when hovering an event or its box.
         title: Shown above the timeline.
         height: Height in pixels.
@@ -130,9 +132,7 @@ def story(
         time=time,
         lane=lane,
         text=text,
-        labels="stems",
-        stem_shape=stem_shape,
-        label_width=label_width,
+        stems=stems,
         color=color,
         palette=palette,
         symbol=symbol,

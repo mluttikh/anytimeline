@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from anytimeline.widget import Timeline
+    from anytimeline.plot import Timeline
 
 
 def selection(plot: Timeline) -> Callable[[], dict[str, list[int]]]:
@@ -40,12 +40,13 @@ def selection(plot: Timeline) -> Callable[[], dict[str, list[int]]]:
     import marimo as mo
 
     get, set_ = mo.state(dict(plot.selection))
-    if plot._marimo_selection is not None:
-        plot.unobserve(plot._marimo_selection, "selection")
+    for old in plot._watchers.get("selection", []):
+        if getattr(old, "_marimo", False):
+            plot._unwatch("selection", old)
 
     def changed(change: dict[str, Any]) -> None:
         set_(dict(change["new"]))
 
-    plot.observe(changed, "selection")
-    plot._marimo_selection = changed
+    changed._marimo = True  # ty: ignore[unresolved-attribute]
+    plot._watch("selection", changed)
     return get

@@ -21,8 +21,10 @@ interface Payload {
   font_size: number;
   mark_scale?: number;
   dodge?: boolean;
-  /** The last zoom_to (ticks), or null. */
+  /** The last zoom_to or plot.view (ticks), or null. */
   zoom: [number, number] | null;
+  /** The lane plot.view put at the top, or null. */
+  lanes?: string | null;
   /** The selection made in Python: layer → base64 int32 event indices. */
   marks: Record<string, string>;
   /** The group of linked plots it is in (Timeline.link), or null. */
@@ -75,6 +77,7 @@ async function show(host: HTMLElement, payload: Payload): Promise<TimelineView> 
   await view.setSpec(payload.spec, source);
   view.setXScale(payload.xscale ?? "time");
   if (payload.zoom) view.zoomTo(payload.zoom);
+  if (payload.lanes) view.scrollToLane(payload.lanes);
   return view;
 }
 

@@ -24,7 +24,8 @@ print(plot._embed_html())
 - `importance=` decides who keeps a box when they do not all fit: the most important are
   placed first. The others are counted in badges; zoom in (or click a badge) for room.
 - Long titles wrap onto two lines, then end in "…": a box is at most 16 × the text size
-  wide (`label_width=` sets it in pixels; `0` for no limit). The full text is in the tooltip.
+  wide (`stems=Stem(width=...)` sets it in pixels; `None` for no limit). The full text is in
+  the tooltip.
 - Hover a box for its event's details; with the **Select** tool, click a box to select its
   event.
 - Switch to **Order** in the toolbar: every event gets the same width, which gives the boxes
@@ -33,11 +34,19 @@ print(plot._embed_html())
 ## Straight or curved stems
 
 By default each box sits over its event and its stem is straight. With
-`stem_shape="curved"`, a box may move aside when that gives it room, and its stem bends
-near the line: more boxes fit where events crowd, at the cost of some bends.
+`stems="curved"`, a box may move aside when that gives it room, and its stem bends near the
+line: more boxes fit where events crowd, at the cost of some bends.
 
 ```python
-story(incident(), "{time:%H:%M}\n{title}", color="kind", stem_shape="curved")
+story(incident(), "{time:%H:%M}\n{title}", color="kind", stems="curved")
+```
+
+A [`Stem`][anytimeline.Stem] sets the shape and the boxes' width together:
+
+```python
+from anytimeline import Stem
+
+story(incident(), "{title}", stems=Stem(shape="curved", width=240))
 ```
 
 ## A story line per lane
@@ -53,11 +62,11 @@ print(plot._embed_html())
 ## In any plot
 
 `story()` is a [`Timeline`][anytimeline.Timeline] with one events layer that has
-`labels="stems"`. Any events layer can have it, next to other layers: a story of deploys and
+`stems=True`. Any events layer can have it, next to other layers: a story of deploys and
 incidents above the CPU of the services, say.
 
 ```python
-plot.events(changes, time="time", lane="service", text="title", labels="stems")
+plot.events(changes, time="time", lane="service", text="title", stems=True)
 ```
 
 Story lines need room: a lane gets as many levels of boxes as its height holds, and a lane

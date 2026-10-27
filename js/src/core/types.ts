@@ -2,7 +2,7 @@
 
 export type RendererKind = "webgpu" | "webgl2" | "canvas2d";
 export type RendererPreference = "auto" | RendererKind;
-export type XScale = "time" | "sequence";
+export type XScale = "time" | "order";
 
 export type DType = "float64" | "float32" | "int32" | "uint32" | "uint16" | "uint8" | "utf8";
 

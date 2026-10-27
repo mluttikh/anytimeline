@@ -10,19 +10,19 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, get_args
 
 import numpy as np
 
 from anytimeline import data as tables
 from anytimeline import styling
 from anytimeline.codec import Encoded, encode
-from anytimeline.events import _numbers
+from anytimeline.layers.common import numbers
 from anytimeline.timebase import TimeBase, Times, times
+from anytimeline.types import ValuesKind, ValuesScale
 
-Kind = Literal["line", "area", "step"]
-Scale = Literal["lane", "shared"]
-KINDS = ("line", "area", "step")
+KINDS = get_args(ValuesKind)
+SCALES = get_args(ValuesScale)
 
 
 @dataclass
@@ -39,8 +39,8 @@ class ValuesRecord:
     series: np.ndarray | None
     series_title: str
     color: styling.Encoding  # per row
-    kind: Kind
-    scale: Scale
+    kind: ValuesKind
+    scale: ValuesScale
     ylim: tuple[float, float] | dict[Any, tuple[float, float]] | None
     width: float
     tooltip: dict[str, np.ndarray]
@@ -66,8 +66,8 @@ def build(
     series: str | None,
     color: str | None,
     palette: Mapping[Any, str] | Sequence[str] | None,
-    kind: Kind,
-    scale: Scale,
+    kind: ValuesKind,
+    scale: ValuesScale,
     ylim: tuple[float, float] | Mapping[Any, tuple[float, float]] | None,
     width: float,
     tooltip: Sequence[str] | None,
@@ -77,8 +77,8 @@ def build(
     """Read a values layer from a table."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {KINDS}, got {kind!r}")
-    if scale not in ("lane", "shared"):
-        raise ValueError(f"scale must be 'lane' or 'shared', got {scale!r}")
+    if scale not in SCALES:
+        raise ValueError(f"scale must be one of {SCALES}, got {scale!r}")
     for lim in ylim.values() if isinstance(ylim, Mapping) else [ylim] if ylim is not None else []:
         if not (len(lim) == 2 and float(lim[1]) > float(lim[0])):
             raise ValueError(f"ylim must be (low, high) with high above low, got {lim!r}")
@@ -94,7 +94,7 @@ def build(
     )
     rows = np.flatnonzero(t.valid)
     t = t.take(rows)
-    v = _numbers(tables.column(table, value)[rows], value)
+    v = numbers(tables.column(table, value)[rows], value)
     lanes = (
         tables.column(table, lane)[rows].astype(object)
         if lane is not None

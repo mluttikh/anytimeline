@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from anytimeline import Timeline
-from anytimeline.intervals import IntervalsRecord
+from anytimeline.layers.intervals import IntervalsRecord
 from anytimeline.synthetic import service_health, service_metrics
 
 T = np.array(

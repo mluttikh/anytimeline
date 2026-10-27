@@ -55,7 +55,8 @@ nav = [
     { "save_html" = "reference/save-html.md" },
     { "anytimeline.marimo" = "reference/marimo.md" },
     { "OpenTelemetry" = "reference/otel.md" },
-    { "Route and symbols" = "reference/styling.md" },
+    { "Parts and views" = "reference/parts.md" },
+    { "anytimeline.types" = "reference/types.md" },
     { "Example data" = "reference/synthetic.md" },
   ] },
   { "Explanation" = [

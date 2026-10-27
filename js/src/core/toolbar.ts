@@ -149,9 +149,9 @@ export class Toolbar {
     scale.className = "atl-group";
     this.scaleButtons = {
       time: button(ICONS.time, "Time", "Time: events at their time · key t", () => actions.xscale("time")),
-      sequence: button(ICONS.order, "Order", "Order: events in the order they happened, evenly spaced · key t", () => actions.xscale("sequence")),
+      order: button(ICONS.order, "Order", "Order: events in the order they happened, evenly spaced · key t", () => actions.xscale("order")),
     };
-    scale.append(this.scaleButtons.time, this.scaleButtons.sequence);
+    scale.append(this.scaleButtons.time, this.scaleButtons.order);
 
     this.back = button(ICONS.previous, "Previous view", "Previous view · Backspace", actions.previous);
     this.home = button(ICONS.home, "Whole timeline", "The whole timeline · key 0, or double-click with Pan", actions.home);
@@ -216,11 +216,11 @@ export class Toolbar {
       b.classList.toggle("atl-last", t === shown[shown.length - 1]);
       b.setAttribute("aria-pressed", String(s.tool === t));
     }
-    for (const xs of ["time", "sequence"] as XScale[]) {
+    for (const xs of ["time", "order"] as XScale[]) {
       this.scaleButtons[xs].setAttribute("aria-pressed", String(s.xscale === xs));
     }
     this.scaleButtons.time.disabled = !s.timeAvailable;
-    this.scaleButtons.sequence.disabled = !s.orderAvailable;
+    this.scaleButtons.order.disabled = !s.orderAvailable;
     this.back.disabled = !s.canGoBack;
     this.home.disabled = !s.zoomed;
     this.clear.hidden = s.selected === 0;

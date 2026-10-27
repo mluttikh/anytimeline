@@ -41,7 +41,7 @@ lane's next change.
 - A row that repeats the state its lane is in changes nothing; a missing state is a gap
   (nothing known then).
 - A lane's last state runs to `end=` if you give it, else to the plot's last time.
-- Each state's name is written in its band where it fits (`text=False` to leave it out).
+- Each state's name is written in its band where it fits (`text=None` to leave it out).
 - Hover a state to compare the lanes at one moment: the tooltip lists **every lane's state at
   the pointer's time** (the hovered lane in bold), and follows the pointer; under them the
   hovered state's start, end and duration, with the `tooltip=` columns.

@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from anytimeline import Timeline, story
-from anytimeline.events import EventsRecord
+from anytimeline import Stem, Timeline, story
+from anytimeline.layers.events import EventsRecord
 from anytimeline.synthetic import incident
 
 
@@ -24,10 +24,12 @@ def test_story_preset():
 def test_stems_need_text_and_a_known_layout():
     data = {"time": np.array([1.0, 2.0]), "title": ["a", "b"]}
     with pytest.raises(ValueError, match="text="):
-        Timeline().events(data, labels="stems")
-    with pytest.raises(ValueError, match="labels"):
-        Timeline().events(data, text="title", labels="above")  # ty: ignore[invalid-argument-type]
-    plot = Timeline().events(data, text="title", labels="stems")
+        Timeline().events(data, stems=True)
+    with pytest.raises(ValueError, match="shape"):
+        Timeline().events(data, text="title", stems="above")  # ty: ignore[invalid-argument-type]
+    with pytest.raises(TypeError, match="stems=None"):
+        Timeline().events(data, text="title", stems=False)
+    plot = Timeline().events(data, text="title", stems=True)
     assert plot._spec["layers"][0]["labels"] == "stems"
     assert plot._spec["lanes"]["show_names"] is True
 
@@ -39,15 +41,27 @@ def test_incident_data():
     assert (np.diff(inc["time"].astype(np.int64)) > 0).all()
 
 
-def test_stem_shape_and_label_width():
+def test_stem_shape_and_width():
     data = {"time": np.array([1.0, 2.0]), "title": ["a", "b"]}
-    plot = Timeline().events(data, text="title", labels="stems")
+    plot = Timeline().events(data, text="title", stems=True)
     layer = plot._spec["layers"][0]
     assert (layer["stem_shape"], layer["label_width"]) == ("straight", None)
-    plot = story(data, "title", stem_shape="curved", label_width=0)
+    plot = story(data, "title", stems=Stem("curved", width=None))
     layer = plot._spec["layers"][0]
     assert (layer["stem_shape"], layer["label_width"]) == ("curved", 0)
-    with pytest.raises(ValueError, match="stem_shape"):
-        Timeline().events(data, text="title", labels="stems", stem_shape="wavy")  # ty: ignore[invalid-argument-type]
-    with pytest.raises(ValueError, match="label_width"):
-        Timeline().events(data, text="title", labels="stems", label_width=-5)
+    plot = story(data, "title", stems=Stem(width=180))
+    assert plot._spec["layers"][0]["label_width"] == 180
+    with pytest.raises(ValueError, match="shape"):
+        Stem("wavy")  # ty: ignore[invalid-argument-type]
+    with pytest.raises(ValueError, match="width"):
+        Stem(width=-5)
+
+
+def test_old_spellings_say_the_new_one():
+    data = {"time": np.array([1.0, 2.0]), "title": ["a", "b"]}
+    with pytest.raises(TypeError, match="stems=True"):
+        Timeline().events(data, text="title", labels="stems")  # ty: ignore[unknown-argument]
+    with pytest.raises(TypeError, match=r"stems=Stem\(shape"):
+        Timeline().events(data, text="title", stem_shape="curved")  # ty: ignore[unknown-argument]
+    with pytest.raises(TypeError, match=r"stems=Stem\(width"):
+        story(data, "title", label_width=100)  # ty: ignore[unknown-argument]

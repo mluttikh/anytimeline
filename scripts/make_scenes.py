@@ -147,7 +147,7 @@ def main() -> None:
     write("service_routes", zoomed)
 
     seq = Timeline(
-        title="The same requests in order", lane_order=services, xscale="sequence", height=360
+        title="The same requests in order", lane_order=services, xscale="order", height=360
     )
     seq.events(
         log,
@@ -162,7 +162,7 @@ def main() -> None:
     write("service_sequence", seq)
 
     # the example notebook's first plot on the Order scale: every long gap of a whole log
-    overview = Timeline(title="A whole log in order", lane_order=services, xscale="sequence")
+    overview = Timeline(title="A whole log in order", lane_order=services, xscale="order")
     overview.events(
         service_log(),
         time="time",
@@ -407,7 +407,7 @@ def main() -> None:
             color="kind",
             palette=kinds,
             importance="importance",
-            stem_shape="curved",
+            stems="curved",
             title="Checkout incident (curved stems)",
             height=460,
         ),

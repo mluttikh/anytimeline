@@ -31,10 +31,10 @@ Click **Order** in the toolbar (or press **t**). Every event now takes the same 
 after another, in the order they happened. The axis counts events (#1, #2, ...) instead of
 time, and a break mark ⫽ shows where a long gap was skipped, with how long it was.
 
-You can start a plot on the Order scale with `xscale="sequence"`:
+You can start a plot on the Order scale with `xscale="order"`:
 
 ```python exec="on" source="above" session="order" html="true"
-plot = Timeline(lane_order=services, xscale="sequence")
+plot = Timeline(lane_order=services, xscale="order")
 plot.events(
     log, time="time", lane="service", color="request", order="seq", route="request", text="{event}"
 )

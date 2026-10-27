@@ -1,15 +1,15 @@
 # Use anytimeline in marimo
 
-A `Timeline` is an [anywidget](https://anywidget.dev), so marimo shows it as it is. To have
-cells react to what happens in the plot (a selection, a tool, the scale), wrap it in
-`mo.ui.anywidget`:
+marimo shows a `Timeline` as it is. To have cells react to what happens in the plot (a
+selection, a tool, the scale), wrap the widget that shows it,
+[`plot.widget`][anytimeline.Timeline.widget], in `mo.ui.anywidget`:
 
 ```python
 import marimo as mo
 from anytimeline import Timeline
 
 plot = Timeline().events(df, time="time", lane="service")
-widget = mo.ui.anywidget(plot)
+widget = mo.ui.anywidget(plot.widget)
 widget
 ```
 

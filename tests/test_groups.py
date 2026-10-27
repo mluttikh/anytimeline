@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from anytimeline import Timeline
-from anytimeline.events import EventsRecord
+from anytimeline.layers.events import EventsRecord
 from anytimeline.synthetic import service_log, service_metrics, traces
 
 LOG = {

@@ -12,7 +12,7 @@ from __future__ import annotations
 import heapq
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, get_args
 
 import numpy as np
 
@@ -20,10 +20,11 @@ from anytimeline import data as tables
 from anytimeline import styling
 from anytimeline import tree as trees
 from anytimeline.codec import Encoded, encode, encode_strings
-from anytimeline.events import _numbers, _texts
+from anytimeline.layers.common import numbers, texts
 from anytimeline.timebase import UNITS, TimeBase, Times, times
+from anytimeline.types import BarOverlap
 
-Overlap = Literal["pack", "overlay"]
+OVERLAPS = get_args(BarOverlap)
 
 KIND_MILESTONE = 1
 KIND_OPEN = 2
@@ -45,7 +46,7 @@ class IntervalsRecord:
     tooltip: dict[str, np.ndarray]
     progress: np.ndarray | None
     links: np.ndarray  # (k, 2) pairs of positions in ``rows``: from → to
-    overlap: Overlap
+    overlap: BarOverlap
     height: float
     hover: bool
     select: bool
@@ -85,7 +86,7 @@ def build(
     text: str | None,
     tooltip: Sequence[str] | None,
     progress: str | None,
-    overlap: Overlap,
+    overlap: BarOverlap,
     height: float,
     time_unit: str | None,
     duration_unit: str | None,
@@ -106,8 +107,8 @@ def build(
         raise ValueError("critical_path= needs parent=: the path runs through a tree of bars")
     if (end is None) == (duration is None):
         raise ValueError("pass end= (a column of times) or duration= (a column of durations)")
-    if overlap not in ("pack", "overlay"):
-        raise ValueError(f"overlap must be 'pack' or 'overlay', got {overlap!r}")
+    if overlap not in OVERLAPS:
+        raise ValueError(f"overlap must be one of {OVERLAPS}, got {overlap!r}")
     if not 0 < height <= 1:
         raise ValueError(f"height is a fraction of the lane, above 0 and at most 1; got {height}")
     table = tables.frame(data)
@@ -196,7 +197,7 @@ def build(
     )
     prog = None
     if progress is not None:
-        values = _numbers(col(progress), progress)  # ty: ignore[invalid-argument-type]
+        values = numbers(col(progress), progress)  # ty: ignore[invalid-argument-type]
         prog = np.where(np.isfinite(values), np.clip(values, 0, 1), -1.0)
     tip_cols = list(tooltip) if tooltip is not None else []
     tables.check(table, tip_cols)
@@ -213,7 +214,7 @@ def build(
         lane_title=(label or id or "") if tree is not None else (lane or ""),
         lane_declared=tables.categories(table, lane) if lane else None,
         color=color_enc,
-        text=_texts(table, text, rows) if text is not None else None,
+        text=texts(table, text, rows) if text is not None else None,
         tooltip={c: tables.column(table, c)[rows] for c in tip_cols},
         progress=prog,
         links=links,
@@ -248,7 +249,7 @@ def _add(start: Times, values: np.ndarray, name: str, unit: str | None) -> Times
     ``unit``; numbers in the start's own units when the starts are plain numbers)."""
     if start.kind == "number":
         assert start.values is not None
-        d = _numbers(values, name)
+        d = numbers(values, name)
         valid = start.valid & np.isfinite(d)
         return Times("number", None, np.where(valid, start.values + np.nan_to_num(d), 0.0), valid)
     numeric = values.dtype.kind in "iuf"

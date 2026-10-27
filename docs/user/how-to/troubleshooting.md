@@ -13,7 +13,7 @@ install `anywidget` in the same environment as the kernel.
 **The plot is slow, or the info line says `canvas2d`**: the browser has no usable graphics
 chip for WebGPU or WebGL2, so the plot draws on the CPU. Check that hardware acceleration is
 on in the browser's settings. You can choose the backend with `Timeline(renderer="webgl2")`;
-the info line at the top of the plot names the one in use, and `plot.perf` reports it.
+the info line at the top of the plot names the one in use, and `plot.dev.perf` reports it.
 
 **Scrolling scrolls the page, not the plot**: click the plot first; then the wheel zooms.
 **Ctrl** (⌘ on a Mac) + wheel zooms at any time.

@@ -76,7 +76,7 @@ for local times.
 ## Your own table
 
 Any table with a row per span works. By default `spans()` reads the columns `span_id`,
-`parent_id`, `name`, `start` and `end`; name yours with `id=`, `parent=`, `label=`, `start=`
+`parent_id`, `name`, `start` and `end`; name yours with `id=`, `parent=`, `lane=`, `start=`
 and `end=` (or `duration=`). Span ids must be unique in the table; a span whose parent is not
 in it (a trace cut short) is shown at the top.
 
