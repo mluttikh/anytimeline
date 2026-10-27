@@ -17,7 +17,8 @@ import numpy as np
 from ipywidgets import CallbackDispatcher
 
 from anytimeline import data as tables
-from anytimeline import grouping, page, scene
+from anytimeline import find, grouping, image, page, scene
+from anytimeline import summary as summaries
 from anytimeline.data import NotFoundError
 from anytimeline.lanes import LANE_SORTS
 from anytimeline.layers import common
@@ -25,7 +26,7 @@ from anytimeline.layers import events as ev
 from anytimeline.layers import intervals as iv
 from anytimeline.layers import states as st
 from anytimeline.layers import values as vl
-from anytimeline.parts import Marker, Route, Stem
+from anytimeline.parts import Annotation, Connection, Marker, Route, Stem
 from anytimeline.renamed import gone, gone_method, renamed
 from anytimeline.settings import (
     at_least,
@@ -73,6 +74,8 @@ DISPLAYS = get_args(Display)
 ALIGNS = get_args(Align)
 FONT_SIZES = (8, 24)
 WINDOW_KEEP = 8
+UNDO_STEPS = 50
+"""How many changes of the selection ``undo_selection`` can take back."""
 MARKED = 100_000
 """Of an events layer sent as levels, the browser shows at most this many selected events over
 its bins (all of them once zoomed in to its events)."""
@@ -83,6 +86,24 @@ _LAYOUT = ("markers", "timezone", "lane_order", "sort", "group_order", "align", 
 """Settings that change how the layers are laid out: the plot is laid out again."""
 _NOT_COPIED = ("_widget", "_watchers", "_select_handlers", "_snapshot_paths")
 """What a pickled or copied plot leaves out (``__getstate__``)."""
+
+
+def _annotations(value: Any, name: str) -> list[Annotation]:
+    if isinstance(value, Annotation) or not isinstance(value, Sequence | tuple):
+        raise TypeError(f"{name} must be a list of Annotations, got {value!r}")
+    for a in value:
+        if not isinstance(a, Annotation):
+            raise TypeError(f"{name} must be a list of Annotations, got {a!r} among them")
+    return list(value)
+
+
+def _connections(value: Any, name: str) -> list[Connection]:
+    if isinstance(value, Connection) or not isinstance(value, Sequence | tuple):
+        raise TypeError(f"{name} must be a list of Connections, got {value!r}")
+    for c in value:
+        if not isinstance(c, Connection):
+            raise TypeError(f"{name} must be a list of Connections, got {c!r} among them")
+    return list(value)
 
 
 def _xscale(value: Any, name: str) -> Any:
@@ -151,6 +172,9 @@ class Timeline:
             them on the lane's line.
         hover: Show a tooltip for the mark under the pointer.
         legend: Show the legend.
+        summary_panel: Show the selection in numbers (count, and for bars total and mean
+            duration, by colour category and lane) in a panel while something is selected;
+            [`summary`][anytimeline.Timeline.summary] gives them as a table.
         selection_mode: ``"multiple"``: boxes, and Shift/Ctrl/Cmd-clicks that add;
             ``"single"``: one mark; ``None``: nothing can be selected (no Select tool).
         display: How a notebook shows the plot: ``"widget"`` (default; connected to Python)
@@ -185,6 +209,9 @@ class Timeline:
     """Show a tooltip for the mark under the pointer."""
     legend: bool = setting(True, flag)
     """Show the legend."""
+    summary_panel: bool = setting(True, flag)
+    """Show the selection in numbers in a panel while something is selected; see
+    [`summary`][anytimeline.Timeline.summary]."""
     selection_mode: SelectionMode | None = setting("multiple", _selection_mode)
     """``"multiple"``: boxes, and Shift/Ctrl/Cmd-clicks that add; ``"single"``: one mark;
     ``None``: no selection (the Select tool is not offered)."""
@@ -202,6 +229,14 @@ class Timeline:
     markers: list[Marker] = setting([], _markers, sync=False)
     """The plot's [`Marker`][anytimeline.Marker]s: vertical lines across the lanes at a time.
     [`marker`][anytimeline.Timeline.marker] adds one; ``plot.markers = []`` removes them."""
+    annotations: list[Annotation] = setting([], _annotations, sync=False)
+    """The plot's [`Annotation`][anytimeline.Annotation]s: notes on a time range or a time,
+    over a lane or all. [`annotate`][anytimeline.Timeline.annotate] adds one, as does the key
+    ``a`` in the plot; ``plot.annotations = []`` removes them."""
+    connections: list[Connection] = setting([], _connections, sync=False)
+    """The plot's [`Connection`][anytimeline.Connection]s: arrows from one mark to another.
+    [`connect`][anytimeline.Timeline.connect] adds one, as does the key ``c`` in the plot
+    (on one mark, then on another); ``plot.connections = []`` removes them."""
     timezone: str | None = setting(None, text_or_none, sync=False)
     """The time zone datetimes are shown in; None: the time column's own, else UTC."""
     lane_order: list[Any] | None = setting(None, values_or_none, sync=False)
@@ -221,6 +256,10 @@ class Timeline:
     _marked: dict[str, bytes] = setting({})
     """Per events layer sent as levels: where its selected events are (time, order and lane,
     float64), so that they show over its bins; at most MARKED of them."""
+    _notes: dict[str, Any] = setting({})
+    """The annotations and connections as the browser draws them (ticks, lane indices)."""
+    _summary: list[dict[str, Any]] = setting([])
+    """What the summary panel shows: per layer with something selected, its numbers as text."""
     _zoom: dict[str, Any] = setting({})
     _link: dict[str, Any] = setting({})
     """The group of linked plots: ``{"group": id, "align": "time" | "start"}``, or empty."""
@@ -252,6 +291,7 @@ class Timeline:
         dodge: bool = True,
         hover: bool = True,
         legend: bool = True,
+        summary_panel: bool = True,
         selection_mode: SelectionMode | None = "multiple",
         display: Display = "widget",
     ) -> None:
@@ -273,6 +313,7 @@ class Timeline:
             "dodge": dodge,
             "hover": hover,
             "legend": legend,
+            "summary_panel": summary_panel,
             "selection_mode": selection_mode,
             "display": display,
         }
@@ -296,6 +337,12 @@ class Timeline:
         """What the browser reported it shows: ``{"range": (t0, t1), "lanes": [...]}``."""
         self._perf: dict[str, Any] = {}
         self._tooltip_cache: dict[tuple[str, int], list[list[str]]] = {}
+        self._findable: list[find.Marks] | None = None
+        """What search and stepping see (made when first asked; again after a change)."""
+        self._undo: list[dict[str, list[int]]] = []
+        """The selections before the last changes, the latest last (``undo_selection``)."""
+        self._redo: list[dict[str, list[int]]] = []
+        self._undoing = False
         self._snapshots = 0
         self._snapshot_paths: dict[str, Path] = {}
         self._widget: TimelineWidget | None = None
@@ -911,6 +958,66 @@ class Timeline:
         self.markers = [*self.markers, Marker(time, label, color)]
         return self
 
+    def annotate(
+        self,
+        start: Any,
+        end: Any = None,
+        text: str = "",
+        *,
+        lane: Any = None,
+        color: str | None = None,
+    ) -> Self:
+        """Add an [`Annotation`][anytimeline.Annotation]: a note on a time range (or, without
+        ``end``, at a time), over one lane or all of them. It shows in the plot, in pages
+        and in images; ``plot.annotations = []`` removes them all. In the plot, the key
+        ``a`` and then a drag over a range (or a click at a time) adds one too.
+
+        Args:
+            start: Where it starts: a time of the data's kind (datetime, ISO text, duration
+                or number).
+            end: Where it ends; ``None``: a note at one time.
+            text: Written at its top.
+            lane: The lane it is in (a lane's name); ``None``: across all lanes.
+            color: Its colour (default: the accent colour).
+        """
+        note = Annotation(start, end, text, lane, color)
+        if self._layers:
+            self._note_of(note)  # wrong times and lanes raise here
+        self.annotations = [*self.annotations, note]
+        return self
+
+    def connect(
+        self,
+        a: int | tuple[str, int],
+        b: int | tuple[str, int],
+        text: str = "",
+        *,
+        color: str | None = None,
+    ) -> Self:
+        """Add a [`Connection`][anytimeline.Connection]: an arrow from mark ``a`` to mark
+        ``b`` (from an event or a bar's end, to an event or a bar's start), with ``text`` at
+        its middle. It shows in the plot, in pages and in images;
+        ``plot.connections = []`` removes them all. In the plot, the key ``c`` on one mark
+        and then on another adds one too.
+
+        Args:
+            a: The mark it starts at: a row of the plot's one layer, or ``(layer, row)``.
+            b: The mark it points to.
+            text: Written at its middle.
+            color: Its colour (default: the accent colour).
+        """
+        ends = []
+        for end in (a, b):
+            if isinstance(end, tuple):
+                ends.append((str(end[0]), end[1]))
+            else:
+                ends.append((self._layer_named(None), end))
+        link = Connection(ends[0], ends[1], text, color)
+        for layer, row in ends:
+            self._mark_at(layer, int(row))  # an unknown layer or row raises here
+        self.connections = [*self.connections, link]
+        return self
+
     @property
     def layers(self) -> list[str]:
         """The layers' names, in drawing order."""
@@ -1045,6 +1152,9 @@ class Timeline:
         self._tooltip_cache.clear()
         self._marks = self._marks_of(self.selection)
         self._marked = self._marked_of(self._marks)
+        self._summary = self._panel(self.selection)
+        self._findable = None
+        self._notes = self._notes_of()
         self._spec = made.spec
 
     # ------------------------------------------------------------------ pages
@@ -1211,9 +1321,60 @@ class Timeline:
 
     # ------------------------------------------------------------------ pictures
 
+    def save_image(
+        self,
+        path: str | PathLike[str],
+        *,
+        width: int = 960,
+        height: int | None = None,
+        view: View | None = None,
+        theme: Literal["light", "dark"] = "light",
+        scale: float = 2,
+    ) -> Path:
+        """Save a picture of the plot, drawn in Python: no browser, notebook or widget is
+        needed, so it works in scripts, tests and CI. ``.svg`` gives an SVG that slides
+        (PowerPoint, Keynote, Google Slides) import as shapes and text; ``.png`` needs the
+        optional ``resvg-py`` (``pip install 'anytimeline[png]'``).
+
+        The picture is the plot as the browser draws it at that size and view: the lanes,
+        axis, marks, text, markers, annotations, legend and title, and the selection. Layers
+        sent as levels show their bins, or their marks when the view is narrow enough.
+        Folded lanes are folded as the plot starts; story timelines' text goes beside the
+        marks.
+
+        Args:
+            path: The file to write: ``.svg`` or ``.png``.
+            width: Its width in pixels.
+            height: Its height in pixels; None: the plot's ``height`` (0: tall enough for
+                every lane).
+            view: What to show (a [`View`][anytimeline.View]); None: the plot's
+                [`view`][anytimeline.Timeline.view], as shown or set last.
+            theme: ``"light"`` or ``"dark"``.
+            scale: For a PNG, pixels per pixel of the plot (2: sharp on a high-resolution
+                screen or a slide).
+
+        Returns:
+            The path written.
+        """
+        target = Path(path)
+        image.save(self, target, width=width, height=height, view=view, theme=theme, scale=scale)
+        return target
+
+    def to_svg(
+        self,
+        *,
+        width: int = 960,
+        height: int | None = None,
+        view: View | None = None,
+        theme: Literal["light", "dark"] = "light",
+    ) -> str:
+        """The picture [`save_image`][anytimeline.Timeline.save_image] saves, as SVG text."""
+        return image.svg(self, width=width, height=height, view=view, theme=theme)
+
     def save_png(self, path: str | PathLike[str]) -> None:
         """Save the plot as a PNG, as it is shown in the notebook (its view, zoom and folded
-        lanes; title and legend; at twice the screen's resolution).
+        lanes; title and legend; at twice the screen's resolution). To draw it without a
+        browser, see [`save_image`][anytimeline.Timeline.save_image].
 
         The picture is drawn in the browser, so the plot must be on screen, and the file is
         written when the browser sends it: in Jupyter right after the cell has run, not
@@ -1287,6 +1448,137 @@ class Timeline:
         rows = [[names[c], f"{int(counts[c]):,}"] for c in np.argsort(-counts, kind="stable")]
         return [r for r in rows if r[1] != "0"][:8]
 
+    # ------------------------------------------------------------------ annotations
+
+    def _note_of(self, a: Annotation) -> dict[str, Any]:
+        """An annotation as the browser draws it: ticks, and its lane's index (None: all)."""
+        if self._scene is None:
+            self._update_spec()
+        if self._base is None:
+            raise ValueError("annotations need layers with times")
+        x0 = self._base.to_ticks(a.start)
+        x1 = x0 if a.end is None else self._base.to_ticks(a.end)
+        if x1 < x0:
+            raise ValueError(f"an annotation ends before it starts: {a.start!r} to {a.end!r}")
+        lane = None
+        if a.lane is not None:
+            names = [str(n) for n in self._spec["lanes"]["names"]]
+            if str(a.lane) not in names:
+                raise NotFoundError(f"no lane {a.lane!r} to annotate")
+            lane = names.index(str(a.lane))
+        return {
+            "x0": x0,
+            "x1": x1,
+            "point": a.end is None,
+            "lane": lane,
+            "text": a.text,
+            "color": a.color,
+        }
+
+    def _mark_at(self, layer: str, row: int) -> dict[str, Any]:
+        """Where the mark of table row ``row`` is: its index in the browser, its start and
+        end (ticks), its place in the order, and its lane."""
+        layer = self._layer_named(layer)
+        if self._scene is None:
+            self._update_spec()
+        rec = self._layers[layer]
+        pos = summaries.positions(rec, [row])
+        if not len(pos):
+            raise NotFoundError(f"layer {layer!r} draws no row {row}")
+        inverse = np.empty(len(rec.perm), dtype=np.int64)
+        inverse[rec.perm] = np.arange(len(rec.perm))
+        i = int(inverse[pos[0]])
+        lay = self._laid[layer]
+        ranks = self._ranks.get(layer)
+        r = (
+            (float(ranks[i, 0]), float(ranks[i, -1]))
+            if ranks is not None and len(ranks)
+            else (float(lay.lo[i]), float(lay.hi[i]))
+        )
+        return {
+            "layer": layer,
+            "index": i,
+            "x": float(lay.lo[i]),
+            "x2": float(lay.hi[i]),
+            "r": r[0],
+            "r2": r[1],
+            "lane": int(lay.lanes[i]),
+        }
+
+    def _notes_of(self) -> dict[str, Any]:
+        """``_notes``: the annotations and connections that can be drawn (those of lanes and
+        rows the plot no longer has are left out)."""
+        if not self._layers or (not self.annotations and not self.connections):
+            return {}
+        bands, arrows = [], []
+        for a in self.annotations:
+            try:
+                bands.append(self._note_of(a))
+            except (LookupError, ValueError, TypeError):
+                continue
+        for c in self.connections:
+            try:
+                ends = [self._mark_at(layer, int(row)) for layer, row in (c.a, c.b)]
+            except (LookupError, ValueError):
+                continue
+            arrows.append({"a": ends[0], "b": ends[1], "text": c.text, "color": c.color})
+        return {"bands": bands, "arrows": arrows}
+
+    def _annotate_from(self, content: Mapping[str, Any]) -> None:
+        """An annotation made in the plot (``{"type": "annotate"}``): ticks, a lane index."""
+        if self._base is None:
+            return
+        x0 = float(content["x0"])
+        x1 = content.get("x1")
+        lane = content.get("lane")
+        names = self._spec["lanes"]["names"]
+        name = names[int(lane)] if lane is not None and 0 <= int(lane) < len(names) else None
+        end = None if x1 is None else self._base.to_value(float(x1))
+        self.annotate(self._base.to_value(x0), end, str(content.get("text", "")), lane=name)
+
+    def _connect_from(self, content: Mapping[str, Any]) -> None:
+        """A connection made in the plot (``{"type": "connect"}``): marks by their index."""
+        ends = []
+        for key in ("a", "b"):
+            end = content[key]
+            layer = str(end["layer"])
+            rec = self._layers[layer]
+            ends.append((layer, int(rec.rows[rec.perm[int(end["index"])]])))
+        self.connect(ends[0], ends[1], str(content.get("text", "")))
+
+    # ------------------------------------------------------------------ find and step
+
+    def _marks_to_find(self) -> list[find.Marks]:
+        if self._scene is None:
+            self._update_spec()
+        if self._findable is None:
+            self._findable = find.marks_of(self._layers, self._laid, self._ranks)
+        assert self._findable is not None
+        return self._findable
+
+    def _find(self, content: Mapping[str, Any]) -> dict[str, Any]:
+        """The search box's matches (``{"type": "find"}``)."""
+        marks = self._marks_to_find()
+        names = [str(n) for n in self._spec["lanes"]["names"]]
+        return find.search(marks, names, str(content.get("q", "")), str(content.get("scale")))
+
+    def _step(self, content: Mapping[str, Any]) -> dict[str, Any]:
+        """The mark ``.`` or ``,`` steps to (``{"type": "step"}``)."""
+        after = content.get("after") or {}
+        layer = after.get("layer")
+        match = find.step(
+            self._marks_to_find(),
+            int(content["lane"]),
+            (
+                float(after.get("x", 0.0)),
+                None if layer is None else str(layer),
+                int(after.get("index", -1)),
+            ),
+            bool(content.get("forward", True)),
+            str(content.get("scale")),
+        )
+        return {"match": match}
+
     # ------------------------------------------------------------------ tooltips
 
     def _tooltip(self, layer: str, index: int) -> list[list[str]]:
@@ -1314,13 +1606,95 @@ class Timeline:
         Args:
             layer: The layer's name; may be left out when the plot has one layer.
         """
+        layer = self._layer_named(layer)
+        return tables.take(self._tables[layer], self.selection.get(layer, []))
+
+    def summary(
+        self, layer: str | None = None, *, rows: Literal["selected", "all"] = "selected"
+    ) -> Any:
+        """The selection in numbers: the selected marks of a layer counted by lane and by
+        colour category (when its colour is a column of categories), as a table of the type
+        plotted (Polars, PyArrow, pandas, or a dict of arrays), a row per lane and category
+        in the plot's order.
+
+        Bars (intervals and states) add ``total`` and ``mean``: their duration (durations,
+        or numbers on a plot of numbers), and ``open``: bars without an end, which count but
+        have no duration. Events add ``first`` and ``last``: their earliest and latest time.
+        Values add ``mean``, ``min`` and ``max`` of their values. The plot shows the same
+        numbers in a panel while something is selected
+        ([`summary_panel`][anytimeline.Timeline.summary_panel]).
+
+        Args:
+            layer: The layer's name; may be left out when the plot has one layer.
+            rows: ``"selected"``: the selected rows (none selected: a table without rows);
+                ``"all"``: every row drawn.
+        """
+        layer = self._layer_named(layer)
+        rec = self._layers[layer]
+        if rows == "all":
+            pos = np.arange(len(rec.rows), dtype=np.int64)
+        elif rows == "selected":
+            pos = summaries.positions(rec, self.selection.get(layer, []))
+        else:
+            raise ValueError(f'rows must be "selected" or "all", got {rows!r}')
+        groups = self._groups(layer, pos)
+        return summaries.table(groups, self._base, self._tables[layer])
+
+    def _layer_named(self, layer: str | None) -> str:
         if layer is None:
             if len(self._layers) != 1:
                 raise ValueError(f"name the layer: the plot has {len(self._layers)}: {self.layers}")
-            layer = next(iter(self._layers))
+            return next(iter(self._layers))
         if layer not in self._layers:
             raise NotFoundError(f"no layer {layer!r}; layers: {self.layers}")
-        return tables.take(self._tables[layer], self.selection.get(layer, []))
+        return layer
+
+    def _groups(self, layer: str, pos: np.ndarray) -> summaries.Groups:
+        if self._scene is None:
+            self._update_spec()
+        names = [str(n) for n in self._spec["lanes"]["names"]]
+        return summaries.group(self._layers[layer], self._laid[layer], names, pos)
+
+    def _panel(self, selection: Mapping[str, list[int]]) -> list[dict[str, Any]]:
+        """What the summary panel shows (``_summary``)."""
+        if not self.summary_panel or self._scene is None:
+            return []
+        out = []
+        for name, rows in selection.items():
+            if name not in self._layers or not rows:
+                continue
+            pos = summaries.positions(self._layers[name], rows)
+            if len(pos):
+                out.append(summaries.panel(name, self._groups(name, pos), self._base))
+        return out
+
+    def undo_selection(self) -> bool:
+        """Take back the last change of the selection (made in the plot or in Python), as
+        Ctrl/Cmd+Z does in the plot; up to 50 changes. Returns False when there is none.
+        [`on_select`][anytimeline.Timeline.on_select] callbacks hear of it."""
+        return self._back(self._undo, self._redo)
+
+    def redo_selection(self) -> bool:
+        """Make again the change of the selection last taken back, as Ctrl/Cmd+Shift+Z
+        does in the plot. Returns False when there is none."""
+        return self._back(self._redo, self._undo)
+
+    def _back(self, take: list[dict[str, list[int]]], keep: list[dict[str, list[int]]]) -> bool:
+        while take:
+            was = take.pop()
+            was = {k: v for k, v in was.items() if k in self._layers}  # layers since removed
+            if was == self.selection:
+                continue
+            keep.append(self.selection)
+            del keep[:-UNDO_STEPS]
+            self._undoing = True
+            try:
+                self.selection = was
+            finally:
+                self._undoing = False
+            self._select_handlers(self.selection)
+            return True
+        return False
 
     def on_select(
         self, callback: Callable[[dict[str, list[int]]], Any], *, remove: bool = False
@@ -1347,8 +1721,21 @@ class Timeline:
 
     @observes("selection")
     def _selection_changed(self, change: dict[str, Any]) -> None:
+        if not self._undoing:
+            self._undo = [*self._undo, change["old"]][-UNDO_STEPS:]
+            self._redo = []
         self._marks = self._marks_of(change["new"])
         self._marked = self._marked_of(self._marks)
+        self._summary = self._panel(change["new"])
+
+    @observes("annotations", "connections")
+    def _notes_changed(self, change: dict[str, Any]) -> None:
+        if self._scene is not None:
+            self._notes = self._notes_of()
+
+    @observes("summary_panel")
+    def _summary_panel_changed(self, change: dict[str, Any]) -> None:
+        self._summary = self._panel(self.selection)
 
     def _marks_of(self, selection: Mapping[str, list[int]]) -> dict[str, bytes]:
         """Per layer, the browser's indices of the selected rows, as int32 bytes."""
@@ -1357,13 +1744,7 @@ class Timeline:
             rec = self._layers.get(name)
             if rec is None or not len(rows) or not len(rec.perm):
                 continue
-            pos_of_row = np.full(
-                int(rec.rows.max()) + 1 if len(rec.rows) else 0, -1, dtype=np.int64
-            )
-            pos_of_row[rec.rows] = np.arange(len(rec.rows))
-            wanted = np.asarray([r for r in rows if 0 <= r < len(pos_of_row)], dtype=np.int64)
-            pos = pos_of_row[wanted]
-            pos = pos[pos >= 0]
+            pos = summaries.positions(rec, rows)
             inverse = np.empty(len(rec.perm), dtype=np.int64)
             inverse[rec.perm] = np.arange(len(rec.perm))
             marks[name] = np.sort(inverse[pos]).astype("<i4").tobytes()

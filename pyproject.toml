@@ -32,7 +32,13 @@ dependencies = [
     "ipywidgets>=8",
     "traitlets>=5.9",
     "narwhals>=1.30",
+    # the IANA time zones for zoneinfo (pictures' time axis), which Windows lacks
+    "tzdata; sys_platform == 'win32'",
 ]
+
+[project.optional-dependencies]
+# PNG images drawn in Python (Timeline.save_image); SVG needs nothing more
+png = ["resvg-py>=0.5"]
 
 [project.urls]
 Homepage = "https://github.com/mluttikh/anytimeline"
@@ -58,6 +64,7 @@ dev = [
     "jsonschema>=4",
     "hypothesis>=6.100",
     "duckdb>=1.1",
+    "resvg-py>=0.5",
 ]
 
 [build-system]

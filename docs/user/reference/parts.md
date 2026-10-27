@@ -10,6 +10,10 @@ The parts of a layer whose settings only matter together, and what a plot shows.
 
 ::: anytimeline.Marker
 
+::: anytimeline.Annotation
+
+::: anytimeline.Connection
+
 ## Symbols
 
 The names `symbol=` and `symbols=` take, in the order a category column gets them:

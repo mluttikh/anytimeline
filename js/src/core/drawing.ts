@@ -775,3 +775,50 @@ export function drawMarked(view: TimelineView, ctx: CanvasRenderingContext2D, pl
   ctx.stroke();
   ctx.restore();
 }
+
+/** The mark found or stepped to (`view.focus`): a ring in the accent colour (a bar: a frame
+ * around it) and, beside it, its text and time. */
+export function drawFocus(view: TimelineView, ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, laneTop: number): void {
+  const f = view.focus;
+  if (!f || !view.axis) return;
+  const row = view.slot[f.lane];
+  if (row === undefined || row < 0) return;
+  const order = view.xscale === "order";
+  const c = view.camera;
+  const x = plot.x + ((order ? f.r : f.x) - c.left) * c.scale;
+  const x2 = plot.x + ((order ? f.r2 : f.x2) - c.left) * c.scale;
+  const y = laneTop + (row + 0.5) * view.laneH;
+  if (y < plot.y || y > plot.y + plot.h || x2 < plot.x - 12 || x > plot.x + plot.w + 12) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.x, plot.y, plot.w, plot.h);
+  ctx.clip();
+  ctx.strokeStyle = view.theme.accent;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  const r = Math.max(6, Math.min(10, view.laneH * 0.35));
+  if (x2 - x > 2 * r) ctx.roundRect(x - 3, y - r, x2 - x + 6, 2 * r, 3);
+  else ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.stroke();
+  // its text and time, in a box beside it (left of it near the right edge)
+  const time = order ? `#${Math.round(f.r) + 1}` : view.axis.formatFull(f.x);
+  const label = f.text ? `${f.text} · ${time}` : time;
+  ctx.font = view.font(-1);
+  const w = ctx.measureText(label).width + 10;
+  const h = view.fs + 6;
+  let lx = x + r + 6;
+  if (lx + w > plot.x + plot.w) lx = x - r - 6 - w;
+  const ly = Math.max(plot.y + 2, Math.min(plot.y + plot.h - h - 2, y - r - h - 2));
+  ctx.fillStyle = view.theme.bg;
+  ctx.globalAlpha = 0.92;
+  ctx.fillRect(lx, ly, w, h);
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = view.theme.accent;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(lx + 0.5, ly + 0.5, w - 1, h - 1);
+  ctx.fillStyle = view.theme.text;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillText(label, lx + 5, ly + h / 2);
+  ctx.restore();
+}

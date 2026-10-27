@@ -4,6 +4,7 @@ import { type Box, type BoxKind, boxMode, clickMode, DOUBLE_CLICK_MS, type DragM
 import * as folding from "./folding";
 import * as drawing from "./drawing";
 import * as picking from "./picking";
+import { askText, markOf } from "./notes";
 import type { TimelineView } from "./view";
 
 export function cancelDrag(view: TimelineView): void {
@@ -42,14 +43,42 @@ export function bindInput(view: TimelineView): void {
     view.afterMove();
   }, { passive: false });
 
+  // touch waits for a tap (as web maps do): before it, a finger scrolls the page; after it
+  // (until the plot loses focus), one finger pans and two pinch to zoom
+  const touches = new Map<number, { x: number; y: number }>();
+  let pinch: { d: number } | null = null;
+  let waiting = false; // a touch on the plot before its tap
+  const active = () => view.root.contains(document.activeElement) || view.isFullscreen();
+  const spread = () => {
+    const [a, b] = [...touches.values()];
+    return { d: Math.hypot(a.x - b.x, a.y - b.y), mid: (a.x + b.x) / 2 };
+  };
+
   stage.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
+    if (e.pointerType === "touch") {
+      if (!active()) {
+        waiting = true;
+        return;
+      }
+      touches.set(e.pointerId, local(e));
+      if (touches.size >= 2) {
+        // a second finger: pinch, not a drag
+        cancelDrag(view);
+        if (touches.size === 2) {
+          view.pushHistory();
+          pinch = { d: spread().d };
+        }
+        return;
+      }
+    }
     view.root.focus({ preventScroll: true });
     const p = local(e);
     const plot = view.plot();
     stage.setPointerCapture(e.pointerId);
     let mode: DragMode;
-    if (view.spaceDown) mode = "pan";
+    if (view.annotating) mode = "note";
+    else if (view.spaceDown) mode = "pan";
     else if (p.y < plot.y && p.x >= plot.x) mode = "axis";
     else if (view.tool === "zoom") mode = "zoom";
     else if (view.tool === "select") mode = "select";
@@ -59,6 +88,17 @@ export function bindInput(view: TimelineView): void {
 
   stage.addEventListener("pointermove", (e) => {
     const p = local(e);
+    if (e.pointerType === "touch" && touches.has(e.pointerId)) {
+      touches.set(e.pointerId, p);
+      if (pinch && touches.size === 2) {
+        const s = spread();
+        const plot = view.plot();
+        if (pinch.d > 0 && s.d > 0) view.camera.zoomAt(Math.max(0, Math.min(plot.w, s.mid - plot.x)), s.d / pinch.d);
+        pinch.d = s.d;
+        view.afterMove();
+        return;
+      }
+    }
     view.pointer = p;
     const d = view.drag;
     if (d) {
@@ -95,6 +135,20 @@ export function bindInput(view: TimelineView): void {
   });
 
   const end = (e: PointerEvent) => {
+    if (e.pointerType === "touch") {
+      if (waiting) {
+        // the tap: the plot takes the fingers from now on
+        waiting = false;
+        view.root.focus({ preventScroll: true });
+        view.flashNotice("Drag to pan · pinch to zoom · tap outside the plot to scroll the page");
+        return;
+      }
+      touches.delete(e.pointerId);
+      if (pinch) {
+        if (touches.size < 2) pinch = null;
+        return;
+      }
+    }
     const d = view.drag;
     const box = view.box;
     view.drag = null;
@@ -103,6 +157,11 @@ export function bindInput(view: TimelineView): void {
     if (!d) return;
     const p = local(e);
     const wide = box && Math.abs(box.x1 - box.x0) >= MIN_BOX;
+    if (d.mode === "note") {
+      note(view, p, d.moved && box && wide ? box : null);
+      view.requestRender();
+      return;
+    }
     if (d.moved && box && d.mode !== "pan") {
       if (box.kind === "select" || box.kind === "range-select") {
         if (wide || box.kind === "select") selectBox(view, box, boxMode(e));
@@ -116,7 +175,18 @@ export function bindInput(view: TimelineView): void {
     click(view, p, e, d.mode);
   };
   stage.addEventListener("pointerup", end);
-  stage.addEventListener("pointercancel", () => cancelDrag(view));
+  stage.addEventListener("pointercancel", (e) => {
+    if (e.pointerType === "touch") {
+      touches.delete(e.pointerId);
+      if (touches.size < 2) pinch = null;
+      if (waiting) {
+        // the page scrolled under the finger
+        waiting = false;
+        view.flashNotice("Tap the plot first, then drag to pan");
+      }
+    }
+    cancelDrag(view);
+  });
   stage.addEventListener("pointerleave", () => {
     view.pointer = null;
     view.shareCursor(null);
@@ -135,6 +205,30 @@ export function bindInput(view: TimelineView): void {
     view.root.classList.remove("atl-space");
   });
   document.addEventListener("fullscreenchange", view.onFullscreenChange);
+}
+
+/** The key `a`, then a drag over a range or a click at a time: a note there (in the lane
+ * dragged in, when the drag stays in one; at a click: the lane clicked), with its text. */
+function note(view: TimelineView, p: { x: number; y: number }, box: Box | null): void {
+  view.annotating = false;
+  view.setMode(null);
+  const plot = view.plot();
+  const inside = (y: number) => Math.max(plot.y, Math.min(plot.y + plot.h - 1, y));
+  const laneTop = plot.y - view.scrollY;
+  const rowOf = (y: number) => Math.floor((inside(y) - laneTop) / view.laneH);
+  const r0 = rowOf(box ? Math.min(box.y0, box.y1) : p.y);
+  const r1 = rowOf(box ? Math.max(box.y0, box.y1) : p.y);
+  const lane = r0 === r1 && p.y >= plot.y ? (view.laneAt[r0] ?? null) : null;
+  const at = (x: number) => view.camera.fromPx(Math.max(0, Math.min(plot.w, x - plot.x)));
+  const xa = box ? Math.min(box.x0, box.x1) : p.x;
+  const xb = box ? Math.max(box.x0, box.x1) : p.x;
+  // on the order scale the note's times are the instants' at its ends
+  const time = (v: number) => (view.xscale === "order" ? (view.seq?.count ? view.seq.time(Math.max(0, Math.min(view.seq.count - 1, Math.round(v)))) : v) : v);
+  const x0 = time(at(xa));
+  const x1 = box ? time(at(xb)) : null;
+  askText(view, xa, (lane === null ? plot.y : laneTop + Math.max(0, r0) * view.laneH) + 2, (text) => {
+    if (text !== null) view.callbacks.onAnnotate?.({ x0, x1, lane, text });
+  });
 }
 
 export function boxKind(view: TimelineView, mode: DragMode): BoxKind {
@@ -229,6 +323,23 @@ export function zoomToBox(view: TimelineView, b: Box): void {
 }
 
 export function key(view: TimelineView, e: KeyboardEvent): void {
+  const target = e.target as HTMLElement | null;
+  if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT")) return;
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "f" && !view.helpEl) {
+    // the plot's search, not the page's, while the plot has the keyboard
+    e.preventDefault();
+    e.stopPropagation();
+    view.finder.open();
+    return;
+  }
+  const k = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === "z" || (k === "y" && e.ctrlKey)) && view.callbacks.onUndo && view.selectionMode !== "none") {
+    // the selection's history, kept in Python (the notebook's own undo stays out)
+    e.preventDefault();
+    e.stopPropagation();
+    view.callbacks.onUndo(k === "y" || e.shiftKey);
+    return;
+  }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (view.helpEl && e.key !== "?" && e.key !== "Escape") return;
   const plot = view.plot();
@@ -294,6 +405,48 @@ export function key(view: TimelineView, e: KeyboardEvent): void {
     case "f":
       view.toggleFullscreen();
       break;
+    case "/":
+      view.finder.open();
+      break;
+    case "a":
+      if (!view.callbacks.onAnnotate) {
+        view.flashNotice("Annotations are made in Python here");
+        break;
+      }
+      view.connectFrom = null;
+      view.annotating = !view.annotating;
+      view.setMode(view.annotating ? "Annotate: drag over a time range, or click a time · Esc cancels" : null);
+      break;
+    case "c": {
+      if (!view.callbacks.onConnect) {
+        view.flashNotice("Connections are made in Python here");
+        break;
+      }
+      const mark = markOf(view, view.hovered) ?? (view.focus ? { layer: view.focus.layer, index: view.focus.index } : null);
+      if (!mark) {
+        view.flashNotice("Point at a mark, then press c");
+        break;
+      }
+      if (!view.connectFrom) {
+        view.connectFrom = mark;
+        view.annotating = false;
+        view.setMode("Connect: point at another mark and press c · Esc cancels");
+      } else {
+        const from = view.connectFrom;
+        view.connectFrom = null;
+        view.setMode(null);
+        if (from.layer !== mark.layer || from.index !== mark.index) view.callbacks.onConnect(from, mark);
+      }
+      break;
+    }
+    case ".":
+    case ",":
+      void view.step(e.key === ".");
+      break;
+    case "F":
+      if (!view.focus) return;
+      view.setFocus(view.focus, true, true);
+      break;
     case "?":
       view.toggleHelp();
       break;
@@ -304,6 +457,13 @@ export function key(view: TimelineView, e: KeyboardEvent): void {
     case "Escape":
       if (view.helpEl) view.toggleHelp();
       else if (view.drag) cancelDrag(view);
+      else if (view.annotating || view.connectFrom) {
+        view.annotating = false;
+        view.connectFrom = null;
+        view.setMode(null);
+      }
+      else if (view.finder.isOpen) view.finder.close();
+      else if (view.focus) view.setFocus(null);
       else if (Object.values(view.marks).some((m) => m.length)) view.callbacks.onGesture?.({ kind: "clear" });
       else handled = false;
       break;

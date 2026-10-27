@@ -24,6 +24,14 @@ describe("time axis", () => {
     expect(t.pinned).toBe("Mon Oct 12, 2026");
   });
 
+  it("counts months and days on across a new year", () => {
+    const axis = datetimeAxis("2023-10-01T00:00:00Z", "s");
+    const months = axis.ticks(0, 200 * 86400, 900).minor.map((m) => m.label);
+    expect(months.slice(0, 5)).toEqual(["Oct", "Nov", "Dec", "2024", "Feb"]);
+    const days = axis.ticks(88 * 86400, 95 * 86400, 900).minor.map((m) => m.label);
+    expect(days).toEqual(["28", "29", "30", "31", "1", "2", "3", "4"]);
+  });
+
   it("labels sub-second ticks as fractions with the second as context", () => {
     const axis = datetimeAxis("2026-10-12T08:00:00Z", "ns");
     const t = axis.ticks(1e9, 1e9 + 2_000_000, 800); // 2 ms after 08:00:01

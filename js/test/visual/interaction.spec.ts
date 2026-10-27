@@ -431,21 +431,19 @@ test("Display: mark size and spreading reach the plot and Python; the key d swit
   await page.locator('.atl-popover button[aria-label="Smaller marks"]').click();
   await expect(page.locator(".atl-popover .atl-size").nth(1)).toHaveText("×0.75");
   expect(await state(page, "mark_scale")).toBe(0.75);
-  await page.waitForTimeout(100);
-  expect((await marks()).size).toBeCloseTo(before.size * 0.75, 5);
+  await expect.poll(async () => (await marks()).size).toBeCloseTo(before.size * 0.75, 5);
   // spreading off: every event on its lane's line
   await page.locator(".atl-popover-check input").uncheck();
   expect(await state(page, "dodge")).toBe(false);
-  await page.waitForTimeout(100);
-  expect((await marks()).spread).toBe(0);
+  await expect.poll(async () => (await marks()).spread).toBe(0);
   await page.locator('.atl-popover button[aria-label="Default mark size"]').click();
   expect(await state(page, "mark_scale")).toBe(1);
   await page.mouse.click(5, 300); // close the panel
   await view(page).click({ position: { x: 400, y: 200 } });
   await page.keyboard.press("d");
   expect(await state(page, "dodge")).toBe(true);
-  await page.waitForTimeout(100);
-  expect((await marks()).spread).toBeGreaterThan(0);
+  // the next frame dodges again (a slow runner draws it later)
+  await expect.poll(async () => (await marks()).spread).toBeGreaterThan(0);
 });
 
 test("Dodging in a tall lane: the rows spread out until marks no longer overlap", async ({ page }) => {
@@ -623,4 +621,154 @@ test("a states tooltip shows every lane's state at the pointer's time, and follo
   await page.screenshot({ path: "test-results/shots/states_tooltip.png" });
   // the hovered state's own rows follow the lanes; its tooltip columns come from Python
   await expect(tip).toContainText("duration");
+});
+
+test("Find: / opens the search box, Enter steps through lanes and marks, Esc closes it", async ({ page }) => {
+  await open(page, "gantt_plan");
+  await view(page).click({ position: { x: 4, y: 4 } });
+  await page.keyboard.press("/");
+  const box = page.locator(".atl-finder input");
+  await expect(box).toBeFocused();
+  await box.fill("build");
+  // two lanes by name, two bars by their text
+  await expect(page.locator(".atl-finder-status")).toHaveText("4 found");
+  // the plot's keys stay out of the box
+  await box.press("z");
+  expect(await state(page, "tool")).toBe("pan");
+  await box.fill("build");
+  await expect(page.locator(".atl-finder-status")).toHaveText("4 found");
+  for (let i = 0; i < 3; i++) await box.press("Enter");
+  await expect(page.locator(".atl-finder-status")).toHaveText("3 of 4");
+  const focus = () => view(page).evaluate((root: any) => root.__view.focus);
+  expect(await focus()).toMatchObject({ text: "Build backend" });
+  await box.press("Shift+Enter");
+  await expect(page.locator(".atl-finder-status")).toHaveText("2 of 4");
+  await box.press("Escape");
+  await expect(page.locator(".atl-finder")).toBeHidden();
+  expect(await focus()).toBeNull();
+  // Ctrl/Cmd+F opens it too
+  await page.keyboard.press("ControlOrMeta+f");
+  await expect(box).toBeFocused();
+  await box.press("Escape");
+});
+
+test("Step: . and , go to the next and previous mark of a lane; F fits the view to it", async ({ page }) => {
+  await open(page, "service_time");
+  await view(page).click({ position: { x: 4, y: 4 } });
+  const focus = () => view(page).evaluate((root: any) => root.__view.focus);
+  const span = () => view(page).evaluate((root: any) => root.__view.camera.span);
+  // a key, then the mark it went to (each step waits for Python, or here for the fallback)
+  const press = async (key: string) => {
+    const was = JSON.stringify(await focus());
+    await page.keyboard.press(key);
+    await expect.poll(async () => JSON.stringify(await focus())).not.toBe(was);
+    return focus();
+  };
+  const first = await press(".");
+  const second = await press(".");
+  const third = await press(".");
+  expect(second.x).toBeGreaterThanOrEqual(first.x);
+  expect(third.x).toBeGreaterThanOrEqual(second.x);
+  expect(third.lane).toBe(first.lane);
+  const back = await press(",");
+  expect(back.index).toBe(second.index);
+  const before = await span();
+  await page.keyboard.press("F");
+  expect(await span()).toBeLessThan(before);
+  await page.keyboard.press("Escape");
+  expect(await focus()).toBeNull();
+});
+
+test("Summary: Python's numbers show in a panel while something is selected; × hides it", async ({ page }) => {
+  await open(page, "gantt_plan");
+  await expect(page.locator(".atl-summary")).toHaveCount(0);
+  const summary = [{ layer: "tasks", columns: ["count", "total", "mean"], total: { count: "3", total: "30 d", mean: "10 d", open: "1 open" }, blocks: [{ title: "phase", rows: [{ count: "2", total: "16 d", mean: "8 d", label: "plan", color: "#4c78a8" }, { count: "1", total: "14 d", mean: "14 d", label: "build", color: "#f58518" }], more: 0 }] }];
+  await page.evaluate((s) => {
+    (window as any).__model.state._summary = s;
+    (window as any).__model.emit("change:_summary");
+  }, summary);
+  const panel = page.locator(".atl-summary");
+  await expect(panel).toContainText("3 selected");
+  await expect(panel).toContainText("1 open: no duration");
+  await expect(panel.locator(".atl-summary-all")).toContainText("30 d");
+  await expect(panel).toContainText("by phase");
+  await expect(panel.locator(".atl-summary-swatch")).toHaveCount(2);
+  await panel.locator(".atl-summary-close").click();
+  await expect(page.locator(".atl-summary")).toHaveCount(0);
+  await page.evaluate((s) => {
+    (window as any).__model.state._summary = s;
+    (window as any).__model.emit("change:_summary");
+  }, summary);
+  await expect(page.locator(".atl-summary")).toHaveCount(1);
+});
+
+test("Annotate: a, then a drag, then text and Enter sends the note to Python; c joins two marks", async ({ page }) => {
+  await open(page, "service_time");
+  await view(page).click({ position: { x: 4, y: 4 } });
+  const sent = (type: string) => page.evaluate((t) => (window as any).__log.filter((m: any) => m.type === t), type);
+  await page.keyboard.press("a");
+  await expect(page.locator(".atl-mode")).toContainText("Annotate");
+  const a = await eventAt(page, 0, 10);
+  const b = await eventAt(page, 0, 40);
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, a.y + 2, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.locator(".atl-mode")).toHaveCount(0);
+  const input = page.locator(".atl-note-input");
+  await expect(input).toBeFocused();
+  await input.fill("incident");
+  await input.press("Enter");
+  await expect(input).toHaveCount(0);
+  const [note] = await sent("annotate");
+  expect(note).toMatchObject({ text: "incident" });
+  expect(note.x1).toBeGreaterThan(note.x0);
+  expect(note.lane).not.toBeNull(); // the drag stayed in one lane
+  // Esc drops a note
+  await page.keyboard.press("a");
+  await page.mouse.click(b.x, b.y);
+  await page.locator(".atl-note-input").press("Escape");
+  expect(await sent("annotate")).toHaveLength(1);
+  // c on a mark, then on another
+  await page.mouse.move(a.x, a.y);
+  await expect(page.locator(".atl-tooltip.atl-show")).toBeVisible();
+  await page.keyboard.press("c");
+  await expect(page.locator(".atl-mode")).toContainText("Connect");
+  await page.mouse.move(b.x, b.y);
+  await expect(page.locator(".atl-tooltip.atl-show")).toBeVisible();
+  await page.keyboard.press("c");
+  const [link] = await sent("connect");
+  expect(link.a.index).not.toBe(link.b.index);
+  // what Python sends back is drawn (no error), and pages draw it too
+  await page.evaluate((n) => {
+    (window as any).__model.state._notes = n;
+    (window as any).__model.emit("change:_notes");
+  }, { bands: [{ x0: note.x0, x1: note.x1, point: false, lane: note.lane, text: "incident", color: null }], arrows: [] });
+  expect(await view(page).evaluate((root: any) => root.__view.notes.bands.length)).toBe(1);
+});
+
+test("Undo: Ctrl/Cmd+Z asks Python to take back a change of the selection, Shift for redo", async ({ page }) => {
+  await open(page, "service_time");
+  await view(page).click({ position: { x: 4, y: 4 } });
+  await page.keyboard.press("ControlOrMeta+z");
+  await page.keyboard.press("ControlOrMeta+Shift+z");
+  const sent = await page.evaluate(() => (window as any).__log.filter((m: any) => m.type === "undo" || m.type === "redo").map((m: any) => m.type));
+  expect(sent).toEqual(["undo", "redo"]);
+});
+
+test.describe("touch", () => {
+  test.use({ hasTouch: true });
+
+  test("a tap gives the plot the fingers; before it, a touch does not take them", async ({ page }) => {
+    await open(page, "service_time");
+    const focused = () => view(page).evaluate((root: HTMLElement) => root.contains(document.activeElement));
+    expect(await focused()).toBe(false);
+    const box = await stageBox(page);
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    await expect.poll(focused).toBe(true);
+    await expect(page.locator(".atl-notice")).toContainText("pinch to zoom");
+    // a tap once it has them: a click as with a mouse (Pan: nothing selected)
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    expect(await picks(page)).toEqual([]);
+  });
 });

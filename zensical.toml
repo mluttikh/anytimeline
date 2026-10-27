@@ -39,6 +39,7 @@ nav = [
     { "States and values" = "how-to/states-values.md" },
     { "Several layers in one plot" = "how-to/layers.md" },
     { "Zoom from Python" = "how-to/zoom.md" },
+    { "Summarise, find and annotate" = "how-to/explore.md" },
     { "Groups and linked plots" = "how-to/groups.md" },
     { "Share a plot" = "how-to/share.md" },
     { "Text and mark size, height and full screen" = "how-to/size.md" },

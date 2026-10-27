@@ -43,6 +43,7 @@ export function helpSections(tools: Tool[], fullscreen: boolean, tree = false): 
         ["Click", "select an event"],
         ["Shift/Ctrl/⌘", "add to the selection"],
         ["Alt", "remove from it"],
+        ["Ctrl/⌘ Z · Shift+Ctrl/⌘ Z", "undo · redo a change of the selection"],
       ],
     ]);
   }
@@ -68,6 +69,11 @@ export function helpSections(tools: Tool[], fullscreen: boolean, tree = false): 
       ["← → ↑ ↓", "pan time · scroll lanes"],
       ["Esc", fullscreen ? "leave full screen (the browser's)" : "cancel a box, then clear the selection"],
       ["d", "spread overlapping events, or not"],
+      ["/ · Ctrl/⌘ F", "find text or lanes (Enter · Shift+Enter: next · previous)"],
+      [". · ,", "the next · previous mark in the lane"],
+      ["F", "fit the view to that mark"],
+      ["a", "annotate: drag over a time range, or click a time"],
+      ["c", "on a mark, then on another: an arrow between them"],
       ["l · f · ?", "legend · full screen · this help"],
     ],
   ]);

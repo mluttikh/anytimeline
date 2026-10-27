@@ -13,7 +13,7 @@ import { BarLayer, type BarView, decodeBars } from "./bars";
 import { type BarLayerDraw, barBox, type MarkLayerDraw } from "./renderers/renderer";
 import { decodeEvents, type EventsData, fillSolid, lowerBound, specBufferIds, SYMBOLS, upperBound, view as bytes } from "./scene";
 import type { Sequence } from "./sequence";
-import type { BarLevelsSpec, DataSource, EventsLayerSpec, IntervalsLayerSpec, LevelScale, LevelSpec, LevelsSpec, ValueLevelsSpec, ValuesLayerSpec, WindowAnswer, XScale } from "./types";
+import type { BarLevelsSpec, DataSource, EventsLayerSpec, IntervalsLayerSpec, LevelSpec, LevelsSpec, ValueLevelsSpec, ValuesLayerSpec, WindowAnswer, XScale } from "./types";
 import { decodeValues, type ValuesData } from "./values";
 
 /** Asks Python for a window of a layer sent as levels: its events in a range (k null), or its
@@ -23,7 +23,7 @@ export type WindowAsk = (layer: string, scale: XScale, range: [number, number], 
 /** A level's bins are drawn at least this wide (px). */
 export const BIN_PX = 4;
 /** The bars of bins fill this much of their lane at the most. */
-const BIN_FILL = 0.8;
+export const BIN_FILL = 0.8;
 
 /** One level (or a window's bins), decoded. */
 export interface BinsData {
@@ -372,8 +372,7 @@ export class Detail {
         return "raw";
       }
     }
-    const pyramid = lv[scale];
-    const want = wantedLevel(pyramid, cam.scale);
+    const want = eventsLevel(lv[scale].top, cam.scale);
     const bins = this.choose(view, scale, want, a, b);
     this.show(bins);
     if (!bins) return null;
@@ -479,10 +478,24 @@ export class Detail {
 
 }
 
-/** The finest level whose bins are at least BIN_PX wide at `scale` px per unit. */
-function wantedLevel(p: LevelScale, scale: number): number {
-  const bins = (p.top * scale) / BIN_PX;
+/** The level an events layer draws: the finest whose bins are at least BIN_PX wide at
+ * `scale` px per unit (`top`: the coarsest level's bin width). */
+export function eventsLevel(top: number, scale: number): number {
+  const bins = (top * scale) / BIN_PX;
   return bins > 0 ? Math.floor(Math.log(bins) / Math.log(4)) : 0;
+}
+
+/** The level a values layer draws: the coarsest whose bins are at most a pixel wide at `px`
+ * px per unit of time. */
+export function valuesLevel(top: number, px: number): number {
+  const bins = top * px;
+  return bins > 1 ? Math.ceil(Math.log(bins) / Math.log(4)) : 0;
+}
+
+/** The level an intervals layer draws: the coarsest whose bins are at most MERGE_PX wide. */
+export function barsLevel(top: number, scale: number): number {
+  const bins = (top * scale) / MERGE_PX;
+  return bins > 1 ? Math.ceil(Math.log(bins) / Math.log(4)) : 0;
 }
 
 /** How many of a window's events are in view (lanes on rows r0..r1, from a to b). */
@@ -576,8 +589,7 @@ export class ValueDetail {
       tb = at(Math.ceil(cam.right));
     }
     const px = tb > ta ? ((cam.right - cam.left) * cam.scale) / (tb - ta) : cam.scale;
-    const bins = this.levels.top * px;
-    const want = bins > 1 ? Math.ceil(Math.log(bins) / Math.log(4)) : 0;
+    const want = valuesLevel(this.levels.top, px);
     const w = this.window;
     const covers = !!w && w.range[0] <= ta && w.range[1] >= tb;
     if (w && covers && (w.k === null || w.k >= want)) return w.samples;
@@ -653,7 +665,7 @@ export interface BarDetailView {
 }
 
 /** A level's bars are merged where shorter than this many px. */
-const MERGE_PX = 2;
+export const MERGE_PX = 2;
 
 /**
  * The levels and windows of one intervals layer of many bars. Level k has the bars at least
@@ -718,8 +730,7 @@ export class BarDetail {
     const a = cam.left;
     const b = cam.right;
     const p = this.levels[scale];
-    const bins = (p.top * cam.scale) / MERGE_PX;
-    const want = bins > 1 ? Math.ceil(Math.log(bins) / Math.log(4)) : 0;
+    const want = barsLevel(p.top, cam.scale);
     const w = this.window;
     const covers = !!w && w.scale === scale && w.range[0] <= a && w.range[1] >= b;
     if (w && covers && (w.k === null || w.k >= want)) return w.bars;

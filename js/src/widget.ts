@@ -1,5 +1,8 @@
 // anywidget entry (AFM): connects a Python Timeline model to TimelineView.
 
+import type { Found, Match } from "./core/find";
+import type { Notes } from "./core/notes";
+import type { LayerSummary } from "./core/summary";
 import { BufferStore, type PutMessage } from "./core/transport";
 import type { RendererPreference, SceneSpec, WindowAnswer, XScale } from "./core/types";
 import { type Gesture, type Tool, TimelineView } from "./core/view";
@@ -177,6 +180,11 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
       return p;
     },
     onBinTooltip: (layer, scale, lane, range) => ask(model, s, { type: "tooltip", layer, bin: { scale, lane, range } }).then((msg) => msg.rows as string[][]),
+    onUndo: (redo) => send(model, { type: redo ? "redo" : "undo" }),
+    onAnnotate: (note) => send(model, { type: "annotate", ...note }),
+    onConnect: (a, b) => send(model, { type: "connect", a, b }),
+    onFind: (q, scale) => ask(model, s, { type: "find", q, scale }) as Promise<Found>,
+    onStep: (lane, after, forward, scale) => ask(model, s, { type: "step", lane, after, forward, scale }).then((msg) => (msg.match ?? null) as Match | null),
     onWindow: (layer, scale, range, k) => ask(model, s, { type: "window", layer, scale, range, k }) as Promise<WindowAnswer>,
     onPerf: reportPerf,
     onTool: (tool: Tool) => {
@@ -213,6 +221,8 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
   const onXScale = () => view.setXScale((model.get("xscale") ?? "time") as XScale);
   const onMarks = () => view.setMarks(marksOf(model));
   const onMarked = () => view.setMarked(markedOf(model));
+  const onNotes = () => view.setNotes((model.get("_notes") ?? {}) as Notes);
+  const onSummary = () => view.setSummary((model.get("_summary") ?? []) as LayerSummary[]);
   const onHover = () => view.setHover(Boolean(model.get("hover")));
   const onLegend = () => view.setLegend(Boolean(model.get("legend")));
   const onMode = () => view.setSelectionMode(String(model.get("selection_mode") ?? "none"));
@@ -242,6 +252,8 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
     ["change:xscale", onXScale],
     ["change:_marks", onMarks],
     ["change:_marked", onMarked],
+    ["change:_summary", onSummary],
+    ["change:_notes", onNotes],
     ["change:hover", onHover],
     ["change:legend", onLegend],
     ["change:selection_mode", onMode],
@@ -264,6 +276,8 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
   onDodge();
   onMarks();
   onMarked();
+  onSummary();
+  onNotes();
   onXScale();
   onLink();
   load();

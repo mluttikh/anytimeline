@@ -1,13 +1,16 @@
 """Parts of a layer whose settings only matter together, as frozen dataclasses: a
 [`Route`][anytimeline.Route], a story's [`Stem`][anytimeline.Stem], a
-[`Marker`][anytimeline.Marker]. Each has ``of()``, which also takes the short forms its
-argument accepts (``route="request"``, ``stems=True``)."""
+[`Marker`][anytimeline.Marker], an [`Annotation`][anytimeline.Annotation], a
+[`Connection`][anytimeline.Connection]. Route and Stem have ``of()``, which also takes the
+short forms its argument accepts (``route="request"``, ``stems=True``)."""
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
 from typing import Any, Literal, get_args
+
+import numpy as np
 
 from anytimeline.types import StemShape
 
@@ -105,6 +108,62 @@ class Marker:
             raise TypeError(f"Marker's label is text, got {self.label!r}")
         if self.color is not None and not isinstance(self.color, str):
             raise TypeError(f"Marker's color is a colour name or #hex, got {self.color!r}")
+
+
+@dataclass(frozen=True)
+class Annotation:
+    """A note on the plot: a time range (or one time) with text, over one lane or all of them
+    ([`Timeline.annotate`][anytimeline.Timeline.annotate]).
+
+    Args:
+        start: Where it starts: a time of the data's kind (a datetime, ISO text, a duration
+            or a number).
+        end: Where it ends; ``None``: a note at one time (a line).
+        text: Written at its top.
+        lane: The lane it is in (a lane's name); ``None``: across all lanes.
+        color: Its colour; ``None``: the accent colour.
+    """
+
+    start: Any
+    end: Any = None
+    text: str = ""
+    lane: Any = None
+    color: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.text, str):
+            raise TypeError(f"Annotation's text is text, got {self.text!r}")
+        if self.color is not None and not isinstance(self.color, str):
+            raise TypeError(f"Annotation's color is a colour name or #hex, got {self.color!r}")
+
+
+@dataclass(frozen=True)
+class Connection:
+    """An arrow from one mark to another, with text
+    ([`Timeline.connect`][anytimeline.Timeline.connect]): from an event, or a bar's end, to an
+    event, or a bar's start.
+
+    Args:
+        a: The mark it starts at: ``(layer, row)``, a row of that layer's table.
+        b: The mark it points to.
+        text: Written at its middle.
+        color: Its colour; ``None``: the accent colour.
+    """
+
+    a: tuple[str, int]
+    b: tuple[str, int]
+    text: str = ""
+    color: str | None = None
+
+    def __post_init__(self) -> None:
+        for end in (self.a, self.b):
+            ok = isinstance(end, tuple) and len(end) == 2 and isinstance(end[0], str)
+            if not ok or isinstance(end[1], bool) or not isinstance(end[1], int | np.integer):
+                raise TypeError(f"Connection's ends are (layer, row), got {end!r}")
+        if not isinstance(self.text, str):
+            raise TypeError(f"Connection's text is text, got {self.text!r}")
+        if self.color is not None and not isinstance(self.color, str):
+            raise TypeError(f"Connection's color is a colour name or #hex, got {self.color!r}")
 
 
 def _positive(value: Any) -> bool:

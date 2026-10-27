@@ -3,6 +3,8 @@
 // holding a <script type="application/json"> with the data (Python: Timeline._embed_html).
 // Each plot starts when it comes near the screen, and follows the page's light or dark theme.
 
+import type { Notes } from "./core/notes";
+import type { LayerSummary } from "./core/summary";
 import type { DataSource, RendererPreference, SceneSpec, XScale } from "./core/types";
 import { type Tool, TimelineView } from "./core/view";
 
@@ -29,6 +31,10 @@ interface Payload {
   marks: Record<string, string>;
   /** Per events layer sent as levels: where its selected events are (float64 triplets). */
   marked?: Record<string, string>;
+  /** The selection in numbers (Timeline.summary), for its panel. */
+  summary?: LayerSummary[];
+  /** Annotations and connections (Timeline.annotate, Timeline.connect). */
+  notes?: Notes;
   /** The group of linked plots it is in (Timeline.link), or null. */
   link?: { group: string; align: "time" | "start" } | null;
   /** Per layer, its tooltip columns as text, by event index (absent for large layers). */
@@ -76,6 +82,8 @@ async function show(host: HTMLElement, payload: Payload): Promise<TimelineView> 
   view.setTool(payload.tool ?? "pan");
   view.setMarks(Object.fromEntries(Object.entries(payload.marks ?? {}).map(([k, v]) => [k, new Int32Array(decodeBase64(v))])));
   view.setMarked(Object.fromEntries(Object.entries(payload.marked ?? {}).map(([k, v]) => [k, new Float64Array(decodeBase64(v))])));
+  view.setSummary(payload.summary ?? []);
+  view.setNotes(payload.notes ?? {});
   if (payload.link?.group) view.setLink(payload.link);
   await view.setSpec(payload.spec, source);
   view.setXScale(payload.xscale ?? "time");

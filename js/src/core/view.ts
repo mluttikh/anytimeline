@@ -14,6 +14,9 @@ import { BarLayer, decodeBars } from "./bars";
 import { TimeCamera } from "./camera";
 import { buildHelp } from "./help";
 import { buildLegend } from "./legend";
+import { type FindAsk, Finder, type Match, reveal, revealLane, type StepAsk, stepHeld } from "./find";
+import { buildSummary, type LayerSummary } from "./summary";
+import { type MarkRef, type NewNote, type Notes } from "./notes";
 import { FLAG_SELECTED, type MarkLayerDraw, type Renderer } from "./renderers/renderer";
 import { createRenderer } from "./renderers/select";
 import { type Align, compatible, convert, frameOf, join, leave, type LinkFrame, type LinkPeer, type LinkSpec, others } from "./link";
@@ -61,6 +64,17 @@ export interface ViewCallbacks {
   onMarkScale?: (factor: number) => void;
   /** The user switched spreading overlapping events on or off. */
   onDodge?: (on: boolean) => void;
+  /** Search every mark (Python; without, the search box searches the marks held). */
+  onFind?: FindAsk;
+  /** The next or previous mark of a lane (Python; without, among the marks held). */
+  onStep?: StepAsk;
+  /** Ctrl/Cmd+Z (`redo`: with Shift, or Ctrl+Y): Python takes back a change of the
+   * selection, or makes it again. */
+  onUndo?: (redo: boolean) => void;
+  /** An annotation made in the plot (key `a`); without, the plot makes none. */
+  onAnnotate?: (note: NewNote) => void;
+  /** An arrow made in the plot (key `c` on two marks); without, the plot makes none. */
+  onConnect?: (a: MarkRef, b: MarkRef) => void;
 }
 
 export class TimelineView implements DetailView {
@@ -82,6 +96,19 @@ export class TimelineView implements DetailView {
   readonly tooltip: HTMLDivElement;
   private readonly notice: HTMLDivElement;
   legendEl: HTMLElement | null = null;
+  /** The selection in numbers (Python's), over the plot while something is selected. */
+  summaryEl: HTMLElement | null = null;
+  /** The search box (`/`, Ctrl/Cmd+F). */
+  readonly finder: Finder;
+  /** The mark found or stepped to (a ring, and its text), or null. */
+  focus: Match | null = null;
+  /** Annotations and connections, as Python sends them. */
+  notes: Notes = {};
+  /** The key `a` was pressed: the next drag or click makes a note. */
+  annotating = false;
+  /** The key `c` was pressed on this mark: `c` on another connects them. */
+  connectFrom: MarkRef | null = null;
+  private modeEl: HTMLDivElement | null = null;
   renderer: Renderer | null = null;
   private rendererPref: RendererPreference = "auto";
   private failedKinds: RendererKind[] = [];
@@ -190,7 +217,8 @@ export class TimelineView implements DetailView {
     this.front = canvas("atl-front");
     this.tooltip = div("atl-tooltip");
     this.notice = div("atl-notice");
-    this.stage.append(this.back, this.front, this.tooltip, this.notice);
+    this.finder = new Finder(this);
+    this.stage.append(this.back, this.front, this.tooltip, this.notice, this.finder.el);
     this.root.append(this.header, this.stage);
     host.append(this.root);
     this.theme = this.readTheme();
@@ -355,6 +383,91 @@ export class TimelineView implements DetailView {
     this.requestRender();
   }
 
+  /** The selection in numbers, as Python wrote them (none: no panel). Its × hides it until
+   * the next selection. */
+  setSummary(layers: LayerSummary[]): void {
+    this.summaryEl?.remove();
+    this.summaryEl = buildSummary(layers, () => {
+      this.summaryEl?.remove();
+      this.summaryEl = null;
+    });
+    if (!this.summaryEl) return;
+    this.stage.append(this.summaryEl);
+    this.placeSummary();
+  }
+
+  /** Bottom right over the plot, left of a legend in a column; the search box top left. */
+  private placeSummary(): void {
+    if (this.summaryEl) this.summaryEl.style.right = `${this.padRight + 6}px`;
+    this.finder.el.style.left = `${this.gutter + 6}px`;
+    this.finder.el.style.top = `${this.axisH + 4}px`;
+  }
+
+  setNotes(notes: Notes): void {
+    this.notes = notes ?? {};
+    this.requestRender();
+  }
+
+  /** What the next gesture or key does, shown over the plot (null: as usual). */
+  setMode(text: string | null): void {
+    this.modeEl?.remove();
+    this.modeEl = null;
+    if (!text) return;
+    this.modeEl = div("atl-mode");
+    this.modeEl.textContent = text;
+    this.modeEl.setAttribute("role", "status");
+    this.stage.append(this.modeEl);
+  }
+
+  /** Show mark `m` (null: none): its ring, its lane in sight and, with `move`, its place
+   * (`fit`: the view fits it). */
+  setFocus(m: Match | null, move = false, fit = false): void {
+    this.focus = m;
+    if (m && move) {
+      this.pushHistory();
+      reveal(this, m, fit);
+      this.afterMove();
+    } else this.requestRender();
+  }
+
+  /** Scroll lane `lane` into sight (a lane found by its name). */
+  focusLane(lane: number): void {
+    this.focus = null;
+    this.pushHistory();
+    revealLane(this, lane);
+    this.focusedLane = lane;
+    this.afterMove();
+  }
+
+  /** The lane stepped in last (`.` and `,` without a mark found). */
+  focusedLane = -1;
+
+  /** `.` (forward) or `,`: the next or previous mark of the focused mark's lane, else of the
+   * lane at the top of the view, from the view's left or right edge. */
+  step(forward: boolean): Promise<void> {
+    // one after another: quick presses step on from where the last one went
+    this.stepping = this.stepping.then(() => this.stepOnce(forward));
+    return this.stepping;
+  }
+
+  private stepping: Promise<void> = Promise.resolve();
+
+  private async stepOnce(forward: boolean): Promise<void> {
+    const f = this.focus;
+    const scale = this.xscale;
+    const order = scale === "order";
+    const lane = f ? f.lane : this.focusedLane >= 0 && this.slot[this.focusedLane] >= 0 ? this.focusedLane : (this.laneAt[Math.max(0, Math.floor(this.scrollY / this.laneH))] ?? 0);
+    const from = f ? { x: order ? f.r : f.x, layer: f.layer, index: f.index } : { x: forward ? this.camera.left : this.camera.right, layer: null, index: -1 };
+    let m: Match | null;
+    try {
+      m = this.callbacks.onStep ? await this.callbacks.onStep(lane, from, forward, scale) : stepHeld(this, lane, from, forward, scale);
+    } catch {
+      m = stepHeld(this, lane, from, forward, scale);
+    }
+    if (m) this.setFocus(m, true);
+    else this.flashNotice(forward ? "No later mark in this lane" : "No earlier mark in this lane");
+  }
+
   /** The selected events per layer, as indices into the layer's (sorted) events. */
   setMarks(marks: Record<string, Int32Array>): void {
     this.marks = marks;
@@ -439,6 +552,7 @@ export class TimelineView implements DetailView {
     this.retainDraws();
     const orderOnly = spec.time.kind === "order";
     if (orderOnly && this.xscale === "time") this.xscale = "order";
+    this.focus = null;
     this.legendEl?.remove();
     this.legendEl = buildLegend(spec.layers, this.theme.accent);
     if (this.legendEl) {
@@ -721,6 +835,7 @@ export class TimelineView implements DetailView {
     }
     this.gutter = this.measureGutter();
     this.placeLegend();
+    this.placeSummary();
     this.shareSizes();
     const plot = this.plot();
     // lanes fill the height (dodging then has room to spread ties); when they do not fit at

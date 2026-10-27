@@ -50,12 +50,30 @@ the tooltip columns (tooltips are left out for layers of more than a million val
 
 ## As a picture
 
-The toolbar's **Save as PNG** button (the arrow into a tray) downloads the plot as it is on
+From Python, without a browser (scripts, tests, CI, a report built at night),
+[`save_image`][anytimeline.Timeline.save_image] draws the plot as the browser would at that
+size and view:
+
+```python
+from anytimeline import View
+
+plot.save_image("checkout-trace.svg")                       # shapes and text, for slides
+plot.save_image("checkout-trace.png", width=1200, scale=2)  # needs anytimeline[png]
+plot.save_image("db.svg", view=View(start, end, lanes=["db"]), theme="dark")
+```
+
+An SVG holds only shapes, lines and text (no clip paths, filters or images), so PowerPoint,
+Keynote and Google Slides import it as shapes you can recolour and edit. A PNG needs the
+optional `resvg-py`: `pip install 'anytimeline[png]'`. `plot.to_svg()` gives the SVG as
+text. The picture has the lanes, axis, marks, text, markers, annotations, legend, title and
+the selection; folded lanes are folded as the plot starts, and a story's text goes beside
+its marks rather than in boxes on stems.
+
+In the notebook, the toolbar's **Save as PNG** button (the arrow into a tray) downloads the plot as it is on
 screen: the title, the lanes and marks in view, and the legend, at twice the screen's
 resolution, named after the title. Zoom and fold first to show what matters.
 
-From Python, [`save_png`][anytimeline.Timeline.save_png] does the same into a file of your
-choice, also where a notebook blocks downloads (VS Code):
+[`save_png`][anytimeline.Timeline.save_png] does the same into a file of your choice, also where a notebook blocks downloads (VS Code):
 
 ```python
 plot.save_png("checkout-trace.png")
