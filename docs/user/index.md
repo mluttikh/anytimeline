@@ -2,7 +2,7 @@
 
 Interactive timeline charts for Jupyter and marimo notebooks, drawn on the GPU: **event
 charts** (one mark per event at the moment it happened, on lanes, so you see what happened,
-when, and in what order) and **Gantt charts** and schedules (bars from a start to an end). From a hundred events to a million; from
+when, and in what order) and **Gantt charts** and schedules (bars from a start to an end). From a hundred events to ten million; from
 nanoseconds to centuries.
 
 The plots on these pages are live: hover over an event, drag to move through time, and click
@@ -54,8 +54,9 @@ print(plot._embed_html())
   ([Gantt chart](how-to/gantt.md), [schedules](how-to/intervals.md)).
 - **Selection** by click or box, given back as rows of your table
   ([tutorial](tutorials/select.md)).
-- **Many events**: a million events pan smoothly on a laptop's graphics chip, and the plot
-  still works without one ([how to](how-to/large.md)).
+- **Many events**: ten million events, samples or bars: the plot sends counts per bin
+  zoomed out and the events themselves where you zoom in, so it opens at once and pans
+  smoothly ([how to](how-to/large.md)).
 
 It reads Polars, pandas, PyArrow and DuckDB tables, and works in JupyterLab, VS Code and
 marimo.

@@ -373,7 +373,7 @@ export function drawStems(view: TimelineView, ctx: CanvasRenderingContext2D, plo
       const onLine: number[] = [];
       if (levels > 0) {
         // boxes may reach past the view (laid out wider than it), not past the data
-        const ext = view.xscale === "order" ? [-0.5, (view.seqTimes?.length ?? 1) - 0.5] : view.spec!.time.extent;
+        const ext = view.xscale === "order" ? [-0.5, (view.seq?.count ?? 1) - 0.5] : view.spec!.time.extent;
         const left = (Math.max(a, ext[0]) - cam.left) * cam.scale;
         const right = Math.max(left, (Math.min(b, ext[1]) - cam.left) * cam.scale);
         const space = { levels, gap, inset: 12, left, right, shape };
@@ -579,7 +579,7 @@ export function valueView(view: TimelineView, plot = view.plot()): ValueView {
     laneH: view.laneH,
     slot: view.slot,
     sequence: view.xscale === "order",
-    seqTimes: view.seqTimes,
+    seq: view.seq,
   };
 }
 
@@ -644,8 +644,8 @@ export function drawMarkers(view: TimelineView, ctx: CanvasRenderingContext2D, p
   for (const m of markers) {
     let at = m.x;
     if (view.xscale === "order") {
-      if (!view.seqTimes?.length) continue;
-      at = lowerBound(view.seqTimes, m.x) - 0.5;
+      if (!view.seq?.count) continue;
+      at = view.seq.lower(m.x) - 0.5;
     }
     const x = Math.round(plot.x + view.camera.toPx(at)) + 0.5;
     if (x < plot.x - 1 || x > plot.x + plot.w + 1) continue;
@@ -738,6 +738,40 @@ export function drawHover(view: TimelineView, ctx: CanvasRenderingContext2D, plo
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(x, y, l.data.size[h.index] / 2 + 3, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** The selected events of layers sent as levels, over their bins (rings in the selection
+ * colour); once their events are drawn, those show the selection. */
+export function drawMarked(view: TimelineView, ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }, laneTop: number, l0: number, l1: number): void {
+  const order = view.xscale === "order";
+  const r = Math.max(2.5, Math.min(5, view.laneH * 0.22));
+  let started = false;
+  for (const l of view.layers) {
+    const at = view.marked[l.data.spec.name];
+    if (!at?.length || !l.detail?.shown) continue;
+    if (!started) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(plot.x, plot.y, plot.w, plot.h);
+      ctx.clip();
+      ctx.strokeStyle = view.theme.select;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      started = true;
+    }
+    for (let i = 0; i + 2 < at.length; i += 3) {
+      const row = view.slot[at[i + 2]];
+      if (row < l0 || row > l1 || row < 0) continue;
+      const x = plot.x + ((order ? at[i + 1] : at[i]) - view.camera.left) * view.camera.scale;
+      if (x < plot.x - r || x > plot.x + plot.w + r) continue;
+      const y = laneTop + (row + 0.5) * view.laneH;
+      ctx.moveTo(x + r, y);
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+    }
+  }
+  if (!started) return;
   ctx.stroke();
   ctx.restore();
 }

@@ -4,6 +4,7 @@
 
 import { BAR_MILESTONE, BAR_OPEN, barBox, type BarLayerDraw, FLAG_SELECTED } from "./renderers/renderer";
 import { decodeStrings, fillSolid, lowerBound, upperBound, view } from "./scene";
+import type { BarDetail } from "./levels";
 import type { DataSource, IntervalsLayerSpec } from "./types";
 
 export interface BarsData {
@@ -29,7 +30,19 @@ export interface BarsData {
   /** Per lane, the longest bar: how far left of the view a bar in view may start. */
   maxDur: Float64Array;
   maxDurRank: Float64Array;
+  /** A level's or a window's bars (a layer sent as levels): the index of each among the
+   * layer's (MERGED: short bars merged), how many each holds, and how opaque each is. */
+  index: Uint32Array | null;
+  n: Uint32Array | null;
+  alpha: Uint8Array | null;
 }
+
+/** Bar kinds (Python's): a milestone, open (no end), short bars merged (a level's). */
+export const KIND_MILESTONE = 1;
+export const KIND_OPEN = 2;
+export const KIND_MERGED = 3;
+/** The index of short bars merged. */
+export const MERGED = 0xffffffff;
 
 /** What the view tells the bars about the frame. */
 export interface BarView {
@@ -94,11 +107,25 @@ export function decodeBars(spec: IntervalsLayerSpec, source: DataSource): BarsDa
     critical: spec.critical?.count ? (view(spec.critical.segments, source) as Uint32Array) : null,
     maxDur,
     maxDurRank,
+    index: spec.index ? (view(spec.index, source) as Uint32Array) : null,
+    n: spec.n ? (view(spec.n, source) as Uint32Array) : null,
+    alpha: spec.alpha ? (view(spec.alpha, source) as Uint8Array) : null,
   };
+}
+
+/** Each bar's opacity times its own (merged bars: by how much of them their bars cover). */
+function applyAlpha(d: BarsData): void {
+  const a = d.alpha;
+  if (!a) return;
+  for (let i = 0; i < d.count; i++) d.color[4 * i + 3] = Math.round((d.color[4 * i + 3] * a[i]) / 255);
 }
 
 export class BarLayer {
   readonly draw: BarLayerDraw;
+  /** A layer sent as levels: these bars are a level's or a window's. */
+  detail: BarDetail | null = null;
+  /** Real bars' local indices, by their index among the layer's (to place selected bars). */
+  private real: { local: Uint32Array; index: Uint32Array } | null = null;
 
   constructor(
     readonly data: BarsData,
@@ -106,6 +133,7 @@ export class BarLayer {
   ) {
     const n = data.count;
     if (data.themeColor) fillSolid(data.color, accent, data.spec.color.alpha);
+    applyAlpha(data);
     const geom = new Float32Array(n * 4);
     const flags = new Uint8Array(n * 4);
     for (let i = 0; i < n; i++) {
@@ -114,7 +142,7 @@ export class BarLayer {
       geom[4 * i + 2] = data.rows[i];
       geom[4 * i + 3] = data.progress ? data.progress[i] : -1;
       const fades = data.kind[i] === 2 && data.spec.fade_open !== false;
-      flags[4 * i] = (data.kind[i] === 1 ? BAR_MILESTONE : 0) | (fades ? BAR_OPEN : 0);
+      flags[4 * i] = (data.kind[i] === KIND_MILESTONE ? BAR_MILESTONE : 0) | (fades ? BAR_OPEN : 0);
     }
     this.draw = {
       key: data.spec.start.id + data.spec.name,
@@ -177,16 +205,38 @@ export class BarLayer {
     for (const a of [this.draw.x, this.draw.geom, this.draw.color, this.draw.flags]) a.version++;
   }
 
+  /** Mark the bars selected (`marks`: indices among the layer's bars). */
   applyMarks(marks: Int32Array | undefined): void {
     const f = this.draw.flags.data;
     for (let i = 0; i < this.data.count; i++) f[4 * i] &= ~FLAG_SELECTED;
-    if (marks) for (const i of marks) if (i >= 0 && i < this.data.count) f[4 * i] |= FLAG_SELECTED;
+    const index = this.data.index;
+    if (marks && index) {
+      // some of the layer's bars: those of them selected (real bars are in the layer's order)
+      if (!this.real) {
+        const real: number[] = [];
+        for (let i = 0; i < index.length; i++) if (index[i] !== MERGED) real.push(i);
+        this.real = { local: Uint32Array.from(real), index: Uint32Array.from(real, (i) => index[i]) };
+      }
+      const { local: real, index: at } = this.real;
+      for (const m of marks) {
+        const j = lowerBound(at, m);
+        if (j < at.length && at[j] === m) f[4 * real[j]] |= FLAG_SELECTED;
+      }
+    } else if (marks) for (const i of marks) if (i >= 0 && i < this.data.count) f[4 * i] |= FLAG_SELECTED;
     this.draw.flags.version++;
+  }
+
+  /** Bar i's index among the layer's (as Python knows it); -1 for merged bars. */
+  globalIndex(i: number): number {
+    const index = this.data.index;
+    if (!index) return i;
+    return index[i] === MERGED ? -1 : index[i];
   }
 
   recolor(accent: string): void {
     if (!this.data.themeColor) return;
     fillSolid(this.data.color, accent, this.data.spec.color.alpha);
+    applyAlpha(this.data);
     this.draw.color.version++;
   }
 
@@ -214,7 +264,7 @@ export class BarLayer {
     const x0 = v.plot.x + (lo[i] - v.left) * v.scale;
     const x1 = v.plot.x + (hi[i] - v.left) * v.scale;
     const { cy, h } = barBox(v.slot[this.data.lane[i]], this.data.row[i], this.data.rows[i], v.laneTop, v.laneH, this.data.spec.height, this.maxBar(v.maxBar));
-    return { x0, x1: Math.max(x1, x0 + 1), cy, h, milestone: this.data.kind[i] === 1 };
+    return { x0, x1: Math.max(x1, x0 + 1), cy, h, milestone: this.data.kind[i] === KIND_MILESTONE };
   }
 
   /** The bar under a point (the lanes of rows near `row`), or -1. */
@@ -256,7 +306,7 @@ export class BarLayer {
       ctx.fillStyle = muted;
       for (let j = 0; j < this.draw.visibleCount; j++) {
         const i = this.draw.visible[j];
-        if (kind[i] === 2) continue;
+        if (kind[i] === KIND_OPEN || kind[i] === KIND_MERGED) continue;
         const b = this.box(i, v);
         if (text?.[i] && b.milestone) continue; // the milestone's text goes there
         const label = span(end[i] - start[i]);

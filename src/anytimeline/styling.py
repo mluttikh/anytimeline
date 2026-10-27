@@ -223,13 +223,19 @@ def colors(
             pal = list(palette) if palette is not None else TAB10
             mapped = {k: pal[i % len(pal)] for i, k in enumerate(cats)}
         lookup = {k: rgba(c) for k, c in mapped.items()}
-        for i, v in enumerate(values.tolist()):
-            if not missing[i]:
-                out[i] = lookup[v]
+        # each row's category (its index in the legend; missing values after the others)
+        code_of = {k: i for i, k in enumerate(cats)}
+        codes = np.array([code_of.get(v, -1) for v in values.tolist()], dtype=np.int32)
+        codes[missing | (codes < 0)] = len(cats)
+        table = np.array([lookup[k] for k in cats] + [rgba(MISSING_COLOR)], dtype=np.uint8)
+        table[:, 3] = (table[:, 3].astype(np.uint16) * alpha // 255).astype(np.uint8)
         items = [{"label": label(k), "color": hex_of(lookup[k])} for k in cats]
         if missing.any():
             items.append({"label": "missing", "color": MISSING_COLOR})
         legend = {"kind": "categories", "title": title, "items": items}
+        names = [label(k) for k in cats] + ["missing"]
+        extra = {"codes": codes, "palette": table, "names": names}
+        return Encoding(values=table[codes], legend=legend, extra=extra)
     out[:, 3] = (out[:, 3].astype(np.uint16) * alpha // 255).astype(np.uint8)
     return Encoding(values=out, legend=legend)
 

@@ -9,9 +9,19 @@ it (``Timeline._set(..., shown=True)``).
   content id, with dtype and count.
 * The browser asks for buffers it does not have: ``{"type": "need", "ids": [...]}``, and
   Python answers with ``{"type": "put", "id", "chunk", "chunks", "offset", ...}`` messages,
-  each with one binary chunk of at most ``CHUNK_BYTES``.
+  each with one binary chunk of at most ``CHUNK_BYTES``. In marimo a buffer of at least
+  ``FILE_BYTES`` goes as a file instead (a marimo virtual file, binary over HTTP rather than
+  base64 in a message): one ``put`` with its ``url`` and ``file``. The browser fetches it
+  and says ``{"type": "fetched", "file"}``, and Python drops the file; a fetch that fails
+  asks again with ``{"type": "need", "ids", "files": false}``, and the buffers come as
+  messages from then on.
 * ``{"type": "tooltip", "request", "layer", "index"}`` asks for the tooltip columns of one
   event; Python answers ``{"type": "answer", "request", "rows"}``.
+* ``{"type": "window", "request", "layer", "scale", "range", "k"}`` asks for a window of a
+  layer sent as levels: its marks in a range (``k`` null), or its bins of level ``k`` there;
+  Python answers ``{"type": "answer", "request", "spec", "range", ...}``, whose buffers the
+  browser then asks for. A tooltip with ``"bin": {"scale", "lane", "range"}`` asks what a
+  bin holds.
 * ``{"type": "view", "range", "lanes"}`` reports the visible time range and the lanes in
   sight (debounced), for ``plot.view``.
 * ``{"type": "perf", "update"}`` reports the renderer and timings (``plot.dev.perf``); not a
@@ -28,7 +38,9 @@ to views that ask for it.
 
 from __future__ import annotations
 
+import sys
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -39,6 +51,10 @@ if TYPE_CHECKING:
     from anytimeline.plot import Timeline
 
 CHUNK_BYTES = 4 * 1024 * 1024
+FILE_BYTES = 64 * 1024
+"""In marimo, buffers at least this large go as files the browser fetches."""
+FILES_KEPT = 64
+"""Files not fetched yet (a view closed meanwhile) are dropped after this many newer ones."""
 
 _STATIC = Path(__file__).parent / "static"
 
@@ -65,6 +81,7 @@ class TimelineWidget(anywidget.AnyWidget):
     selection = traitlets.Dict().tag(sync=True)
     _pick = traitlets.Dict().tag(sync=True)
     _marks = traitlets.Dict().tag(sync=True)
+    _marked = traitlets.Dict().tag(sync=True)
     _zoom = traitlets.Dict().tag(sync=True)
     _link = traitlets.Dict().tag(sync=True)
 
@@ -74,6 +91,9 @@ class TimelineWidget(anywidget.AnyWidget):
         super().__init__(**state)
         self.observe(self._changed, names=list(state))
         self.on_msg(self._on_msg)
+        # marimo virtual files sent and not fetched yet, by name; False: send no files
+        self._files: OrderedDict[str, Any] = OrderedDict()
+        self._use_files = True
 
     def show(self, name: str, value: Any) -> None:
         """Set a trait to the plot's setting (``Timeline._set``)."""
@@ -92,13 +112,28 @@ class TimelineWidget(anywidget.AnyWidget):
         plot = self._plot
         kind = content.get("type")
         if kind == "need":
+            if content.get("files") is False:
+                self._use_files = False
             for buffer_id in content.get("ids", []):
                 self._send_buffer(str(buffer_id))
+        elif kind == "fetched":
+            self._drop_file(str(content.get("file")))
         elif kind == "tooltip":
             answer: dict[str, Any] = {"type": "answer", "request": content.get("request")}
             try:
-                answer["rows"] = plot._tooltip(str(content.get("layer")), int(content["index"]))
+                if "bin" in content:
+                    asked = {**content["bin"], "layer": content.get("layer")}
+                    answer["rows"] = plot._bin_tooltip(asked)
+                else:
+                    answer["rows"] = plot._tooltip(str(content.get("layer")), int(content["index"]))
             except Exception as err:  # the browser shows what it has; the kernel carries on
+                answer["error"] = str(err)
+            self.send(answer)
+        elif kind == "window":
+            answer = {"type": "answer", "request": content.get("request")}
+            try:
+                answer.update(plot._window(content))
+            except Exception as err:
                 answer["error"] = str(err)
             self.send(answer)
         elif kind == "view":
@@ -113,10 +148,22 @@ class TimelineWidget(anywidget.AnyWidget):
     def _send_buffer(self, buffer_id: str) -> None:
         data = self._plot._buffers.get(buffer_id)
         if data is None:
+            data = self._plot._window_buffers.get(buffer_id)
+        if data is None:
             self.send({"type": "missing", "id": buffer_id})
             return
-        chunks = max(1, -(-len(data) // CHUNK_BYTES))
         t_send = time.time()
+        if self._use_files and len(data) >= FILE_BYTES:
+            sent = _marimo_file(data)
+            if sent is not None:
+                self._files[sent.filename] = sent
+                while len(self._files) > FILES_KEPT:
+                    self._drop_file(next(iter(self._files)))
+                put = {"type": "put", "id": buffer_id, "chunk": 0, "chunks": 1, "offset": 0}
+                put.update(byteLength=len(data), t_send=t_send, url=sent.url, file=sent.filename)
+                self.send(put)
+                return
+        chunks = max(1, -(-len(data) // CHUNK_BYTES))
         for i in range(chunks):
             part = data[i * CHUNK_BYTES : (i + 1) * CHUNK_BYTES]
             self.send(
@@ -132,5 +179,36 @@ class TimelineWidget(anywidget.AnyWidget):
                 buffers=[part],
             )
 
+    def _drop_file(self, name: str) -> None:
+        sent = self._files.pop(name, None)
+        if sent is not None:
+            _remove_marimo_file(sent)
+
     def __repr__(self) -> str:
         return f"TimelineWidget of {self._plot!r}"
+
+
+def _marimo_file(data: bytes) -> Any | None:
+    """``data`` as a marimo virtual file the browser can fetch; None outside marimo, or when
+    marimo cannot serve files here."""
+    if "marimo" not in sys.modules:
+        return None
+    try:
+        from marimo._runtime.context import get_context
+        from marimo._runtime.virtual_file.virtual_file import VirtualFile
+
+        if not get_context().virtual_files_supported:
+            return None
+        sent = VirtualFile.create_and_register(data, "bin")
+    except Exception:  # another marimo version, or no marimo runtime here
+        return None
+    return None if sent.url.startswith("data:") else sent
+
+
+def _remove_marimo_file(sent: Any) -> None:
+    try:
+        from marimo._runtime.context import get_context
+
+        get_context().virtual_file_registry.remove(sent)
+    except Exception:
+        pass

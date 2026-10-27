@@ -1,9 +1,10 @@
 // Picking: the event, bar or sample under the pointer, and its tooltip.
 
+import { KIND_MERGED } from "./bars";
 import { lowerBound, upperBound } from "./scene";
 import { fmtNumber } from "./time";
 import type { EventsLayerSpec, IntervalsLayerSpec, ValuesLayerSpec } from "./types";
-import { div, type Hit, HOVER_PX, STATE_TIP_LANES } from "./common";
+import { div, globalIndex, type Hit, HOVER_PX, STATE_TIP_LANES } from "./common";
 import * as drawing from "./drawing";
 import type { TimelineView } from "./view";
 
@@ -45,6 +46,14 @@ export function pick(view: TimelineView, px: number, py: number): Hit | null {
     }
   });
   if (best) return best;
+  // the bins of layers sent as levels
+  const bv = drawing.barView(view, plot);
+  for (let li = view.layers.length - 1; li >= 0; li--) {
+    const bins = view.layers[li].detail?.shown;
+    if (!bins || !view.layers[li].data.spec.hover) continue;
+    const i = bins.pick(px, py, at, view.laneAt, bv, HOVER_PX);
+    if (i >= 0) return { layer: li, index: i, bin: true };
+  }
   // samples of values layers near the pointer: a line is a small target, a bar (a state
   // filling its lane) a large one, so the line goes first
   const vv = drawing.valueView(view, plot);
@@ -72,8 +81,13 @@ export function specOf(view: TimelineView, h: Hit): EventsLayerSpec | IntervalsL
 }
 
 export function setHovered(view: TimelineView, h: Hit | null): void {
-  const same = h && view.hovered && h.layer === view.hovered.layer && h.index === view.hovered.index && !!h.bar === !!view.hovered.bar && !!h.val === !!view.hovered.val;
-  if (same || (!h && !view.hovered)) return;
+  const o = view.hovered;
+  const same = h && o && h.layer === o.layer && h.index === o.index && !!h.bar === !!o.bar && !!h.val === !!o.val && !!h.bin === !!o.bin;
+  if (same) return;
+  if (!h && !view.hovered) {
+    if (view.tooltipKey) showTooltip(view); // a tooltip left over: hide it
+    return;
+  }
   view.hovered = h;
   view.requestRender();
   showTooltip(view);
@@ -87,7 +101,13 @@ export function showTooltip(view: TimelineView): void {
     view.tooltipKey = "";
     return;
   }
-  const key = `${h.val ? "v" : h.bar ? "b" : "e"}${h.layer}:${h.index}`;
+  const bins = h.bin ? view.layers[h.layer]?.detail?.shown : null;
+  if (h.bin && !bins) {
+    view.tooltip.classList.remove("atl-show");
+    view.tooltipKey = "";
+    return;
+  }
+  const key = bins ? `n${h.layer}:${h.index}:${bins.data.spec.lo.id}` : `${h.val ? "v" : h.bar ? "b" : "e"}${h.layer}:${h.index}`;
   // the same mark again (a states tooltip follows the pointer): what Python sent stays
   const again = key === view.tooltipKey;
   view.tooltipKey = key;
@@ -96,7 +116,33 @@ export function showTooltip(view: TimelineView): void {
   const rows: [string, string, string?][] = [];
   if (view.layers.length + view.bars.length + view.values.length > 1) rows.push(["layer", spec.name]);
   if (h.bar && view.bars[h.layer].data.states) rows.push(...statesAt(view, h));
-  if (h.val) {
+  /** Tooltip columns Python has for this hit, if any. */
+  let extra: (() => Promise<string[][]>) | null = null;
+  if (bins) {
+    const d = bins.data;
+    const i = h.index;
+    const order = d.scale === "order";
+    const time = (x: number) => (order ? (view.seq?.count ? view.seq.time(Math.round(x)) : NaN) : x);
+    const name = spec.name;
+    if (view.spec.lanes.show_names !== false) rows.push([view.spec.lanes.title || "lane", view.spec.lanes.names[d.lane[i]] ?? ""]);
+    if (d.n[i] === 1) {
+      if ((spec as EventsLayerSpec).has_time && !Number.isNaN(time(d.lo[i]))) rows.push(["time", view.axis.formatFull(time(d.lo[i]))]);
+      if (order) rows.push(["order", `#${fmtNumber(d.lo[i] + 1)}`]);
+      const top = d.top[i];
+      if (spec.tooltip.length && view.callbacks.onTooltip) extra = () => view.callbacks.onTooltip!(name, top);
+    } else {
+      rows.push(["events", fmtNumber(d.n[i])]);
+      if ((spec as EventsLayerSpec).has_time && !Number.isNaN(time(d.lo[i]))) {
+        rows.push(["from", view.axis.formatFull(time(d.lo[i]))]);
+        rows.push(["to", view.axis.formatFull(time(d.hi[i]))]);
+      }
+      if (order) rows.push(["order", `#${fmtNumber(d.lo[i] + 1)} – #${fmtNumber(d.hi[i] + 1)}`]);
+      const levels = view.layers[h.layer].detail!.levels;
+      const lane = d.lane[i];
+      const range: [number, number] = [d.lo[i], d.hi[i]];
+      if (levels.categories && view.callbacks.onBinTooltip) extra = () => view.callbacks.onBinTooltip!(name, d.scale, lane, range);
+    }
+  } else if (h.val) {
     const v = view.values[h.layer];
     const d = v.data;
     rows.push([view.spec.lanes.title || "lane", view.spec.lanes.names[v.laneOf(h.index)] ?? ""]);
@@ -104,6 +150,15 @@ export function showTooltip(view: TimelineView): void {
     if (series) rows.push([d.spec.series_title || "series", series]);
     rows.push(["time", view.axis.formatFull(d.time[h.index])]);
     rows.push(["value", fmtNumber(d.value[h.index], 6)]);
+  } else if (h.bar && view.bars[h.layer].data.kind[h.index] === KIND_MERGED) {
+    // short bars merged (a layer sent as levels)
+    const d = view.bars[h.layer].data;
+    const i = h.index;
+    const order = view.xscale === "order";
+    if (!d.states) rows.push([view.spec.lanes.title || "lane", view.spec.lanes.names[d.lane[i]] ?? ""]);
+    rows.push(["bars", fmtNumber(d.n ? d.n[i] : 1)]);
+    rows.push(["from", view.axis.formatFull(d.start[i])], ["to", view.axis.formatFull(d.end[i])]);
+    if (order) rows.push(["order", `#${fmtNumber(d.rankStart[i] + 1)} – #${fmtNumber(d.rankEnd[i] + 1)}`]);
   } else if (h.bar) {
     const d = view.bars[h.layer].data;
     const i = h.index;
@@ -143,9 +198,19 @@ export function showTooltip(view: TimelineView): void {
   };
   render(view.tooltipExtra);
   view.tooltip.classList.add("atl-show");
-  if (!again && spec.tooltip.length && view.callbacks.onTooltip) {
-    view.callbacks.onTooltip(spec.name, h.index).then(render, () => {});
+  if (!bins && !h.bar && !h.val && spec.tooltip.length && view.callbacks.onTooltip) {
+    // an event's index as Python knows it (a window's events are some of the layer's)
+    const index = globalIndex(view.layers[h.layer], h.index);
+    extra = () => view.callbacks.onTooltip!(spec.name, index);
+  } else if (h.val && spec.tooltip.length && view.callbacks.onTooltip) {
+    const index = view.values[h.layer].globalIndex(h.index);
+    extra = () => view.callbacks.onTooltip!(spec.name, index);
+  } else if (h.bar && spec.tooltip.length && view.callbacks.onTooltip) {
+    // a bar's index as Python knows it (a level's bars are some of the layer's)
+    const index = view.bars[h.layer].globalIndex(h.index);
+    if (index >= 0) extra = () => view.callbacks.onTooltip!(spec.name, index);
   }
+  if (!again && extra) extra().then(render, () => {});
 }
 
 /** A states layer's tooltip: the time at the pointer, and every lane's state then (the

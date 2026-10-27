@@ -126,7 +126,7 @@ export class Canvas2DRenderer implements Renderer {
       const i = layer.visible[j];
       const x0 = plot.x + (xs[2 * i] - layer.offset) * layer.scale;
       const x1 = plot.x + (xs[2 * i + 1] - layer.offset) * layer.scale;
-      const { cy, h } = barBox(g[4 * i], g[4 * i + 1], g[4 * i + 2], layer.laneTop, layer.laneHeight, layer.fill, layer.maxBar);
+      const { cy, h } = barBox(g[4 * i], g[4 * i + 1], g[4 * i + 2], layer.laneTop, layer.laneHeight, layer.fill, layer.maxBar, g[4 * i + 3]);
       const flags = fl[4 * i];
       const faded = layer.fade && !(flags & FLAG_SELECTED);
       const a = (col[4 * i + 3] / 255) * (faded ? 0.22 : 1);

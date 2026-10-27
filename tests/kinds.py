@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from anytimeline import Route, Stem, Timeline, gantt, story
+from anytimeline import Route, Stem, Timeline, gantt, levels, story
 from anytimeline.synthetic import (
     incident,
+    instants,
     service_health,
     service_log,
     service_metrics,
@@ -138,4 +139,32 @@ def every_kind() -> dict[str, Timeline]:
     linked_b = Timeline().values(metrics, value="cpu", lane="service")
     linked_a.link(linked_b, align="start")
     plots["linked"] = linked_a
+    # a layer of many events, sent as levels (the threshold lowered for it)
+    from_ = levels.LEVELS_FROM
+    levels.LEVELS_FROM = 200
+    try:
+        plots["events_levels"] = Timeline().events(
+            instants(400, lanes=6), lane="lane", color="kind", importance="value", size="value"
+        )
+        plots["values_levels"] = Timeline().values(
+            many_samples(600), lane="lane", value="cpu", series="series"
+        )
+    finally:
+        levels.LEVELS_FROM = from_
     return plots
+
+
+def many_samples(n: int, *, seed: int = 0) -> dict[str, np.ndarray]:
+    """``n`` samples of a value on 3 lanes, 2 series on the first, with gaps (NaN)."""
+    rng = np.random.default_rng(seed)
+    lane = np.sort(rng.integers(0, 3, n))
+    series = np.where((lane == 0) & (rng.uniform(size=n) < 0.5), "b", "a")
+    value = np.cumsum(rng.normal(0, 1, n))
+    value[rng.integers(0, n, n // 50)] = np.nan
+    return {
+        "time": np.datetime64("2026-10-12T08:00", "ms") + rng.integers(0, 3_600_000, n),
+        "lane": np.array([f"host {i}" for i in lane], dtype=object),
+        "series": series.astype(object),
+        "cpu": value,
+        "id": np.arange(n),
+    }

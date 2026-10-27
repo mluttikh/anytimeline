@@ -102,6 +102,7 @@ void main() {
   float rows = max(1.0, a_geom.z);
   float pitch = u_laneH * u_fill / rows;
   float h = min(pitch * (rows > 1.5 ? 0.85 : 1.0), u_maxBar);
+  if (a_geom.w < -1.5) h *= -a_geom.w - 2.0;
   float cy = u_laneTop + (a_geom.x + 0.5) * u_laneH + (a_geom.y - (rows - 1.0) * 0.5) * pitch;
   int f = int(a_flags.x + 0.5);
   vec2 half_;

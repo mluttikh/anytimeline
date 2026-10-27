@@ -1,7 +1,7 @@
 // anywidget entry (AFM): connects a Python Timeline model to TimelineView.
 
 import { BufferStore, type PutMessage } from "./core/transport";
-import type { RendererPreference, SceneSpec, XScale } from "./core/types";
+import type { RendererPreference, SceneSpec, WindowAnswer, XScale } from "./core/types";
 import { type Gesture, type Tool, TimelineView } from "./core/view";
 
 interface AnyModel {
@@ -42,7 +42,8 @@ function stateFor(model: AnyModel): ModelState {
     perfTimer: undefined,
   };
   model.on("msg:custom", (msg: any, buffers: (DataView | ArrayBuffer)[] = []) => {
-    if (msg?.type === "put") state.store.receive(msg as PutMessage, buffers[0]);
+    if (msg?.type === "put" && msg.url) fetchFile(model, state.store, msg as PutMessage);
+    else if (msg?.type === "put") state.store.receive(msg as PutMessage, buffers[0]);
     else if (msg?.type === "missing") state.store.missing(msg.id);
     else if (msg?.type === "answer") {
       state.pending.get(msg.request)?.(msg);
@@ -75,6 +76,26 @@ function stateFor(model: AnyModel): ModelState {
   model.on("change:_spec", () => state.tooltips.clear());
   states.set(model, state);
   return state;
+}
+
+/** A buffer sent as a file (marimo): fetch it, and say so (Python then drops the file); when
+ * that fails, ask for it again, and for every buffer as messages from now on. */
+function fetchFile(model: AnyModel, store: BufferStore, msg: PutMessage): void {
+  fetch(msg.url!)
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.arrayBuffer();
+    })
+    .then((bytes) => {
+      if (bytes.byteLength !== msg.byteLength) throw new Error("short file");
+      store.receive(msg, bytes);
+      send(model, { type: "fetched", file: msg.file });
+    })
+    .catch((err) => {
+      console.warn("[anytimeline] cannot fetch a buffer file, asking for messages:", err);
+      send(model, { type: "fetched", file: msg.file });
+      send(model, { type: "need", ids: [msg.id], files: false });
+    });
 }
 
 function ask(model: AnyModel, s: ModelState, content: Record<string, unknown>): Promise<any> {
@@ -117,6 +138,16 @@ function marksOf(model: AnyModel): Record<string, Int32Array> {
   return out;
 }
 
+function markedOf(model: AnyModel): Record<string, Float64Array> {
+  const raw = (model.get("_marked") ?? {}) as Record<string, DataView | ArrayBuffer | Uint8Array>;
+  const out: Record<string, Float64Array> = {};
+  for (const [name, v] of Object.entries(raw)) {
+    const bytes = v instanceof ArrayBuffer ? new Uint8Array(v) : new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+    out[name] = new Float64Array(bytes.slice().buffer);
+  }
+  return out;
+}
+
 function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void {
   const s = stateFor(model);
   let pickCount = Number(model.get("_pick")?.n ?? 0);
@@ -145,6 +176,8 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
       }
       return p;
     },
+    onBinTooltip: (layer, scale, lane, range) => ask(model, s, { type: "tooltip", layer, bin: { scale, lane, range } }).then((msg) => msg.rows as string[][]),
+    onWindow: (layer, scale, range, k) => ask(model, s, { type: "window", layer, scale, range, k }) as Promise<WindowAnswer>,
     onPerf: reportPerf,
     onTool: (tool: Tool) => {
       model.set("tool", tool);
@@ -179,6 +212,7 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
   const onTitle = () => view.setTitle(String(model.get("title") ?? ""));
   const onXScale = () => view.setXScale((model.get("xscale") ?? "time") as XScale);
   const onMarks = () => view.setMarks(marksOf(model));
+  const onMarked = () => view.setMarked(markedOf(model));
   const onHover = () => view.setHover(Boolean(model.get("hover")));
   const onLegend = () => view.setLegend(Boolean(model.get("legend")));
   const onMode = () => view.setSelectionMode(String(model.get("selection_mode") ?? "none"));
@@ -207,6 +241,7 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
     ["change:title", onTitle],
     ["change:xscale", onXScale],
     ["change:_marks", onMarks],
+    ["change:_marked", onMarked],
     ["change:hover", onHover],
     ["change:legend", onLegend],
     ["change:selection_mode", onMode],
@@ -228,6 +263,7 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
   onMarkScale();
   onDodge();
   onMarks();
+  onMarked();
   onXScale();
   onLink();
   load();

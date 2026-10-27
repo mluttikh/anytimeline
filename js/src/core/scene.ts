@@ -1,6 +1,6 @@
 // Typed-array views of a layer's buffers, and the per-event arrays the renderers draw.
 
-import type { BufferRef, DataSource, EventsLayerSpec, SceneSpec } from "./types";
+import type { BufferRef, DataSource, EventsLayerSpec } from "./types";
 
 export function view(ref: BufferRef, source: DataSource): ArrayBufferView & ArrayLike<number> {
   const buf = source.get(ref.id);
@@ -34,15 +34,16 @@ export function decodeStrings(ref: BufferRef, source: DataSource): string[] {
   return out;
 }
 
-/** Every buffer id a spec refers to. */
-export function specBufferIds(spec: SceneSpec): string[] {
+/** Every buffer id a spec (or a part of one) refers to; the levels of layers sent as levels
+ * (fetched when they are drawn) only with `levels`. */
+export function specBufferIds(spec: unknown, levels = false): string[] {
   const ids: string[] = [];
   const walk = (v: unknown): void => {
     if (!v || typeof v !== "object") return;
     if (Array.isArray(v)) return v.forEach(walk);
     const o = v as Record<string, unknown>;
     if (typeof o.id === "string" && typeof o.byteLength === "number") ids.push(o.id);
-    else Object.values(o).forEach(walk);
+    else for (const [k, x] of Object.entries(o)) if (levels || k !== "levels") walk(x);
   };
   walk(spec);
   return ids;

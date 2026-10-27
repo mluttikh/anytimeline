@@ -17,7 +17,7 @@ import numpy as np
 from anytimeline import data as tables
 from anytimeline import styling
 from anytimeline.codec import Encoded, encode
-from anytimeline.layers.common import numbers
+from anytimeline.layers.common import lexsort, numbers
 from anytimeline.timebase import TimeBase, Times, times
 from anytimeline.types import ValuesKind, ValuesScale
 
@@ -140,20 +140,42 @@ def build(
 
 
 @dataclass
+class Samples:
+    """A values layer's samples in the browser's order (by lane, series and time), kept for
+    the levels and windows of a layer sent as levels."""
+
+    time: np.ndarray
+    value: np.ndarray
+    run_starts: np.ndarray  # runs (a lane's series): their first samples, and the end
+    run_lane: np.ndarray
+    run_color: np.ndarray
+    series: list[str] | None  # each run's
+    ylim: np.ndarray
+
+
+@dataclass
 class Layout:
-    """A values layer laid out on the plot's time base and lanes."""
+    """A values layer laid out on the plot's time base and lanes: its spec and buffers."""
 
     spec: dict[str, Any]
     buffers: list[Encoded]
-    lo: np.ndarray
+    lo: np.ndarray  # sorted by lane, series and time: the samples' ticks
     hi: np.ndarray
     lanes: np.ndarray
     instants: list[tuple[np.ndarray, np.ndarray]]  # none: samples take no place in the order
     extent: tuple[float, float] | None  # the time range the samples cover
+    samples: Samples
 
 
-def layout(rec: ValuesRecord, base: TimeBase | None, lane_index: Mapping[Any, int]) -> Layout:
-    """Sort the samples by lane, series and time; find each lane's range of values."""
+def layout(
+    rec: ValuesRecord,
+    base: TimeBase | None,
+    lane_index: Mapping[Any, int],
+    *,
+    levelled: bool = False,
+) -> Layout:
+    """Sort the samples by lane, series and time; find each lane's range of values
+    (``levelled``: no samples in the spec; the plot sends levels, and samples in windows)."""
     assert base is not None
     n = len(rec.rows)
     ticks = base.ticks(rec.times)
@@ -163,7 +185,7 @@ def layout(rec: ValuesRecord, base: TimeBase | None, lane_index: Mapping[Any, in
         group = np.array([first[v] for v in rec.series.tolist()], dtype=np.int64)
     else:
         group = np.zeros(n, dtype=np.int64)
-    perm = np.lexsort((np.arange(n), ticks, group, lane))
+    perm = lexsort((ticks, group, lane))
     rec.perm = perm
     t_s, v_s, lane_s, group_s = ticks[perm], rec.values[perm], lane[perm], group[perm]
     # runs: one line each (a lane's series)
@@ -184,12 +206,18 @@ def layout(rec: ValuesRecord, base: TimeBase | None, lane_index: Mapping[Any, in
             ylim[:] = (float(v_s[finite].min()), float(v_s[finite].max()))
         else:
             # per lane; a lane in several groups (its key (group, lane)) has one range in all
-            name_s = np.array([_lane_name(k) for k in rec.lanes[perm].tolist()], dtype=object)
-            for name in dict.fromkeys(name_s[finite].tolist()):
-                mine = name_s == name
-                vals = v_s[finite & mine]
-                for ln in np.unique(lane_s[mine]).tolist():
-                    ylim[ln] = (float(vals.min()), float(vals.max()))
+            bounds = np.searchsorted(lane_s, np.arange(n_lanes + 1), side="left")
+            name_of = {i: _lane_name(k) for k, i in lane_index.items()}
+            by_name: dict[Any, tuple[float, float]] = {}
+            for ln in range(n_lanes):
+                seg = v_s[bounds[ln] : bounds[ln + 1]]
+                seg = seg[np.isfinite(seg)]
+                if len(seg):
+                    lo, hi = by_name.get(name_of[ln], (np.inf, -np.inf))
+                    by_name[name_of[ln]] = (min(lo, float(seg.min())), max(hi, float(seg.max())))
+            for ln in range(n_lanes):
+                if bounds[ln + 1] > bounds[ln] and name_of[ln] in by_name:
+                    ylim[ln] = by_name[name_of[ln]]
         # a range that starts near zero starts at zero (rates, counts, percentages)
         low, high = ylim[:, 0], ylim[:, 1]
         near_zero = (low >= 0) & (low <= (high - low) * 0.5)
@@ -199,35 +227,60 @@ def layout(rec: ValuesRecord, base: TimeBase | None, lane_index: Mapping[Any, in
         if _lane_name(key) in fixed:
             ylim[i] = fixed[_lane_name(key)]
 
+    c = rec.color
+    samples = Samples(
+        time=t_s,
+        value=v_s,
+        run_starts=run_starts,
+        run_lane=lane_s[run_first].astype(np.uint32),
+        run_color=c.values[perm][run_first]
+        if c.values is not None
+        else np.zeros((len(run_first), 4), np.uint8),
+        series=[str(s) for s in rec.series[perm][run_first].tolist()]
+        if rec.series is not None
+        else None,
+        ylim=ylim,
+    )
+    rows = np.zeros(0, dtype=np.int64) if levelled else None
+    spec, buffers = encode_samples(rec, samples, rows)
+    extent = (float(t_s.min()), float(t_s.max())) if n else None
+    return Layout(spec, buffers, t_s, t_s, lane_s, [], extent, samples)
+
+
+def encode_samples(
+    rec: ValuesRecord, samples: Samples, rows: np.ndarray | None = None
+) -> tuple[dict[str, Any], list[Encoded]]:
+    """The spec and buffers of the layer's samples, or of some of them (``rows``: indices into
+    ``samples``, in order: a level's or a window's, with ``index``, each one's index)."""
     buffers: list[Encoded] = []
 
     def put(enc: Encoded) -> dict[str, Any]:
         buffers.append(enc)
         return enc.descriptor
 
+    s = samples
+    if rows is None:
+        t, v, starts = s.time, s.value, s.run_starts
+    else:
+        t, v = s.time[rows], s.value[rows]
+        run_of = np.searchsorted(s.run_starts, rows, side="right") - 1
+        starts = np.searchsorted(run_of, np.arange(len(s.run_lane) + 1), side="left")
     c = rec.color
-    run_color = (
-        c.values[perm][run_first]
-        if c.values is not None
-        else np.zeros((len(run_first), 4), np.uint8)
-    )
     spec: dict[str, Any] = {
         "type": "values",
         "name": rec.name,
-        "count": n,
-        "time": put(encode(t_s, "float64")),
-        "value": put(encode(v_s, "float32")),
+        "count": len(t),
+        "time": put(encode(t, "float64")),
+        "value": put(encode(v, "float32")),
         "runs": {
-            "starts": put(encode(run_starts, "uint32")),
-            "lane": put(encode(lane_s[run_first].astype(np.uint32), "uint32")),
-            "color": put(encode(run_color, "uint8", components=4)),
-            "count": len(run_first),
+            "starts": put(encode(starts, "uint32")),
+            "lane": put(encode(s.run_lane, "uint32")),
+            "color": put(encode(s.run_color, "uint8", components=4)),
+            "count": len(s.run_lane),
         },
-        "series": [str(s) for s in rec.series[perm][run_first].tolist()]
-        if rec.series is not None
-        else None,
+        "series": s.series,
         "series_title": rec.series_title,
-        "ylim": put(encode(ylim, "float64", components=2)),
+        "ylim": put(encode(s.ylim, "float64", components=2)),
         "kind": rec.kind,
         "width": rec.width,
         "hover": rec.hover,
@@ -236,8 +289,53 @@ def layout(rec: ValuesRecord, base: TimeBase | None, lane_index: Mapping[Any, in
         "color": {"solid": c.value, "alpha": c.extra.get("alpha", 255), "legend": c.legend},
         "tooltip": list(rec.tooltip),
     }
-    extent = (float(t_s.min()), float(t_s.max())) if n else None
-    return Layout(spec, buffers, t_s, t_s, lane_s, [], extent)
+    if rows is not None and len(rows):
+        spec["index"] = put(encode(rows, "uint32"))
+    return spec, buffers
+
+
+def m4(samples: Samples, rows: np.ndarray, grid: Any, k: int) -> np.ndarray:
+    """Of the samples ``rows`` (in order), those that draw them per bin of level ``k`` as the
+    browser draws a pixel column: each run's first, lowest, highest and last value in each bin,
+    and its first gap (NaN) there; in order."""
+    if not len(rows):
+        return rows
+    t, v = samples.time[rows], samples.value[rows].astype(np.float64)
+    run = np.searchsorted(samples.run_starts, rows, side="right") - 1
+    j = np.floor((t - grid.x0) / grid.width(k)).astype(np.int64)
+    n = len(rows)
+    brk = np.empty(n, dtype=bool)
+    brk[0] = True
+    brk[1:] = (j[1:] != j[:-1]) | (run[1:] != run[:-1])
+    starts = np.flatnonzero(brk)
+    ends = np.append(starts[1:], n)
+    seg = np.repeat(np.arange(len(starts)), ends - starts)
+    idx = np.arange(n)
+    nan = np.isnan(v)
+    low = np.where(nan, np.inf, v)
+    high = np.where(nan, -np.inf, v)
+    lowest = np.minimum.reduceat(low, starts)
+    highest = np.maximum.reduceat(high, starts)
+    at_low = np.minimum.reduceat(np.where(low == lowest[seg], idx, n), starts)
+    at_high = np.minimum.reduceat(np.where(high == highest[seg], idx, n), starts)
+    at_gap = np.minimum.reduceat(np.where(nan, idx, n), starts)
+    kept = np.concatenate([starts, ends - 1, at_low, at_high, at_gap])
+    return rows[np.unique(kept[kept < n])]
+
+
+def window_rows(samples: Samples, a: float, b: float) -> np.ndarray:
+    """The samples from ``a`` to ``b``, and each run's one before and one after (its line goes
+    on to them), in order."""
+    parts = []
+    starts = samples.run_starts
+    for r in range(len(starts) - 1):
+        lo, hi = int(starts[r]), int(starts[r + 1])
+        seg = samples.time[lo:hi]
+        i0 = max(0, int(np.searchsorted(seg, a, "left")) - 1)
+        i1 = min(hi - lo, int(np.searchsorted(seg, b, "right")) + 1)
+        if i1 > i0:
+            parts.append(np.arange(lo + i0, lo + i1))
+    return np.concatenate(parts) if parts else np.zeros(0, dtype=np.int64)
 
 
 def _lane_name(key: Any) -> Any:

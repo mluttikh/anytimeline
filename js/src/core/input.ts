@@ -1,6 +1,6 @@
 // Input: the pointer (pan, zoom and select drags, clicks, the wheel, taps) and keys.
 
-import { type Box, type BoxKind, boxMode, clickMode, DOUBLE_CLICK_MS, type DragMode, MIN_BOX, type SelectMode } from "./common";
+import { type Box, type BoxKind, boxMode, clickMode, DOUBLE_CLICK_MS, type DragMode, globalIndex, MIN_BOX, type SelectMode } from "./common";
 import * as folding from "./folding";
 import * as drawing from "./drawing";
 import * as picking from "./picking";
@@ -168,10 +168,31 @@ export function click(view: TimelineView, p: { x: number; y: number }, e: MouseE
     return;
   }
   const selecting = view.selectionMode !== "none";
-  const hit = selecting ? picking.pick(view, p.x, p.y) : null;
+  const hit = picking.pick(view, p.x, p.y);
+  // a bin of a layer sent as levels: a bin of one event is that event; selecting another
+  // selects the events in it
+  const bins = hit?.bin ? view.layers[hit.layer]?.detail?.shown : null;
   const select = (m: SelectMode) => {
-    const spec = hit ? picking.specOf(view, hit) : undefined;
-    if (hit && spec?.select) view.callbacks.onGesture?.({ kind: "click", layer: spec.name, index: hit.index, mode: m });
+    const spec = hit && selecting ? picking.specOf(view, hit) : undefined;
+    if (!hit || !spec?.select) return;
+    if (bins) {
+      const d = bins.data;
+      const i = hit.index;
+      if (d.n[i] > 1) view.callbacks.onGesture?.({ kind: "box", x: [d.lo[i], d.hi[i]], lanes: [d.lane[i], d.lane[i]], shown: [d.lane[i]], xscale: d.scale, mode: m === "toggle" ? "add" : m, layer: spec.name });
+      else view.callbacks.onGesture?.({ kind: "click", layer: spec.name, index: d.top[i], mode: m });
+      return;
+    }
+    if (hit.bar && view.bars[hit.layer].globalIndex(hit.index) < 0) {
+      // short bars merged: selecting selects the bars in it
+      const b = view.bars[hit.layer];
+      const [lo, hi] = b.ends(view.xscale === "order");
+      const i = hit.index;
+      const lane = b.data.lane[i];
+      view.callbacks.onGesture?.({ kind: "box", x: [lo[i], hi[i]], lanes: [lane, lane], shown: [lane], xscale: view.xscale, mode: m === "toggle" ? "add" : m, layer: spec.name });
+      return;
+    }
+    const index = hit.bar ? view.bars[hit.layer].globalIndex(hit.index) : hit.val ? hit.index : globalIndex(view.layers[hit.layer], hit.index);
+    view.callbacks.onGesture?.({ kind: "click", layer: spec.name, index, mode: m });
   };
   if (view.tool === "zoom" && mode === "zoom") {
     view.pushHistory();
