@@ -20,7 +20,7 @@ from anytimeline import data as tables
 from anytimeline import styling
 from anytimeline import tree as trees
 from anytimeline.codec import Encoded, encode, encode_strings
-from anytimeline.layers.common import numbers, texts
+from anytimeline.layers.common import lexsort, numbers, texts
 from anytimeline.timebase import UNITS, TimeBase, Times, times
 from anytimeline.types import BarOverlap
 
@@ -28,6 +28,7 @@ OVERLAPS = get_args(BarOverlap)
 
 KIND_MILESTONE = 1
 KIND_OPEN = 2
+KIND_MERGED = 3  # short bars merged (a level's)
 
 
 @dataclass
@@ -308,6 +309,46 @@ def _ids_in(value: Any, index: Mapping[Any, int]) -> list[Any]:
 
 
 @dataclass
+class Bars:
+    """An intervals layer's bars in the browser's order (by lane, start and end), kept for the
+    levels and windows of a layer sent as levels."""
+
+    lo: np.ndarray  # start ticks
+    hi: np.ndarray  # end ticks (open bars: the plot's last time)
+    lane: np.ndarray
+    lane_starts: np.ndarray
+    row: np.ndarray  # sub-row, and the number of sub-rows of the bar's lane
+    rows: np.ndarray
+    kind: np.ndarray
+    rgba: np.ndarray | None
+    progress: np.ndarray | None
+    text: list[str] | None
+    states: list[str] | None
+    links: np.ndarray  # (m, 2): pairs of bars
+    critical: np.ndarray | None  # (m, 3): bar, from, to (instants: 2 × bar, + 1 for its end)
+
+
+@dataclass
+class Merged:
+    """Short bars merged into one bar per lane and bin (a level's), as tall as the lane: the
+    extent of its bars in time and in the order, how many it holds, how much of the lane over
+    that extent they fill, and its longest bar (whose colour and state it takes)."""
+
+    lo: np.ndarray
+    hi: np.ndarray
+    rank: np.ndarray  # (g, 2)
+    lane: np.ndarray
+    row: np.ndarray
+    rows: np.ndarray
+    n: np.ndarray
+    cover: np.ndarray  # 0 .. 1
+    longest: np.ndarray  # a bar's index
+
+    def __len__(self) -> int:
+        return len(self.n)
+
+
+@dataclass
 class Layout:
     """An intervals layer laid out on the plot's time base and lanes."""
 
@@ -318,18 +359,25 @@ class Layout:
     lanes: np.ndarray
     instants: list[tuple[np.ndarray, np.ndarray]]  # the starts and the ends, for the order
     following: np.ndarray | None = None  # chained: the next bar of the same lane, or -1
+    bars: Bars | None = None
 
 
 def layout(
-    rec: IntervalsRecord, base: TimeBase | None, lane_index: Mapping[Any, int], last: float
+    rec: IntervalsRecord,
+    base: TimeBase | None,
+    lane_index: Mapping[Any, int],
+    last: float,
+    *,
+    levelled: bool = False,
 ) -> Layout:
-    """Sort the bars by lane, start and end; pack each lane; encode the buffers."""
+    """Sort the bars by lane, start and end; pack each lane; encode the buffers
+    (``levelled``: no bars in the spec; the plot sends levels, and bars in windows)."""
     assert base is not None
     n = len(rec.rows)
     lo = base.ticks(rec.starts)
     hi = np.where(rec.ends.valid, base.ticks(rec.ends), np.maximum(last, lo))
     lane = np.array([lane_index[v] for v in rec.lanes.tolist()], dtype=np.uint32)
-    perm = np.lexsort((np.arange(n), hi, lo, lane))
+    perm = lexsort((hi, lo, lane))
     rec.perm = perm
     lo_s, hi_s, lane_s = lo[perm], hi[perm], lane[perm]
     open_s = ~rec.ends.valid[perm]
@@ -338,65 +386,17 @@ def layout(
     starts = np.searchsorted(lane_s, np.arange(n_lanes + 1), side="left")
     row, rows = _pack(lo_s, hi_s, starts, rec.overlap == "pack")
 
-    buffers: list[Encoded] = []
-
-    def put(enc: Encoded) -> dict[str, Any]:
-        buffers.append(enc)
-        return enc.descriptor
-
     c = rec.color
     inverse = np.empty(n, dtype=np.int64)
     inverse[perm] = np.arange(n)
     links = inverse[rec.links] if len(rec.links) else np.zeros((0, 2), dtype=np.int64)
-    spec: dict[str, Any] = {
-        "type": "intervals",
-        "name": rec.name,
-        "count": n,
-        "start": put(encode(lo_s, "float64")),
-        "end": put(encode(hi_s, "float64")),
-        "lane": put(encode(lane_s, "uint32")),
-        "lane_starts": put(encode(starts.astype(np.uint32), "uint32")),
-        "row": put(encode(row, "float32")),
-        "rows": put(encode(rows, "float32")),
-        "kind": put(encode(kind, "uint8")),
-        "height": rec.height,
-        "overlap": rec.overlap,
-        "hover": rec.hover,
-        "select": rec.select,
-        "dropped": rec.dropped,
-        "color": {
-            "rgba": put(encode(c.values[perm], "uint8", components=4))
-            if c.values is not None
-            else None,
-            "solid": c.value,
-            "alpha": c.extra.get("alpha", 255),
-            "legend": c.legend,
-        },
-        "progress": put(encode(rec.progress[perm], "float32"))
-        if rec.progress is not None
-        else None,
-        "text": put(encode_strings([rec.text[i] for i in perm])) if rec.text else None,
-        "tooltip": list(rec.tooltip),
-        "links": {"pairs": put(encode(links, "uint32", components=2)), "count": len(links)}
-        if len(links)
-        else None,
-        "unit_ns": UNITS.get(base.unit, 1),
-        "durations": rec.durations,
-        "fade_open": rec.fade_open,
-        "states": {
-            "values": put(encode_strings([rec.states[i] for i in perm])),
-            "title": rec.state_title,
-        }
-        if rec.states is not None
-        else None,
-        "critical": None,
-    }
+    critical = None
     if rec.critical and rec.tree is not None and n:
         tree = rec.tree
         # in the tree's order (its lanes may be spread over groups), then as sorted bars
         at = inverse[tree.order]  # tree lane k → its bar
         found = trees.critical_path(lo[tree.order], hi[tree.order], tree.depth, tree.size)
-        crit = (
+        critical = (
             np.column_stack(
                 [
                     at[found[:, 0]],
@@ -407,18 +407,238 @@ def layout(
             if len(found)
             else found
         )
-        spec["critical"] = {
-            "segments": put(encode(crit, "uint32", components=3)),
-            "count": len(crit),
-        }
+    bars = Bars(
+        lo=lo_s,
+        hi=hi_s,
+        lane=lane_s,
+        lane_starts=starts,
+        row=row,
+        rows=rows,
+        kind=kind,
+        rgba=c.values[perm] if c.values is not None else None,
+        progress=rec.progress[perm] if rec.progress is not None else None,
+        text=[rec.text[i] for i in perm] if rec.text else None,
+        states=[rec.states[i] for i in perm] if rec.states is not None else None,
+        links=links,
+        critical=critical,
+    )
+    rows_sent = np.zeros(0, dtype=np.int64) if levelled else None
+    spec, buffers = encode_bars(rec, bars, rows_sent, unit_ns=UNITS.get(base.unit, 1))
     zeros = np.zeros(n)
     if rec.chained:
         # a change takes one place in the order; a bar's end is its lane's next change
         following = np.full(n, -1, dtype=np.int64)
         same = lane_s[1:] == lane_s[:-1]
         following[:-1][same] = np.arange(1, n)[same]
-        return Layout(spec, buffers, lo_s, hi_s, lane_s, [(lo_s, zeros)], following)
-    return Layout(spec, buffers, lo_s, hi_s, lane_s, [(lo_s, zeros), (hi_s, zeros + 1)])
+        return Layout(spec, buffers, lo_s, hi_s, lane_s, [(lo_s, zeros)], following, bars)
+    return Layout(spec, buffers, lo_s, hi_s, lane_s, [(lo_s, zeros), (hi_s, zeros + 1)], bars=bars)
+
+
+def encode_bars(
+    rec: IntervalsRecord,
+    bars: Bars,
+    rows: np.ndarray | None = None,
+    *,
+    unit_ns: int,
+    merged: Merged | None = None,
+    rank: np.ndarray | None = None,
+) -> tuple[dict[str, Any], list[Encoded]]:
+    """The spec and buffers of the layer's bars, or of some of them (``rows``: indices into
+    ``bars``, in order: a level's or a window's) and short ones ``merged``, with each bar's
+    ``index`` (merged ones: 0xFFFFFFFF) and how many bars it holds (``n``), and, with ``rank``
+    (every bar's place in the order), the order of each bar's start and end. Dependencies and
+    the critical path keep the parts between bars sent."""
+    buffers: list[Encoded] = []
+
+    def put(enc: Encoded) -> dict[str, Any]:
+        buffers.append(enc)
+        return enc.descriptor
+
+    b = bars
+    full = rows is None
+    if rows is None:
+        rows = np.arange(len(b.lo))
+    g = merged if merged is not None else _no_merged()
+    m = len(rows)
+    lo = np.concatenate([b.lo[rows], g.lo])
+    hi = np.concatenate([b.hi[rows], g.hi])
+    lane = np.concatenate([b.lane[rows], g.lane]).astype(np.uint32)
+    # merged bars go between the others by lane, start and end
+    order = np.arange(m) if full else np.lexsort((np.arange(len(lo)), hi, lo, lane))
+    lo, hi, lane = lo[order], hi[order], lane[order]
+    real = order < m  # (else merged bar order - m)
+    which = np.where(real, order, 0)
+    mine = rows[which] if len(rows) else which  # each real bar's index among the layer's
+    merged_at = np.where(real, 0, order - m)
+
+    def pick(values: np.ndarray, merged_values: np.ndarray) -> np.ndarray:
+        out = values[mine]
+        if len(g):
+            out[~real] = merged_values[merged_at[~real]]
+        return out
+
+    n_lanes = len(b.lane_starts) - 1
+    starts = np.searchsorted(lane, np.arange(n_lanes + 1), side="left")
+    kind = pick(b.kind, np.full(len(g), KIND_MERGED, np.uint8))
+    c = rec.color
+    rgba = None
+    if b.rgba is not None:
+        rgba = pick(b.rgba, b.rgba[g.longest] if len(g) else np.zeros((0, 4), np.uint8))
+    # (positions in the bars sent of the layer's bars sent; -1: not sent)
+    pos = np.full(len(b.lo), -1, dtype=np.int64)
+    pos[mine[real]] = np.flatnonzero(real)
+    links = b.links
+    if not full and len(links):
+        links = pos[links]
+        links = links[(links >= 0).all(axis=1)]
+    critical = b.critical
+    if not full and critical is not None and len(critical):
+        bar, a, z = pos[critical[:, 0]], pos[critical[:, 1] // 2], pos[critical[:, 2] // 2]
+        keep = (bar >= 0) & (a >= 0) & (z >= 0)
+        critical = np.column_stack([bar, 2 * a + critical[:, 1] % 2, 2 * z + critical[:, 2] % 2])[
+            keep
+        ]
+    spec: dict[str, Any] = {
+        "type": "intervals",
+        "name": rec.name,
+        "count": len(lo),
+        "start": put(encode(lo, "float64")),
+        "end": put(encode(hi, "float64")),
+        "lane": put(encode(lane, "uint32")),
+        "lane_starts": put(encode(starts.astype(np.uint32), "uint32")),
+        "row": put(encode(pick(b.row, g.row), "float32")),
+        "rows": put(encode(pick(b.rows, g.rows), "float32")),
+        "kind": put(encode(kind, "uint8")),
+        "height": rec.height,
+        "overlap": rec.overlap,
+        "hover": rec.hover,
+        "select": rec.select,
+        "dropped": rec.dropped,
+        "color": {
+            "rgba": put(encode(rgba, "uint8", components=4)) if rgba is not None else None,
+            "solid": c.value,
+            "alpha": c.extra.get("alpha", 255),
+            "legend": c.legend,
+        },
+        "progress": put(encode(pick(b.progress, np.full(len(g), -1, np.float32)), "float32"))
+        if b.progress is not None
+        else None,
+        "text": put(encode_strings(_pick_list(b.text, mine, real))) if b.text else None,
+        "tooltip": list(rec.tooltip),
+        "links": {"pairs": put(encode(links, "uint32", components=2)), "count": len(links)}
+        if len(links)
+        else None,
+        "unit_ns": unit_ns,
+        "durations": rec.durations,
+        "fade_open": rec.fade_open,
+        "states": {
+            "values": put(encode_strings(_pick_list(b.states, mine, real, g.longest, merged_at))),
+            "title": rec.state_title,
+        }
+        if b.states is not None
+        else None,
+        "critical": {
+            "segments": put(encode(critical, "uint32", components=3)),
+            "count": len(critical),
+        }
+        if critical is not None and len(critical)
+        else None,
+    }
+    if not full:
+        index = np.where(real, mine, 0xFFFFFFFF)
+        n = np.where(real, 1, g.n[merged_at] if len(g) else 1)
+        spec["index"] = put(encode(index, "uint32"))
+        spec["n"] = put(encode(n, "uint32"))
+        if len(g):
+            # a merged bar is as opaque as its bars cover it (at least a little)
+            alpha = np.where(real, 255, np.round(255 * np.clip(g.cover[merged_at], 0.3, 1.0)))
+            spec["alpha"] = put(encode(alpha.astype(np.uint8), "uint8"))
+        if rank is not None:
+            r = rank[mine]
+            if len(g):
+                r[~real] = g.rank[merged_at[~real]]
+            wide = len(rank) and float(rank.max()) >= 2**24
+            spec["rank"] = put(encode(r, "float64" if wide else "float32", components=2))
+    return spec, buffers
+
+
+def _pick_list(
+    values: list[str] | None,
+    mine: np.ndarray,
+    real: np.ndarray,
+    longest: np.ndarray | None = None,
+    merged_at: np.ndarray | None = None,
+) -> list[str]:
+    """``values`` of the bars sent (merged ones: their longest bar's, or "")."""
+    assert values is not None
+    out = []
+    for i, r in zip(mine.tolist(), real.tolist(), strict=True):
+        out.append(values[i] if r else "")
+    if longest is not None and merged_at is not None and len(longest):
+        for j in np.flatnonzero(~real).tolist():
+            out[j] = values[int(longest[merged_at[j]])]
+    return out
+
+
+def _no_merged() -> Merged:
+    z = np.zeros(0)
+    i = np.zeros(0, dtype=np.int64)
+    return Merged(z, z, np.zeros((0, 2)), i, z, z, i, z, i)
+
+
+def merge(bars: Bars, rank: np.ndarray, x_lo: np.ndarray, x_hi: np.ndarray,
+          rows: np.ndarray, width: float, x0: float) -> tuple[np.ndarray, Merged]:  # fmt: skip
+    """A level of the bars ``rows`` (in order; on a scale: their ends ``x_lo``, ``x_hi``;
+    bins of ``width`` from ``x0``): those at least ``width`` long, and the others merged per
+    lane and bin of their start."""
+    dur = x_hi[rows] - x_lo[rows]
+    long = rows[dur >= width]
+    members = rows[dur < width]
+    if not len(members):
+        return long, _no_merged()
+    j = np.floor((x_lo[members] - x0) / width).astype(np.int64)
+    lane = bars.lane[members]
+    brk = np.ones(len(members), dtype=bool)
+    brk[1:] = (lane[1:] != lane[:-1]) | (j[1:] != j[:-1])
+    at = np.flatnonzero(brk)
+    d = x_hi[members] - x_lo[members]
+    seg = np.cumsum(brk) - 1
+    longest_d = np.maximum.reduceat(d, at)
+    first = np.minimum.reduceat(np.where(d == longest_d[seg], np.arange(len(d)), len(d)), at)
+    xa = np.minimum.reduceat(x_lo[members], at)
+    xb = np.maximum.reduceat(x_hi[members], at)
+    span = (xb - xa) * bars.rows[members][at]  # (all of the lane's sub-rows)
+    total = np.add.reduceat(d, at)
+    cover = np.where(span > 0, np.minimum(total / np.where(span > 0, span, 1), 1.0), 1.0)
+    return long, Merged(
+        lo=np.minimum.reduceat(bars.lo[members], at),
+        hi=np.maximum.reduceat(bars.hi[members], at),
+        rank=np.column_stack(
+            [np.minimum.reduceat(rank[members, 0], at), np.maximum.reduceat(rank[members, 1], at)]
+        ),
+        lane=lane[at],
+        row=np.zeros(len(at), dtype=np.float32),
+        rows=np.ones(len(at), dtype=np.float32),
+        n=np.diff(np.append(at, len(members))),
+        cover=cover,
+        longest=members[first],
+    )
+
+
+def window_rows(x_lo: np.ndarray, x_hi: np.ndarray, lane_starts: np.ndarray,
+                a: float, b: float) -> np.ndarray:  # fmt: skip
+    """The bars that reach into ``a`` .. ``b`` (on a scale: their ends), in order."""
+    parts = []
+    for i0, i1 in zip(lane_starts[:-1].tolist(), lane_starts[1:].tolist(), strict=True):
+        if i1 <= i0:
+            continue
+        longest = float((x_hi[i0:i1] - x_lo[i0:i1]).max())
+        j0 = i0 + int(np.searchsorted(x_lo[i0:i1], a - longest, "left"))
+        j1 = i0 + int(np.searchsorted(x_lo[i0:i1], b, "right"))
+        if j1 > j0:
+            idx = np.arange(j0, j1)
+            parts.append(idx[x_hi[idx] >= a])
+    return np.concatenate(parts) if parts else np.zeros(0, dtype=np.int64)
 
 
 def _pack(

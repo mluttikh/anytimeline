@@ -167,7 +167,13 @@ def is_missing(values: np.ndarray) -> np.ndarray:
     if values.dtype.kind in "mM":
         return np.isnat(values)
     if values.dtype.kind == "O":
-        return np.array(
-            [v is None or (isinstance(v, float) and v != v) for v in values], dtype=bool
-        )
+        try:
+            # None, and what is not equal to itself (NaN, NaT): compared in numpy's loop
+            same = np.asarray(np.equal(values, values), dtype=bool)
+            none = np.asarray(values == None, dtype=bool)  # noqa: E711 (per element)
+            return none | ~same
+        except (TypeError, ValueError):  # values that do not compare (pd.NA, arrays)
+            return np.array(
+                [v is None or (isinstance(v, float) and v != v) for v in values], dtype=bool
+            )
     return np.zeros(values.shape, dtype=bool)

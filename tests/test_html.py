@@ -118,4 +118,4 @@ def test_every_kind_makes_a_fragment(kind):
     if not plot._layers:
         pytest.skip("no layers")
     data = payload(plot.to_html(full_html=False))
-    assert set(data["buffers"]) == set(plot._buffers)
+    assert set(data["buffers"]) == set(plot._page_data()[1])

@@ -72,6 +72,11 @@ TOOLS = get_args(Tool)
 DISPLAYS = get_args(Display)
 ALIGNS = get_args(Align)
 FONT_SIZES = (8, 24)
+WINDOW_KEEP = 8
+MARKED = 100_000
+"""Of an events layer sent as levels, the browser shows at most this many selected events over
+its bins (all of them once zoomed in to its events)."""
+"""How many windows' buffers a plot keeps for the browser to ask for (layers sent as levels)."""
 """The smallest and largest text size, in pixels."""
 
 _LAYOUT = ("markers", "timezone", "lane_order", "sort", "group_order", "align", "lane_names")
@@ -213,6 +218,9 @@ class Timeline:
     _spec: dict[str, Any] = setting({})
     _pick: dict[str, Any] = setting({})
     _marks: dict[str, bytes] = setting({})
+    _marked: dict[str, bytes] = setting({})
+    """Per events layer sent as levels: where its selected events are (time, order and lane,
+    float64), so that they show over its bins; at most MARKED of them."""
     _zoom: dict[str, Any] = setting({})
     _link: dict[str, Any] = setting({})
     """The group of linked plots: ``{"group": id, "align": "time" | "start"}``, or empty."""
@@ -275,6 +283,12 @@ class Timeline:
         self._laid: dict[str, scene.Layout] = {}
         self._ranks: dict[str, np.ndarray] = {}
         self._buffers: dict[str, bytes] = {}
+        self._scene: scene.Scene | None = None
+        self._page: tuple[dict[str, Any], dict[str, bytes]] | None = None
+        """The spec and buffers of a page of the plot (with layers sent as levels: of its own)."""
+        self._window_buffers: dict[str, bytes] = {}
+        """The buffers of the windows sent last (layers sent as levels)."""
+        self._windows: list[list[str]] = []  # each of those windows' buffer ids, oldest first
         self._base: TimeBase | None = None
         self._view = View()
         """The view set last (``plot.view``)."""
@@ -373,6 +387,7 @@ class Timeline:
         state = {k: v for k, v in self.__dict__.items() if k not in _NOT_COPIED}
         state["_settings"] = {**self._settings, "_link": {}, "_pick": {}}
         state["_view_shown"] = None
+        state["_window_buffers"], state["_windows"], state["_page"] = {}, [], None
         return state
 
     def __setstate__(self, state: dict[str, Any]) -> None:
@@ -462,7 +477,8 @@ class Timeline:
                 (``"curved"``) or a [`Stem`][anytimeline.Stem]; ``None``: beside the marks.
                 A line break (``"{time:%H:%M}\\n{title}"``) gives a box two lines.
             importance: A numeric column; where text would overlap, the more important
-                events keep theirs.
+                events keep theirs. In a layer sent as levels (many events), each bin is
+                shown by its most important event.
             tooltip: Columns shown when hovering an event (its time and lane always are).
             route: A column (or a [`Route`][anytimeline.Route]) whose groups are joined by
                 lines in the order their events happened.
@@ -1005,8 +1021,8 @@ class Timeline:
 
     # ------------------------------------------------------------------ spec
 
-    def _update_spec(self) -> None:
-        made = scene.make(
+    def _make(self, *, levels: bool = True, windows: bool = True) -> scene.Scene:
+        return scene.make(
             self._layers,
             align=self.align,
             timezone=self.timezone,
@@ -1015,11 +1031,20 @@ class Timeline:
             group_order=self.group_order,
             lane_names=self.lane_names,
             markers=self.markers,
+            levels=levels,
+            windows=windows,
         )
+
+    def _update_spec(self) -> None:
+        made = self._make()
+        self._page = None
         self._base, self._laid, self._ranks = made.base, made.laid, made.ranks
+        self._scene = made
         self._buffers = made.buffers
+        self._window_buffers.clear()
         self._tooltip_cache.clear()
         self._marks = self._marks_of(self.selection)
+        self._marked = self._marked_of(self._marks)
         self._spec = made.spec
 
     # ------------------------------------------------------------------ pages
@@ -1100,8 +1125,20 @@ class Timeline:
             parts.append(f"{name}: {len(rec.rows):,} {kind}")
         return f"Timeline({'; '.join(parts) or 'no layers'})"
 
+    def _page_data(self) -> tuple[dict[str, Any], dict[str, bytes]]:
+        """The spec and buffers a page holds: those the widget gets; for a plot with layers
+        sent as levels, every event when they come to at most ``page.FULL_BYTES``, else the
+        levels alone (a page has no Python to send windows)."""
+        if self._scene is None or not self._scene.detail:
+            return self._spec, self._buffers
+        if self._page is None:
+            full = self._scene.full_bytes() <= page.FULL_BYTES
+            made = self._make(levels=False) if full else self._make(windows=False)
+            self._page = (made.spec, made.buffers)
+        return self._page
+
     def _warn_if_large(self) -> None:
-        size = sum(len(b) for b in self._buffers.values())
+        size = sum(len(b) for b in self._page_data()[1].values())
         if size > page.HTML_WARN_BYTES:
             warnings.warn(
                 f"this plot's data is {size / 1e6:.0f} MB, and with display='html' the "
@@ -1201,6 +1238,55 @@ class Timeline:
         data = buffers[0]
         path.write_bytes(bytes(data.tobytes() if hasattr(data, "tobytes") else data))
 
+    # ------------------------------------------------------------------ levels
+
+    def _window(self, content: Mapping[str, Any]) -> dict[str, Any]:
+        """A window of a layer sent as levels (``{"type": "window"}``): its marks in a range,
+        or its bins of a finer level there. Its buffers are kept for the browser to ask for,
+        those of the last WINDOW_KEEP windows."""
+        if self._scene is None:
+            raise ValueError("the plot has no layers")
+        name = str(content.get("layer"))
+        if name not in self._scene.detail:
+            raise ValueError(f"layer {name!r} has no levels")
+        scale = "order" if content.get("scale") == "order" else "time"
+        a, b = (float(v) for v in content["range"])
+        k = content.get("k")
+        answer, buffers = self._scene.window(name, scale, a, b, int(k) if k is not None else None)
+        for enc in buffers:
+            self._window_buffers[enc.id] = enc.data
+        self._windows.append([enc.id for enc in buffers])
+        while len(self._windows) > WINDOW_KEEP:
+            oldest = self._windows.pop(0)
+            kept = {i for ids in self._windows for i in ids}
+            for i in oldest:
+                if i not in kept:
+                    self._window_buffers.pop(i, None)
+        return answer
+
+    def _bin_tooltip(self, content: Mapping[str, Any]) -> list[list[str]]:
+        """What a bin of a layer sent as levels holds (``{"type": "tooltip", "bin"}``): its
+        marks per colour category, the most first."""
+        if self._scene is None:
+            return []
+        name = str(content.get("layer"))
+        d = self._scene.detail.get(name)
+        if not isinstance(d, scene.Detail) or d.look.codes is None:
+            return []
+        scale = "order" if content.get("scale") == "order" else "time"
+        lane = int(content["lane"])
+        a, b = (float(v) for v in content["range"])
+        x = d.x[scale]
+        marks = d.layout.marks
+        i0 = int(np.searchsorted(marks.lane, lane, "left"))
+        i1 = int(np.searchsorted(marks.lane, lane, "right"))
+        j0 = i0 + int(np.searchsorted(x[i0:i1], a, "left"))
+        j1 = i0 + int(np.searchsorted(x[i0:i1], b, "right"))
+        counts = np.bincount(d.look.codes[j0:j1], minlength=d.look.n_codes)
+        names = d.record.color.extra["names"]
+        rows = [[names[c], f"{int(counts[c]):,}"] for c in np.argsort(-counts, kind="stable")]
+        return [r for r in rows if r[1] != "0"][:8]
+
     # ------------------------------------------------------------------ tooltips
 
     def _tooltip(self, layer: str, index: int) -> list[list[str]]:
@@ -1262,6 +1348,7 @@ class Timeline:
     @observes("selection")
     def _selection_changed(self, change: dict[str, Any]) -> None:
         self._marks = self._marks_of(change["new"])
+        self._marked = self._marked_of(self._marks)
 
     def _marks_of(self, selection: Mapping[str, list[int]]) -> dict[str, bytes]:
         """Per layer, the browser's indices of the selected rows, as int32 bytes."""
@@ -1281,6 +1368,20 @@ class Timeline:
             inverse[rec.perm] = np.arange(len(rec.perm))
             marks[name] = np.sort(inverse[pos]).astype("<i4").tobytes()
         return marks
+
+    def _marked_of(self, marks: Mapping[str, bytes]) -> dict[str, bytes]:
+        """Per events layer sent as levels, where its selected events are (``_marked``)."""
+        out: dict[str, bytes] = {}
+        if self._scene is None:
+            return out
+        for name, d in self._scene.detail.items():
+            if not isinstance(d, scene.Detail) or name not in marks:
+                continue
+            index = np.frombuffer(marks[name], dtype="<i4")[:MARKED]
+            m = d.layout.marks
+            at = np.column_stack([m.primary[index], d.x["order"][index], m.lane[index]])
+            out[name] = at.astype("<f8").tobytes()
+        return out
 
     @observes("_pick")
     def _on_pick(self, change: dict[str, Any]) -> None:
@@ -1326,8 +1427,11 @@ class Timeline:
             shown = pick.get("shown")  # with folded lanes: the lanes in the box that show
             lanes = shown if shown is not None else tuple(sorted(int(v) for v in pick["lanes"]))
             by_rank = pick.get("xscale") == "order"
+            only = pick.get("layer")  # a bin of a layer sent as levels: that layer's events
             out: dict[str, set[int]] = {}
             for name, rec in self._layers.items():
+                if only is not None and name != only:
+                    continue
                 rows = common.in_box(
                     rec,
                     self._laid[name],

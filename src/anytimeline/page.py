@@ -30,6 +30,9 @@ values (events × columns)."""
 HTML_WARN_BYTES = 20_000_000
 """A plot shown as HTML (``display="html"``) whose data is larger than this warns: the
 notebook file holds it."""
+FULL_BYTES = 20_000_000
+"""A page of a plot with layers sent as levels holds every event when they come to at most
+this many bytes; else only the levels (zoomed in, it shows their finest bins)."""
 
 _STATIC = Path(__file__).parent / "static"
 
@@ -116,9 +119,10 @@ def embed(plot: Timeline) -> str:
 def data(plot: Timeline) -> str:
     """The plot's spec, data and settings as JSON that is safe inside a <script>."""
     zoom = plot._zoom.get("range")
+    spec, buffers = plot._page_data()
     payload = {
-        "spec": plot._spec,
-        "buffers": {i: base64.b64encode(b).decode("ascii") for i, b in plot._buffers.items()},
+        "spec": spec,
+        "buffers": {i: base64.b64encode(b).decode("ascii") for i, b in buffers.items()},
         "height": plot.height,
         "renderer": plot.renderer,
         "title": plot.title,
@@ -132,6 +136,7 @@ def data(plot: Timeline) -> str:
         "zoom": zoom,
         "lanes": plot._zoom.get("lanes"),
         "marks": {k: base64.b64encode(v).decode("ascii") for k, v in plot._marks.items()},
+        "marked": {k: base64.b64encode(v).decode("ascii") for k, v in plot._marked.items()},
         "tooltips": tooltip_tables(plot),
         "link": plot._link or None,
     }

@@ -1,13 +1,15 @@
 // What the view's modules share: what is under the pointer, boxes, layers and the theme,
 // sizes, and small helpers.
 
+import type { Detail } from "./levels";
 import type { MarkLayerDraw } from "./renderers/renderer";
 import { type EventsData, parseHex } from "./scene";
 import type { SceneSpec, XScale } from "./types";
 
-/** What is under the pointer: an event, a bar (`bar`) or a sample of a values layer (`val`);
+/** What is under the pointer: an event, a bar (`bar`), a sample of a values layer (`val`) or
+ * a bin of an events layer sent as levels (`bin`: `index` is the bin's in the level drawn);
  * `layer` indexes the view's events layers, bars or values accordingly. */
-export type Hit = { layer: number; index: number; bar?: boolean; val?: boolean };
+export type Hit = { layer: number; index: number; bar?: boolean; val?: boolean; bin?: boolean };
 
 export const PAD_RIGHT = 10;
 export const PAD_BOTTOM = 8;
@@ -28,7 +30,7 @@ export const GAP_PX = 28;
 
 export type Gesture =
   | { kind: "click"; layer: string; index: number; mode: SelectMode }
-  | { kind: "box"; x: [number, number]; lanes: [number, number]; shown?: number[]; xscale: XScale; mode: SelectMode }
+  | { kind: "box"; x: [number, number]; lanes: [number, number]; shown?: number[]; xscale: XScale; mode: SelectMode; layer?: string }
   | { kind: "clear" };
 export type SelectMode = "replace" | "add" | "remove" | "toggle";
 
@@ -45,7 +47,12 @@ export interface Box {
 }
 
 export interface Layer {
+  /** The events: all of the layer's, or a window's (a layer sent as levels). */
   data: EventsData;
+  /** A layer sent as levels: its levels and windows. */
+  detail?: Detail;
+  /** A window's events: each one's index among the layer's (null: the events are all). */
+  index?: Uint32Array | null;
   draw: MarkLayerDraw;
   /** Screen x per event (CSS px, plot-relative) of the last cull. */
   xs: Float64Array;
@@ -143,6 +150,13 @@ export function findGaps(times: Float64Array | null): { at: number; span: number
   return out;
 }
 
+/** Gaps Python found (plots with layers sent as levels): rows of rank and span. */
+export function gapsOf(rows: Float64Array): { at: number; span: number }[] {
+  const out: { at: number; span: number }[] = [];
+  for (let i = 0; i + 1 < rows.length; i += 2) out.push({ at: rows[i], span: rows[i + 1] });
+  return out;
+}
+
 export function lowerBoundBy(a: { at: number }[], x: number): number {
   let lo = 0;
   let hi = a.length;
@@ -165,6 +179,12 @@ export function rowsOf(lane: Uint32Array, slot: Int32Array): Float32Array {
 export function treeKey(spec: SceneSpec): string {
   const t = spec.lanes.tree;
   return t ? `${spec.lanes.names.length}:${t.depth.length}:${spec.lanes.names.slice(0, 50).join("\u0001")}` : "";
+}
+
+/** Event i of a layer as Python knows it: its index among the layer's events (a window's
+ * events are some of them). */
+export function globalIndex(l: Layer, i: number): number {
+  return l.index ? l.index[i] : i;
 }
 
 /** Whether an events layer puts its text in boxes on stems (a story timeline). */

@@ -95,3 +95,19 @@ def in_box(
         in_lanes = np.isin(lay.lanes, np.asarray(lanes, dtype=np.int64))
     inside = np.flatnonzero((hi >= x[0]) & (lo <= x[1]) & in_lanes)
     return {int(r) for r in rec.rows[rec.perm[inside]]}
+
+
+def lexsort(keys: Sequence[np.ndarray]) -> np.ndarray:
+    """``np.lexsort(keys)``: the order by the last key, then the one before it, ..., ties in
+    all kept in place; faster for many rows (one stable sort per key; whole numbers that fit
+    16 bits, such as lanes, by radix sort; keys of one value skipped)."""
+    n = len(keys[0])
+    perm = np.arange(n)
+    for key in keys:
+        k = np.asarray(key)[perm]
+        if not n or k.min() == k.max():
+            continue
+        if k.dtype.kind in "iub" and k.min() >= 0 and k.max() < 1 << 16:
+            k = k.astype(np.uint16)
+        perm = perm[np.argsort(k, kind="stable")]
+    return perm

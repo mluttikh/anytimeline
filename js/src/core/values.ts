@@ -7,6 +7,8 @@
 // falls between (its time interpolated between theirs).
 
 import { fillSolid, lowerBound, upperBound, view } from "./scene";
+import type { ValueDetail } from "./levels";
+import type { Sequence } from "./sequence";
 import type { DataSource, ValuesLayerSpec } from "./types";
 
 export interface ValuesData {
@@ -33,7 +35,7 @@ export interface ValueView {
   /** The row of each lane; -1 for a hidden (folded) lane. */
   slot: Int32Array;
   sequence: boolean;
-  seqTimes: Float64Array | null;
+  seq: Sequence | null;
 }
 
 export function decodeValues(spec: ValuesLayerSpec, source: DataSource): ValuesData {
@@ -56,12 +58,31 @@ export function decodeValues(spec: ValuesLayerSpec, source: DataSource): ValuesD
 
 export class ValueLayer {
   private seqX: Float64Array | null = null;
-  private seqFor: Float64Array | null = null;
+  private seqFor: Sequence | null = null;
+  private seqVersion = -1;
+  /** A layer sent as levels: its samples are some of the layer's (a level's, a window's). */
+  detail: ValueDetail | null = null;
+  /** The index of each sample among the layer's, or null: they are all there. */
+  index: Uint32Array | null = null;
 
   constructor(
-    readonly data: ValuesData,
+    public data: ValuesData,
     private accent: string,
   ) {}
+
+  /** Draw these samples from now on (a level's or a window's); true when they are others. */
+  show(data: ValuesData, index: Uint32Array): boolean {
+    if (data === this.data) return false;
+    this.data = data;
+    this.index = index;
+    this.seqX = null;
+    return true;
+  }
+
+  /** Sample i's index among the layer's (as Python knows it). */
+  globalIndex(i: number): number {
+    return this.index ? this.index[i] : i;
+  }
 
   recolor(accent: string): void {
     this.accent = accent;
@@ -69,21 +90,15 @@ export class ValueLayer {
 
   /** x of each sample on the current scale: its time, or its place between events. */
   xs(v: ValueView): Float64Array {
-    if (!v.sequence || !v.seqTimes) return this.data.time;
-    if (this.seqFor !== v.seqTimes || !this.seqX) {
-      const seq = v.seqTimes;
+    const seq = v.seq;
+    if (!v.sequence || !seq) return this.data.time;
+    if (this.seqFor !== seq || this.seqVersion !== seq.version || !this.seqX) {
       const t = this.data.time;
       const out = new Float64Array(t.length);
-      const n = seq.length;
-      for (let i = 0; i < t.length; i++) {
-        const j = lowerBound(seq, t[i]);
-        if (j < n && seq[j] === t[i]) out[i] = j;
-        else if (j === 0) out[i] = -0.5;
-        else if (j >= n) out[i] = n - 0.5;
-        else out[i] = j - 1 + (t[i] - seq[j - 1]) / (seq[j] - seq[j - 1]);
-      }
+      for (let i = 0; i < t.length; i++) out[i] = seq.position(t[i]);
       this.seqX = out;
       this.seqFor = seq;
+      this.seqVersion = seq.version;
     }
     return this.seqX;
   }

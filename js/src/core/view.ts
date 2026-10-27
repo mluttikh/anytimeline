@@ -20,11 +20,13 @@ import { type Align, compatible, convert, frameOf, join, leave, type LinkFrame, 
 import { download, fileName, legendPainter } from "./snapshot";
 import type { StemPlaced } from "./stems";
 import { decodeValues, ValueLayer, type ValueView } from "./values";
-import { decodeEvents, type EventsData, fillSolid, lowerBound, specBufferIds, upperBound } from "./scene";
+import { BarDetail, Detail, type DetailView, ValueDetail, type WindowAsk } from "./levels";
+import { decodeEvents, type EventsData, fillSolid, lowerBound, specBufferIds } from "./scene";
+import { Sequence } from "./sequence";
 import { fmtNumber, TimeAxis, UNIT_NS } from "./time";
 import { FONT_SIZES, type Tool, Toolbar, TOOLS } from "./toolbar";
 import type { DataSource, EventsLayerSpec, IntervalsLayerSpec, RendererKind, RendererPreference, SceneSpec, ValuesLayerSpec, XScale } from "./types";
-import { AUTO_LANE, type Box, canvas, div, type DragMode, findGaps, fontFamily, type Gesture, HISTORY, type Hit, isStems, type Layer, MIN_LANE, PAD_BOTTOM, PAD_RIGHT, rowsOf, type Theme, THEME_ATTRIBUTES } from "./common";
+import { AUTO_LANE, type Box, canvas, div, type DragMode, findGaps, fontFamily, gapsOf, type Gesture, HISTORY, type Hit, isStems, type Layer, MIN_LANE, PAD_BOTTOM, PAD_RIGHT, rowsOf, type Theme, THEME_ATTRIBUTES } from "./common";
 import * as folding from "./folding";
 import * as rendering from "./rendering";
 import * as drawing from "./drawing";
@@ -42,6 +44,10 @@ export interface ViewCallbacks {
   onXScale?: (xscale: XScale) => void;
   /** Tooltip columns of one event: [name, value] rows. */
   onTooltip?: (layer: string, index: number) => Promise<string[][]>;
+  /** What a bin of a layer sent as levels holds (rows of category and count). */
+  onBinTooltip?: (layer: string, scale: XScale, lane: number, range: [number, number]) => Promise<string[][]>;
+  /** A window of a layer sent as levels (Python serves them; without, the levels are all). */
+  onWindow?: WindowAsk;
   onPerf?: (update: Record<string, unknown>) => void;
   /** The backend to start with (default "auto"). */
   renderer?: RendererPreference;
@@ -57,7 +63,7 @@ export interface ViewCallbacks {
   onDodge?: (on: boolean) => void;
 }
 
-export class TimelineView {
+export class TimelineView implements DetailView {
   readonly root: HTMLDivElement;
   private readonly header: HTMLDivElement;
   private readonly titleEl: HTMLSpanElement;
@@ -82,7 +88,8 @@ export class TimelineView {
   spec: SceneSpec | null = null;
   axis: TimeAxis | null = null;
   layers: Layer[] = [];
-  seqTimes: Float64Array | null = null;
+  /** The order of every instant (the Order scale), or null. */
+  seq: Sequence | null = null;
   gaps: { at: number; span: number }[] = [];
   readonly camera = new TimeCamera();
   xscale: XScale = "time";
@@ -107,6 +114,8 @@ export class TimelineView {
   private fixedHeight = 0;
   dpr = 1;
   marks: Record<string, Int32Array> = {};
+  /** Per events layer sent as levels: where its selected events are (time, order, lane). */
+  marked: Record<string, Float64Array> = {};
   /** The event or bar under the pointer (`bar`: an index into `bars`, else into `layers`). */
   hovered: Hit | null = null;
   bars: BarLayer[] = [];
@@ -294,7 +303,7 @@ export class TimelineView {
     this.updateToolbar();
   }
 
-  private markScale = 1;
+  markScale = 1;
 
   private scaleMarks(l: Layer): void {
     const size = l.data.size;
@@ -340,6 +349,12 @@ export class TimelineView {
     this.notice.classList.toggle("atl-show", !!text);
   }
 
+  /** Where the selected events of layers sent as levels are (shown over their bins). */
+  setMarked(marked: Record<string, Float64Array>): void {
+    this.marked = marked;
+    this.requestRender();
+  }
+
   /** The selected events per layer, as indices into the layer's (sorted) events. */
   setMarks(marks: Record<string, Int32Array>): void {
     this.marks = marks;
@@ -355,6 +370,19 @@ export class TimelineView {
     const token = ++this.loadToken;
     const t0 = performance.now();
     const ids = specBufferIds(spec);
+    // layers sent as levels: the coarsest level of the scale shown, for a first frame
+    const levelled = spec.layers.filter((ls): ls is EventsLayerSpec => ls.type === "events" && !!ls.levels);
+    const scale: XScale = spec.time.kind === "order" ? "order" : this.xscale;
+    const details = levelled.map((ls) => new Detail(ls, source, this.callbacks.onWindow ?? null));
+    for (const d of details) ids.push(...d.firstIds(scale));
+    const valueDetails = spec.layers
+      .filter((ls): ls is ValuesLayerSpec => ls.type === "values" && !!ls.levels)
+      .map((ls) => new ValueDetail(ls, source, this.callbacks.onWindow ?? null));
+    for (const d of valueDetails) ids.push(...d.firstIds());
+    const barDetails = spec.layers
+      .filter((ls): ls is IntervalsLayerSpec => ls.type === "intervals" && !!ls.levels)
+      .map((ls) => new BarDetail(ls, source, this.callbacks.onWindow ?? null, () => this.theme.accent));
+    for (const d of barDetails) ids.push(...d.firstIds(scale));
     if (ids.some((id) => !source.has(id))) this.setStatus("Loading…");
     await source.ensure(ids);
     if (token !== this.loadToken) return;
@@ -364,22 +392,51 @@ export class TimelineView {
     const oldExtent = this.spec?.time.extent;
     this.spec = spec;
     this.axis = new TimeAxis(spec.time);
-    this.layers = spec.layers.filter((ls): ls is EventsLayerSpec => ls.type === "events").map((ls) => this.makeLayer(decodeEvents(ls, source)));
+    for (const l of this.layers) l.detail?.destroy();
+    for (const v of this.values) v.detail?.destroy();
+    for (const b of this.bars) b.detail?.destroy();
+    this.layers = spec.layers
+      .filter((ls): ls is EventsLayerSpec => ls.type === "events")
+      .map((ls) => {
+        const layer = this.makeLayer(decodeEvents(ls, source));
+        const detail = details.find((d) => d.spec === ls);
+        if (detail) {
+          detail.preload(scale);
+          layer.detail = detail;
+          layer.index = new Uint32Array(0);
+        }
+        return layer;
+      });
     this.bars = spec.layers
       .filter((ls): ls is IntervalsLayerSpec => ls.type === "intervals")
       .map((ls) => {
         const b = new BarLayer(decodeBars(ls, source), this.theme.accent);
+        const detail = barDetails.find((d) => d.spec === ls);
+        if (detail) {
+          detail.preload(scale);
+          b.detail = detail;
+        }
         b.applyMarks(this.marks[ls.name]);
         return b;
       });
     this.values = spec.layers
       .filter((ls): ls is ValuesLayerSpec => ls.type === "values")
-      .map((ls) => new ValueLayer(decodeValues(ls, source), this.theme.accent));
+      .map((ls) => {
+        const v = new ValueLayer(decodeValues(ls, source), this.theme.accent);
+        const detail = valueDetails.find((d) => d.spec === ls);
+        if (detail) {
+          detail.preload();
+          v.detail = detail;
+          v.index = new Uint32Array(0);
+        }
+        return v;
+      });
     this.hovered = null;
     folding.initRows(this, spec);
-    this.seqTimes = spec.sequence ? (new Float64Array(source.get(spec.sequence.times.id))) : null;
-    this.gaps = findGaps(this.seqTimes);
-    this.renderer?.retain(new Set([...this.layers.map((l) => l.draw.key), ...this.bars.map((b) => b.draw.key)]));
+    const sq = spec.sequence;
+    this.seq = sq ? new Sequence(new Float64Array(source.get(sq.times.id)), sq.step ?? 1, sq.count) : null;
+    this.gaps = sq?.gaps ? gapsOf(new Float64Array(source.get(sq.gaps.id))) : findGaps(this.seq?.exact ? this.seq.kept : null);
+    this.retainDraws();
     const orderOnly = spec.time.kind === "order";
     if (orderOnly && this.xscale === "time") this.xscale = "order";
     this.legendEl?.remove();
@@ -389,10 +446,10 @@ export class TimelineView {
       this.stage.append(this.legendEl);
     }
     const counts: string[] = [];
-    const events = spec.layers.reduce((n, l) => n + (l.type === "events" ? l.count : 0), 0);
+    const events = spec.layers.reduce((n, l) => n + (l.type === "events" ? (l.levels?.total ?? l.count) : 0), 0);
     if (events || (!this.bars.length && !this.values.length)) counts.push(`${fmtNumber(events)} event${events === 1 ? "" : "s"}`);
-    for (const b of this.bars) counts.push(`${fmtNumber(b.data.count)} ${b.data.spec.name}`);
-    for (const v of this.values) counts.push(`${fmtNumber(v.data.count)} samples`);
+    for (const b of this.bars) counts.push(`${fmtNumber(b.detail?.levels.total ?? b.data.count)} ${b.data.spec.name}`);
+    for (const v of this.values) counts.push(`${fmtNumber(v.detail?.levels.total ?? v.data.count)} samples`);
     const lanes = spec.lanes.names.length;
     const groups = spec.lanes.tree?.header?.length ?? 0;
     if (groups) counts.push(`${fmtNumber(groups)} group${groups === 1 ? "" : "s"}`);
@@ -417,7 +474,7 @@ export class TimelineView {
 
   infoText = "";
 
-  private makeLayer(data: EventsData): Layer {
+  private makeLayer(data: EventsData, index: Uint32Array | null = null): Layer {
     const n = data.count;
     if (data.themeColor) fillSolid(data.color, this.theme.accent, data.spec.color.alpha);
     const sf = new Uint8Array(n * 4);
@@ -440,7 +497,7 @@ export class TimelineView {
       visible: new Uint32Array(n),
       visibleCount: 0,
     };
-    const layer: Layer = { data, draw, xs: new Float64Array(n), dodged: null, baseSize: Float32Array.from(data.size) };
+    const layer: Layer = { data, draw, xs: new Float64Array(n), dodged: null, baseSize: Float32Array.from(data.size), index };
     if (this.markScale !== 1) this.scaleMarks(layer);
     this.applyMarks(layer);
     return layer;
@@ -455,8 +512,52 @@ export class TimelineView {
     const sf = l.draw.sf.data;
     for (let i = 0; i < l.data.count; i++) sf[4 * i + 1] &= ~FLAG_SELECTED;
     const m = this.marks[l.data.spec.name];
-    if (m) for (const i of m) if (i >= 0 && i < l.data.count) sf[4 * i + 1] |= FLAG_SELECTED;
+    const index = l.index;
+    if (m && index) {
+      // a window's events: the selected ones among them (both in the layer's order)
+      for (const g of m) {
+        const i = lowerBound(index, g);
+        if (i < index.length && index[i] === g) sf[4 * i + 1] |= FLAG_SELECTED;
+      }
+    } else if (m) for (const i of m) if (i >= 0 && i < l.data.count) sf[4 * i + 1] |= FLAG_SELECTED;
     l.draw.sf.version++;
+  }
+
+  /** A window's events came for a layer sent as levels: they are its events now. */
+  setWindow(detail: Detail, data: EventsData, index: Uint32Array): void {
+    const at = this.layers.findIndex((l) => l.detail === detail);
+    if (at < 0) return;
+    const layer = this.makeLayer(data, index);
+    layer.detail = detail;
+    this.layers[at] = layer;
+    if (this.hovered && !this.hovered.bar && !this.hovered.val && this.hovered.layer === at) picking.setHovered(this, null);
+    this.rebase(true);
+    this.retainDraws();
+    this.requestRender();
+  }
+
+  /** An intervals layer sent as levels draws other bars (a level's or a window's). */
+  showBars(at: number, bars: BarLayer): void {
+    this.bars[at] = bars;
+    bars.rebase(this.base, this.xscale === "order", this.baseVersion * 1000 + 1);
+    bars.setSlots(this.slot);
+    bars.recolor(this.theme.accent);
+    bars.applyMarks(this.marks[bars.data.spec.name]);
+    if (this.hovered?.bar && this.hovered.layer === at) picking.setHovered(this, null);
+    this.retainDraws();
+  }
+
+  /** The exact times of the order from rank `offset` (a window's). */
+  setSequence(offset: number, times: Float64Array): void {
+    this.seq?.setSlice(offset, times);
+  }
+
+  /** Let the renderer forget what no layer draws any more. */
+  retainDraws(): void {
+    const keys = new Set([...this.layers.map((l) => l.draw.key), ...this.bars.map((b) => b.draw.key)]);
+    for (const l of this.layers) l.detail?.keys(keys);
+    for (const b of this.bars) b.detail?.keys(keys);
+    this.renderer?.retain(keys);
   }
 
   // ------------------------------------------------------------------ scales and camera
@@ -501,19 +602,19 @@ export class TimelineView {
     }
     if (xscale === this.xscale) return;
     const [a, b] = [this.camera.left, this.camera.right];
-    const seq = this.seqTimes;
+    const seq = this.seq;
     this.xscale = xscale;
     this.setLimits();
-    if (seq && seq.length) {
+    if (seq && seq.count) {
       if (xscale === "order") {
-        const r0 = lowerBound(seq, a);
-        const r1 = upperBound(seq, b) - 1;
+        const r0 = seq.lower(a);
+        const r1 = seq.upper(b) - 1;
         if (r1 >= r0) this.camera.fit(r0 - 0.5, r1 + 0.5, 0);
         else this.camera.fitExtent();
       } else {
-        const i0 = Math.max(0, Math.min(seq.length - 1, Math.floor(a + 0.5)));
-        const i1 = Math.max(0, Math.min(seq.length - 1, Math.ceil(b - 0.5)));
-        this.camera.fit(seq[i0], seq[i1], 0.02);
+        const i0 = Math.max(0, Math.min(seq.count - 1, Math.floor(a + 0.5)));
+        const i1 = Math.max(0, Math.min(seq.count - 1, Math.ceil(b - 0.5)));
+        this.camera.fit(seq.time(i0), seq.time(i1), 0.02);
       }
     }
     for (const l of this.layers) l.dodged = null;
@@ -528,9 +629,9 @@ export class TimelineView {
   zoomTo(range: [number, number]): void {
     if (!this.spec) return;
     let [a, b] = range;
-    if (this.xscale === "order" && this.seqTimes) {
-      a = lowerBound(this.seqTimes, a) - 0.5;
-      b = upperBound(this.seqTimes, b) - 0.5;
+    if (this.xscale === "order" && this.seq) {
+      a = this.seq.lower(a) - 0.5;
+      b = this.seq.upper(b) - 0.5;
     }
     this.pushHistory();
     this.camera.fit(a, b, 0);
@@ -566,10 +667,10 @@ export class TimelineView {
     clearTimeout(this.viewTimer);
     this.viewTimer = setTimeout(() => {
       let [a, b] = [this.camera.left, this.camera.right];
-      if (this.xscale === "order" && this.seqTimes?.length) {
-        const n = this.seqTimes.length;
-        a = this.seqTimes[Math.max(0, Math.min(n - 1, Math.ceil(a)))];
-        b = this.seqTimes[Math.max(0, Math.min(n - 1, Math.floor(b)))];
+      if (this.xscale === "order" && this.seq?.count) {
+        const n = this.seq.count;
+        a = this.seq.time(Math.max(0, Math.min(n - 1, Math.ceil(a))));
+        b = this.seq.time(Math.max(0, Math.min(n - 1, Math.floor(b))));
       }
       this.callbacks.onView?.([a, b], folding.lanesInSight(this));
     }, 250);
@@ -692,29 +793,29 @@ export class TimelineView {
 
   /** The time range shown, in ticks (on the Order scale: the times of the events at the edges). */
   private timeRange(): [number, number] {
-    if (this.xscale !== "order" || !this.seqTimes?.length) return [this.camera.left, this.camera.right];
+    if (this.xscale !== "order" || !this.seq?.count) return [this.camera.left, this.camera.right];
     return [this.timeAt(this.camera.left), this.timeAt(this.camera.right)];
   }
 
   /** The time at position x (ticks; on the Order scale interpolated between the events). */
   private timeAt(x: number): number {
-    if (this.xscale !== "order" || !this.seqTimes?.length) return x;
-    const seq = this.seqTimes;
-    const i = Math.max(0, Math.min(seq.length - 1, Math.floor(x)));
-    const j = Math.min(seq.length - 1, i + 1);
+    if (this.xscale !== "order" || !this.seq?.count) return x;
+    const seq = this.seq;
+    const i = Math.max(0, Math.min(seq.count - 1, Math.floor(x)));
+    const j = Math.min(seq.count - 1, i + 1);
     const f = Math.max(0, Math.min(1, x - i));
-    return seq[i] + (seq[j] - seq[i]) * f;
+    return seq.time(i) + (seq.time(j) - seq.time(i)) * f;
   }
 
   /** The position of time t (ticks) on the current scale. */
   xAt(t: number): number {
-    if (this.xscale !== "order" || !this.seqTimes?.length) return t;
-    const seq = this.seqTimes;
-    const j = lowerBound(seq, t);
+    if (this.xscale !== "order" || !this.seq?.count) return t;
+    const seq = this.seq;
+    const j = seq.lower(t);
     if (j <= 0) return -0.5;
-    if (j >= seq.length) return seq.length - 0.5;
-    const span = seq[j] - seq[j - 1];
-    return j - 1 + (span > 0 ? (t - seq[j - 1]) / span : 1);
+    if (j >= seq.count) return seq.count - 0.5;
+    const span = seq.time(j) - seq.time(j - 1);
+    return j - 1 + (span > 0 ? (t - seq.time(j - 1)) / span : 1);
   }
 
   /** Tell the group which time range this view shows. */
@@ -1118,6 +1219,12 @@ export class TimelineView {
       for (let i = i0; i < i1; i++) {
         a = Math.min(a, src[i]);
         b = Math.max(b, src[i]);
+      }
+      // a layer sent as levels: its events there, from its bins
+      const e = l.detail?.extent(this.xscale, lane, last);
+      if (e) {
+        a = Math.min(a, e[0]);
+        b = Math.max(b, e[1]);
       }
     }
     if (!(b >= a)) return;

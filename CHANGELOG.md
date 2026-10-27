@@ -7,8 +7,9 @@ All notable changes to anytimeline. The format follows
 ## [Unreleased]
 
 Foundations: plots that show where widgets do not, and checks that Python and the browser
-agree. And the plot as a Python object, with one name per idea: a release that changes
-code. Each old spelling raises an error that names the new one, for this release.
+agree. The plot as a Python object, with one name per idea: a release that changes code.
+Each old spelling raises an error that names the new one, for this release. And levels of
+detail: ten million events, samples or bars in a plot that opens at once.
 
 ### Breaking changes
 
@@ -35,6 +36,24 @@ code. Each old spelling raises an error that names the new one, for this release
 
 ### Added
 
+- **Levels of detail**: a layer of more than 250,000 events, samples or bars is sent as
+  levels. Zoomed out, the browser draws counts per lane and bin (bins a factor of 4 apart):
+  events as bars from a bin's first to its last event, as tall as it has events, in its most
+  frequent colour; values from each bin's first, lowest, highest and last sample (spikes and
+  gaps stay); bars shorter than a bin merged into a band per lane and bin, as opaque as they
+  fill it. Zoomed in, Python sends the marks there (at most 200,000 in view), drawn as any
+  layer's. The Order scale has levels of its own. For 10,000,000 events on 100 lanes, the
+  browser gets 1.3 MB first instead of 280 MB.
+- A bin's tooltip: its count, its range, and its events per colour category (from Python).
+  `importance=` picks the event that shows a bin.
+- Selecting works on bins (a box, or a click on a bin with the Select tool or Shift), and
+  the selected events are marked over the bins.
+- A page of a plot with levels (`save_html`, `display="html"`) holds every event up to 20 MB,
+  else the levels alone.
+- In marimo, buffers of 64 KB or more come to the browser as files (binary, over HTTP)
+  instead of in messages; if a file cannot be fetched, as messages.
+- `scripts/bench_levels.py`: build time, first-frame size and window times of a plot of
+  many events, samples or bars.
 - **HTML in the notebook**: `Timeline(display="html")` shows the plot as HTML with its data
   in the output, so a saved, exported (nbconvert, Quarto) or shared notebook shows it without
   a kernel. Zoom, pan, hover, Time / Order, folding, full screen and linking work there.
@@ -66,6 +85,10 @@ code. Each old spelling raises an error that names the new one, for this release
 
 ### Changed
 
+- Building a plot of millions of rows is faster: sorting by lane and time (no
+  `np.lexsort`), missing values found in NumPy, colour categories in one pass, and a values
+  layer's range per lane without comparing every lane name. 10,000,000 events: 6.5 s
+  (13 s before); 10,000,000 samples: 2.4 s (16 s).
 - A lazy table (Polars LazyFrame, DuckDB relation) is read once with only the columns its
   layer uses, not every column.
 - A widget's plain-text output (what a notebook without the widget shows) says how to show

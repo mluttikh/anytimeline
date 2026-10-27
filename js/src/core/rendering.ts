@@ -8,6 +8,7 @@ import { TimeAxis } from "./time";
 import { isStems, LABEL_BUDGET, type Layer, rgb01, ROUTE_BUDGET } from "./common";
 import * as folding from "./folding";
 import * as drawing from "./drawing";
+import * as picking from "./picking";
 import type { TimelineView } from "./view";
 
 export function renderFrame(view: TimelineView): void {
@@ -82,6 +83,11 @@ export function renderFrame(view: TimelineView): void {
   }
   if (view.values.length) {
     const vv = drawing.valueView(view, plot);
+    // layers sent as levels: the samples of the level (or window) the view wants
+    view.values.forEach((v, k) => {
+      const got = v.detail?.frame(view);
+      if (got && v.show(got.data, got.index) && view.hovered?.val && view.hovered.layer === k) picking.setHovered(view, null);
+    });
     for (const v of view.values) v.draw(backCtx, vv, l0, l1);
   }
   backCtx.restore();
@@ -100,6 +106,11 @@ export function renderFrame(view: TimelineView): void {
   let inView = 0;
   const bv = drawing.barView(view, plot);
   const seqScale = view.xscale === "order";
+  // layers sent as levels: the bars of the level (or window) the view wants
+  view.bars.forEach((b, k) => {
+    const got = b.detail?.frame(view, b);
+    if (got && got !== b) view.showBars(k, got);
+  });
   for (const b of view.bars) {
     b.cull(view.laneAt, l0, l1, view.camera.left - 2 / view.camera.scale, view.camera.right + 2 / view.camera.scale, seqScale);
     inView += b.draw.visibleCount;
@@ -113,6 +124,27 @@ export function renderFrame(view: TimelineView): void {
     frame.bars.push(d);
   }
   for (const l of view.layers) {
+    // a layer sent as levels: its bins, unless its events in view are there (a window)
+    const detail = l.detail;
+    if (detail) {
+      const what = detail.frame(view, l.data, l0, l1);
+      if (what !== "raw") {
+        l.draw.visibleCount = 0;
+        if (what) {
+          what.update(view.base, view.slot, view.markScale, view.theme.accent);
+          for (const d of [what.bars, what.marks]) {
+            d.offset = view.camera.left - view.base;
+            d.scale = view.camera.scale;
+            d.laneTop = laneTop;
+            d.laneHeight = view.laneH;
+          }
+          frame.bars.push(what.bars);
+          frame.layers.push(what.marks);
+          inView += what.inView;
+        }
+        continue;
+      }
+    }
     cull(view, l, l0, l1, plot.w);
     inView += l.draw.visibleCount;
     if (l.data.spec.overlap === "dodge" && view.dodgeOn && !isStems(l)) dodgeLayer(view, l, l0, l1);
@@ -127,12 +159,16 @@ export function renderFrame(view: TimelineView): void {
     if (seg) frame.segments.push(seg);
   }
   view.renderer?.render(frame);
+  // a bin hovered that is no longer drawn (another level came)
+  const h = view.hovered;
+  if (h?.bin && view.layers[h.layer]?.detail?.changed) picking.setHovered(view, null);
 
   // front: axis, lane names, labels, gaps, hover, box
   drawing.drawAxis(view, frontCtx, plot, ticks);
   drawing.drawLanes(view, frontCtx, plot, laneTop, l0, l1);
   drawing.drawBarText(view, frontCtx, bv, l0, l1, inView <= LABEL_BUDGET);
   drawing.drawStems(view, frontCtx, plot, laneTop, l0, l1);
+  drawing.drawMarked(view, frontCtx, plot, laneTop, l0, l1);
   if (inView <= LABEL_BUDGET) drawing.drawLabels(view, frontCtx, plot, laneTop);
   drawing.drawMarkers(view, frontCtx, plot);
   drawing.drawValueScales(view, frontCtx, plot, l0, l1);
@@ -148,9 +184,9 @@ export function axisTicks(view: TimelineView, width: number) {
     const order = new TimeAxis({ kind: "order", unit: "", origin_ns: "0", origin: 0, timezone: "UTC", extent: [0, 1] });
     const t = order.ticks(view.camera.left, view.camera.right, (width * 11) / (view.fs - 1));
     // the time of the first event in view gives the context
-    if (view.seqTimes?.length && view.axis && view.spec?.time.kind !== "order") {
-      const i = Math.max(0, Math.min(view.seqTimes.length - 1, Math.ceil(view.camera.left)));
-      t.pinned = `from ${view.axis.formatFull(view.seqTimes[i])}`;
+    if (view.seq?.count && view.axis && view.spec?.time.kind !== "order") {
+      const i = Math.max(0, Math.min(view.seq.count - 1, Math.ceil(view.camera.left)));
+      t.pinned = `from ${view.axis.formatFull(view.seq.time(i))}`;
     }
     return t;
   }

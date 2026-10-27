@@ -94,6 +94,47 @@ def test_buffers_are_served_in_chunks(monkeypatch):
     assert b"".join(bytes(b[0]) for _, b in sent) == big
 
 
+def test_in_marimo_large_buffers_go_as_files(monkeypatch):
+    """A buffer of FILE_BYTES or more goes as a marimo virtual file (here a fake one): one put
+    with its url; the file is dropped once fetched, and a failed fetch asks for messages."""
+    from anytimeline import widget as w
+
+    made, dropped = [], []
+
+    class File:
+        def __init__(self, data):
+            self.filename = f"f{len(made)}.bin"
+            self.url = f"./@file/{len(data)}-{self.filename}"
+            made.append(self)
+
+    monkeypatch.setattr(w, "_marimo_file", File)
+    monkeypatch.setattr(w, "_remove_marimo_file", dropped.append)
+    _, plot = plot_of_log()
+    sent = sent_by(plot, monkeypatch)
+    plot._buffers["big"] = b"x" * w.FILE_BYTES
+    plot._buffers["small"] = b"x" * 10
+    plot.widget._on_msg(plot.widget, {"type": "need", "ids": ["big", "small"]}, [])
+    (put, parts), (small, _) = sent
+    assert put["url"] == "./@file/65536-f0.bin"
+    assert put["file"] == "f0.bin"
+    assert put["byteLength"] == w.FILE_BYTES
+    assert not parts
+    assert "url" not in small
+    plot.widget._on_msg(plot.widget, {"type": "fetched", "file": "f0.bin"}, [])
+    assert dropped == made
+    # a fetch failed: messages from now on
+    sent.clear()
+    plot.widget._on_msg(plot.widget, {"type": "need", "ids": ["big"], "files": False}, [])
+    assert "url" not in sent[0][0]
+    assert bytes(sent[0][1][0]) == plot._buffers["big"]
+
+
+def test_outside_marimo_buffers_go_as_messages():
+    from anytimeline import widget as w
+
+    assert w._marimo_file(b"x" * w.FILE_BYTES) is None
+
+
 def test_tooltip_answers_with_the_row(monkeypatch):
     log, plot = plot_of_log()
     sent = sent_by(plot, monkeypatch)

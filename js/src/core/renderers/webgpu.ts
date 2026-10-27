@@ -93,6 +93,7 @@ struct VOut {
   var h = pitch;
   if (rows > 1.5) { h = pitch * 0.85; }
   h = min(h, u.maxBar);
+  if (geom.w < -1.5) { h = h * (-geom.w - 2.0); }
   let cy = u.laneTop + (geom.x + 0.5) * u.laneH + (geom.y - (rows - 1.0) * 0.5) * pitch;
   let f = flags.x;
   var half: vec2f;

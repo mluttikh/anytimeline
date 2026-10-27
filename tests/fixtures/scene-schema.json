@@ -2,6 +2,322 @@
   "$ref": "#/definitions/SceneSpec",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
+    "BarLevelScale": {
+      "additionalProperties": false,
+      "properties": {
+        "levels": {
+          "items": {
+            "$ref": "#/definitions/BarLevelSpec"
+          },
+          "type": "array"
+        },
+        "top": {
+          "type": "number"
+        },
+        "x0": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x0",
+        "top",
+        "levels"
+      ],
+      "type": "object"
+    },
+    "BarLevelSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "alpha": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "bin_width": {
+          "description": "Its bins' width (top / 4^k).",
+          "type": "number"
+        },
+        "color": {
+          "additionalProperties": false,
+          "properties": {
+            "alpha": {
+              "type": "number"
+            },
+            "legend": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/CategoryLegend"
+                },
+                {
+                  "$ref": "#/definitions/ContinuousLegend"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rgba": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/BufferRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "solid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "rgba",
+            "solid",
+            "alpha",
+            "legend"
+          ],
+          "type": "object"
+        },
+        "count": {
+          "type": "number"
+        },
+        "critical": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "count": {
+                  "type": "number"
+                },
+                "segments": {
+                  "$ref": "#/definitions/BufferRef"
+                }
+              },
+              "required": [
+                "segments",
+                "count"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The critical path (layers with a tree): rows (bar, from, to); from and to are instants, 2 × bar for a bar's start and 2 × bar + 1 for its end."
+        },
+        "dropped": {
+          "type": "number"
+        },
+        "durations": {
+          "description": "Write each bar's duration right of it.",
+          "type": "boolean"
+        },
+        "end": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "fade_open": {
+          "description": "False: an open bar (no end) does not fade out (states: the lane is still in it).",
+          "type": "boolean"
+        },
+        "height": {
+          "type": "number"
+        },
+        "hover": {
+          "type": "boolean"
+        },
+        "index": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "A level's or a window's bars: the index of each among the layer's (0xFFFFFFFF: short bars merged, kind 3), how many bars each holds, and how opaque each is (0–255)."
+        },
+        "k": {
+          "description": "A window's bars: those of level k (absent: every bar there).",
+          "type": "number"
+        },
+        "kind": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "1: a milestone (start = end), 2: open (no end; runs to the plot's last time)."
+        },
+        "lane": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "lane_starts": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "levels": {
+          "$ref": "#/definitions/BarLevelsSpec",
+          "description": "Sent as levels (many bars): none above (count 0), these instead."
+        },
+        "links": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "count": {
+                  "type": "number"
+                },
+                "pairs": {
+                  "$ref": "#/definitions/BufferRef"
+                }
+              },
+              "required": [
+                "pairs",
+                "count"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Pairs of bar indices: an arrow from the end of the first to the start of the second."
+        },
+        "n": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "name": {
+          "type": "string"
+        },
+        "overlap": {
+          "enum": [
+            "pack",
+            "overlay"
+          ],
+          "type": "string"
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BufferRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rank": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "Two components: the order of each bar's start and end."
+        },
+        "row": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "Sub-row of each bar in its lane, and the number of sub-rows of its lane."
+        },
+        "rows": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "select": {
+          "type": "boolean"
+        },
+        "start": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "states": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "values": {
+                  "$ref": "#/definitions/BufferRef"
+                }
+              },
+              "required": [
+                "values",
+                "title"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "States layers (Python: Timeline.states): each bar's state, and the state column's name. The tooltip then shows every lane's state at the pointer's time."
+        },
+        "text": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BufferRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tooltip": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "type": {
+          "const": "intervals",
+          "type": "string"
+        },
+        "unit_ns": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "bin_width",
+        "color",
+        "count",
+        "dropped",
+        "end",
+        "height",
+        "hover",
+        "k",
+        "kind",
+        "lane",
+        "lane_starts",
+        "links",
+        "name",
+        "overlap",
+        "progress",
+        "rank",
+        "row",
+        "rows",
+        "select",
+        "start",
+        "text",
+        "tooltip",
+        "type",
+        "unit_ns"
+      ],
+      "type": "object"
+    },
+    "BarLevelsSpec": {
+      "additionalProperties": false,
+      "description": "Levels of an intervals layer of many bars, per scale: level k has the bars at least top / 4^k long, and the others merged per lane, sub-row and bin of that width.",
+      "properties": {
+        "order": {
+          "$ref": "#/definitions/BarLevelScale"
+        },
+        "raw": {
+          "description": "A window of at most this many bars has every one of them.",
+          "type": "number"
+        },
+        "time": {
+          "$ref": "#/definitions/BarLevelScale"
+        },
+        "total": {
+          "type": "number"
+        },
+        "windows": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "total",
+        "raw",
+        "windows",
+        "time",
+        "order"
+      ],
+      "type": "object"
+    },
     "BufferRef": {
       "additionalProperties": false,
       "description": "A buffer Python holds, by content id; fetched with a \"need\" message.",
@@ -182,6 +498,10 @@
             }
           ]
         },
+        "index": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "A window's events: each one's index among the layer's events (Python's order)."
+        },
         "label_width": {
           "description": "Stem labels: the widest a box gets (px); null: 16 × the text size; 0: no limit.",
           "type": [
@@ -203,6 +523,17 @@
         "lane_starts": {
           "$ref": "#/definitions/BufferRef",
           "description": "count of lanes + 1 offsets: lane l's events are lane_starts[l] .. lane_starts[l + 1]."
+        },
+        "levels": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LevelsSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A layer of many events (Python: levels.LEVELS_FROM) is sent as levels: its events counted per lane and bin; the events themselves (none here) come in windows."
         },
         "name": {
           "type": "string"
@@ -453,6 +784,9 @@
       "additionalProperties": false,
       "description": "Bars from a start to an end (Python: Timeline.intervals). Sorted by lane, start, end.",
       "properties": {
+        "alpha": {
+          "$ref": "#/definitions/BufferRef"
+        },
         "color": {
           "additionalProperties": false,
           "properties": {
@@ -544,6 +878,14 @@
         "hover": {
           "type": "boolean"
         },
+        "index": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "A level's or a window's bars: the index of each among the layer's (0xFFFFFFFF: short bars merged, kind 3), how many bars each holds, and how opaque each is (0–255)."
+        },
+        "k": {
+          "description": "A window's bars: those of level k (absent: every bar there).",
+          "type": "number"
+        },
         "kind": {
           "$ref": "#/definitions/BufferRef",
           "description": "1: a milestone (start = end), 2: open (no end; runs to the plot's last time)."
@@ -553,6 +895,10 @@
         },
         "lane_starts": {
           "$ref": "#/definitions/BufferRef"
+        },
+        "levels": {
+          "$ref": "#/definitions/BarLevelsSpec",
+          "description": "Sent as levels (many bars): none above (count 0), these instead."
         },
         "links": {
           "anyOf": [
@@ -577,6 +923,9 @@
             }
           ],
           "description": "Pairs of bar indices: an arrow from the end of the first to the start of the second."
+        },
+        "n": {
+          "$ref": "#/definitions/BufferRef"
         },
         "name": {
           "type": "string"
@@ -744,6 +1093,176 @@
         }
       ]
     },
+    "LevelScale": {
+      "additionalProperties": false,
+      "description": "The levels of one scale: level k has bins of width top / 4^k from x0.",
+      "properties": {
+        "levels": {
+          "items": {
+            "$ref": "#/definitions/LevelSpec"
+          },
+          "type": "array"
+        },
+        "top": {
+          "type": "number"
+        },
+        "x0": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x0",
+        "top",
+        "levels"
+      ],
+      "type": "object"
+    },
+    "LevelSpec": {
+      "additionalProperties": false,
+      "description": "One level: per lane (lane_starts), its bins that hold events, in order.",
+      "properties": {
+        "count": {
+          "type": "number"
+        },
+        "hi": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "k": {
+          "type": "number"
+        },
+        "lane_starts": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "lo": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "The first and last event's position in each bin, and how many it holds."
+        },
+        "most": {
+          "description": "The most events in one bin.",
+          "type": "number"
+        },
+        "n": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The range a window's bins cover; null: everything."
+        },
+        "rgba": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BufferRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Each bin's colour (its most frequent category's, else its representative's), symbol and size; null: the layer's one value."
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BufferRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "symbol": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BufferRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "top": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "Each bin's representative event (the most important, else the first): its index."
+        },
+        "width": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "k",
+        "width",
+        "count",
+        "most",
+        "lane_starts",
+        "lo",
+        "hi",
+        "n",
+        "top",
+        "rgba",
+        "symbol",
+        "size",
+        "range"
+      ],
+      "type": "object"
+    },
+    "LevelsSpec": {
+      "additionalProperties": false,
+      "description": "Levels of detail of a layer sent as levels (Python: anytimeline.levels).",
+      "properties": {
+        "categories": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The colour categories' names (what a bin's tooltip counts), or null."
+        },
+        "order": {
+          "$ref": "#/definitions/LevelScale"
+        },
+        "raw": {
+          "description": "The most events in view that are drawn one by one (with fewer, they are asked for).",
+          "type": "number"
+        },
+        "time": {
+          "$ref": "#/definitions/LevelScale"
+        },
+        "total": {
+          "description": "The layer's events.",
+          "type": "number"
+        },
+        "windows": {
+          "description": "Python serves windows (else, in a page, the levels are all there is).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "total",
+        "raw",
+        "windows",
+        "categories",
+        "time",
+        "order"
+      ],
+      "type": "object"
+    },
     "MarkerSpec": {
       "additionalProperties": false,
       "properties": {
@@ -824,6 +1343,12 @@
                 "count": {
                   "type": "number"
                 },
+                "gaps": {
+                  "$ref": "#/definitions/BufferRef"
+                },
+                "step": {
+                  "type": "number"
+                },
                 "times": {
                   "$ref": "#/definitions/BufferRef"
                 }
@@ -837,7 +1362,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Every instant's time, in the order (the Order scale). With layers sent as levels, every `step`-th (and the last), and the long gaps between them (rows of rank, span)."
         },
         "t": {
           "description": "When Python made it (seconds since the epoch): a new spec is always a change, so it syncs.",
@@ -911,6 +1437,208 @@
       ],
       "type": "object"
     },
+    "ValueLevelSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "bin_width": {
+          "description": "Its bins' width (top / 4^k).",
+          "type": "number"
+        },
+        "color": {
+          "additionalProperties": false,
+          "properties": {
+            "alpha": {
+              "type": "number"
+            },
+            "legend": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/CategoryLegend"
+                },
+                {
+                  "$ref": "#/definitions/ContinuousLegend"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "solid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "solid",
+            "alpha",
+            "legend"
+          ],
+          "type": "object"
+        },
+        "count": {
+          "type": "number"
+        },
+        "dropped": {
+          "type": "number"
+        },
+        "hover": {
+          "type": "boolean"
+        },
+        "index": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "A level's or a window's samples: the index of each among the layer's."
+        },
+        "k": {
+          "description": "A window's samples: those that draw them at level k (absent: every sample).",
+          "type": "number"
+        },
+        "kind": {
+          "enum": [
+            "line",
+            "area",
+            "step"
+          ],
+          "type": "string"
+        },
+        "levels": {
+          "$ref": "#/definitions/ValueLevelsSpec",
+          "description": "Sent as levels (many samples): none above (count 0, the runs kept), these instead."
+        },
+        "name": {
+          "type": "string"
+        },
+        "runs": {
+          "additionalProperties": false,
+          "description": "Runs: one line each (a lane's series): their first samples (count + 1), lanes, colours.",
+          "properties": {
+            "color": {
+              "$ref": "#/definitions/BufferRef"
+            },
+            "count": {
+              "type": "number"
+            },
+            "lane": {
+              "$ref": "#/definitions/BufferRef"
+            },
+            "starts": {
+              "$ref": "#/definitions/BufferRef"
+            }
+          },
+          "required": [
+            "starts",
+            "lane",
+            "color",
+            "count"
+          ],
+          "type": "object"
+        },
+        "select": {
+          "const": false,
+          "type": "boolean"
+        },
+        "series": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The series of each run, or null."
+        },
+        "series_title": {
+          "type": "string"
+        },
+        "time": {
+          "$ref": "#/definitions/BufferRef"
+        },
+        "tooltip": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "type": {
+          "const": "values",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "float32; NaN: a gap in the line."
+        },
+        "width": {
+          "type": "number"
+        },
+        "ylim": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "Per lane of the plot: low and high of its band (two float64 components)."
+        }
+      },
+      "required": [
+        "bin_width",
+        "color",
+        "count",
+        "dropped",
+        "hover",
+        "k",
+        "kind",
+        "name",
+        "runs",
+        "select",
+        "series",
+        "series_title",
+        "time",
+        "tooltip",
+        "type",
+        "value",
+        "width",
+        "ylim"
+      ],
+      "type": "object"
+    },
+    "ValueLevelsSpec": {
+      "additionalProperties": false,
+      "description": "Levels of a values layer of many samples: level k holds the samples that draw it with bins of width top / 4^k from x0 (each run's first, lowest, highest and last sample per bin).",
+      "properties": {
+        "levels": {
+          "items": {
+            "$ref": "#/definitions/ValueLevelSpec"
+          },
+          "type": "array"
+        },
+        "raw": {
+          "description": "A window of at most this many samples has every one of them.",
+          "type": "number"
+        },
+        "top": {
+          "type": "number"
+        },
+        "total": {
+          "type": "number"
+        },
+        "windows": {
+          "type": "boolean"
+        },
+        "x0": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "total",
+        "raw",
+        "windows",
+        "x0",
+        "top",
+        "levels"
+      ],
+      "type": "object"
+    },
     "ValuesLayerSpec": {
       "additionalProperties": false,
       "description": "A number over time per lane (Python: Timeline.values). Sorted by lane, series, time.",
@@ -957,6 +1685,14 @@
         "hover": {
           "type": "boolean"
         },
+        "index": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "A level's or a window's samples: the index of each among the layer's."
+        },
+        "k": {
+          "description": "A window's samples: those that draw them at level k (absent: every sample).",
+          "type": "number"
+        },
         "kind": {
           "enum": [
             "line",
@@ -964,6 +1700,10 @@
             "step"
           ],
           "type": "string"
+        },
+        "levels": {
+          "$ref": "#/definitions/ValueLevelsSpec",
+          "description": "Sent as levels (many samples): none above (count 0, the runs kept), these instead."
         },
         "name": {
           "type": "string"

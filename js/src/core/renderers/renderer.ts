@@ -49,7 +49,8 @@ export interface BarLayerDraw {
   count: number;
   /** Per bar: start and end, relative to the view's base (float32-safe). */
   x: Attr<Float32Array>;
-  /** Per bar: lane, sub-row, sub-rows of its lane, progress (0-1, or −1 for none). */
+  /** Per bar: lane, sub-row, sub-rows of its lane, progress (0-1, or −1 for none; −2 − f:
+   * none, and the bar is f of its row's height, as the bins of levels of detail). */
   geom: Attr<Float32Array>;
   color: Attr<Uint8Array>;
   /** Per bar 4 bytes: flags (FLAG_SELECTED, BAR_MILESTONE, BAR_OPEN), 0, 0, 0. */
@@ -69,10 +70,12 @@ export interface BarLayerDraw {
 export const BAR_MILESTONE = 4;
 export const BAR_OPEN = 8;
 
-/** Where a bar is drawn: centre y and height (px), from its lane and sub-row. */
-export function barBox(lane: number, row: number, rows: number, laneTop: number, laneHeight: number, fill: number, maxBar: number): { cy: number; h: number } {
+/** Where a bar is drawn: centre y and height (px), from its lane and sub-row (and its
+ * progress slot: −2 − f makes it f of the height). */
+export function barBox(lane: number, row: number, rows: number, laneTop: number, laneHeight: number, fill: number, maxBar: number, progress = -1): { cy: number; h: number } {
   const pitch = (laneHeight * fill) / Math.max(1, rows);
-  const h = Math.min(pitch * (rows > 1.5 ? 0.85 : 1), maxBar);
+  let h = Math.min(pitch * (rows > 1.5 ? 0.85 : 1), maxBar);
+  if (progress < -1.5) h *= -progress - 2;
   return { cy: laneTop + (lane + 0.5) * laneHeight + (row - (rows - 1) * 0.5) * pitch, h };
 }
 

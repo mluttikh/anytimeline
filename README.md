@@ -13,7 +13,8 @@ Documentation: <https://mluttikh.github.io/anytimeline/> · Changelog:
 Status: version 0.1. It draws **event charts**: one mark per event at the moment it
 happened, on lanes, so the order of what happened is easy to see. Time can be datetimes (any
 time zone, any century), durations from nanoseconds up, or plain numbers; a Time | Order switch
-spaces events by rank instead of time. Up to about a million events. It also draws **Gantt
+spaces events by rank instead of time. Up to ten million events: a layer of more than 250,000 is
+sent as levels of detail, its events where you zoom in. It also draws **Gantt
 charts** and schedules: bars from a start to an end, with dependencies, progress and
 milestones, and overlapping bars stacked per lane; and **traces**: spans under spans.
 

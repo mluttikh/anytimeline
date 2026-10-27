@@ -16,7 +16,7 @@ import numpy as np
 from anytimeline import data as tables
 from anytimeline import styling
 from anytimeline.codec import Encoded, encode, encode_strings
-from anytimeline.layers.common import numbers, texts
+from anytimeline.layers.common import lexsort, numbers, texts
 from anytimeline.parts import STEM_SHAPES, Route
 from anytimeline.timebase import TimeBase, Times, times
 from anytimeline.types import EventOverlap, StemShape
@@ -209,6 +209,22 @@ def build(
 
 
 @dataclass
+class Sorted:
+    """An events layer's marks in the browser's order (by lane, time and order), kept for
+    the windows of a layer sent as levels."""
+
+    primary: np.ndarray  # ticks, or the order without times
+    order: np.ndarray
+    lane: np.ndarray
+    rgba: np.ndarray | None
+    symbol: np.ndarray | None
+    size: np.ndarray | None
+    text: list[str] | None
+    importance: np.ndarray | None
+    groups: np.ndarray | None  # route=: each mark's group
+
+
+@dataclass
 class Layout:
     """An events layer laid out on the plot's time base and lanes: its spec and buffers."""
 
@@ -218,32 +234,84 @@ class Layout:
     hi: np.ndarray  # the same (an event has no duration)
     lanes: np.ndarray
     instants: list[tuple[np.ndarray, np.ndarray]]  # (ticks, tie-break) for the order
+    marks: Sorted
+    n_lanes: int
 
 
-def layout(rec: EventsRecord, base: TimeBase | None, lane_index: Mapping[Any, int]) -> Layout:
-    """Sort the events by lane, time and order, and encode their buffers."""
+def layout(
+    rec: EventsRecord,
+    base: TimeBase | None,
+    lane_index: Mapping[Any, int],
+    *,
+    levelled: bool = False,
+) -> Layout:
+    """Sort the events by lane, time and order, and encode their buffers (``levelled``: none;
+    the plot sends levels, and the events in windows)."""
     n = len(rec.rows)
     ticks = base.ticks(rec.times) if (base is not None and rec.times is not None) else None
     order = rec.order if rec.order is not None else np.zeros(n)
     lane = np.array([lane_index[v] for v in rec.lanes.tolist()], dtype=np.uint32)
     primary = ticks if ticks is not None else order
-    perm = np.lexsort((np.arange(n), order, primary, lane))
+    perm = lexsort((order, primary, lane))
     rec.perm = perm
-    lane_s, primary_s, order_s = lane[perm], primary[perm], order[perm]
+    c, s, z = rec.color, rec.symbol, rec.size
+    marks = Sorted(
+        primary=primary[perm],
+        order=order[perm],
+        lane=lane[perm],
+        rgba=c.values[perm] if c.values is not None else None,
+        symbol=s.values[perm] if s.values is not None else None,
+        size=z.values[perm] if z.values is not None else None,
+        text=[rec.text[i] for i in perm] if rec.text else None,
+        importance=rec.importance[perm] if rec.importance is not None else None,
+        groups=rec.groups[perm] if rec.route is not None and rec.groups is not None else None,
+    )
+    n_lanes = max(lane_index.values(), default=-1) + 1
+    rows = np.zeros(0, dtype=np.int64) if levelled else None
+    spec, buffers = encode_marks(rec, marks, n_lanes, rows, has_time=ticks is not None)
+    return Layout(
+        spec,
+        buffers,
+        marks.primary,
+        marks.primary,
+        marks.lane,
+        [(marks.primary, marks.order)],
+        marks,
+        n_lanes,
+    )
+
+
+def encode_marks(
+    rec: EventsRecord,
+    marks: Sorted,
+    n_lanes: int,
+    rows: np.ndarray | None = None,
+    *,
+    has_time: bool,
+) -> tuple[dict[str, Any], list[Encoded]]:
+    """The spec and buffers of the layer's events, or of some of them (``rows``: indices into
+    ``marks``, in order; a window). The rank comes from the plot's order."""
     buffers: list[Encoded] = []
 
     def put(enc: Encoded) -> dict[str, Any]:
         buffers.append(enc)
         return enc.descriptor
 
-    n_lanes = max(lane_index.values(), default=-1) + 1
-    starts = np.searchsorted(lane_s, np.arange(n_lanes + 1), side="left").astype(np.uint32)
+    def take(values: Any) -> Any:
+        if values is None or rows is None:
+            return values
+        if isinstance(values, list):
+            return [values[i] for i in rows.tolist()]
+        return values[rows]
+
+    primary, order, lane = take(marks.primary), take(marks.order), take(marks.lane)
+    starts = np.searchsorted(lane, np.arange(n_lanes + 1), side="left").astype(np.uint32)
     spec: dict[str, Any] = {
         "type": "events",
         "name": rec.name,
-        "count": n,
-        "time": put(encode(primary_s, "float64")),
-        "lane": put(encode(lane_s, "uint32")),
+        "count": len(primary),
+        "time": put(encode(primary, "float64")),
+        "lane": put(encode(lane, "uint32")),
         "lane_starts": put(encode(starts, "uint32")),
         "overlap": rec.overlap,
         "labels": rec.labels,
@@ -252,45 +320,43 @@ def layout(rec: EventsRecord, base: TimeBase | None, lane_index: Mapping[Any, in
         "hover": rec.hover,
         "select": rec.select,
         "dropped": rec.dropped,
-        "has_time": ticks is not None,
+        "has_time": has_time,
     }
-    c = rec.color
+    c, s, z = rec.color, rec.symbol, rec.size
+    rgba, symbol, size = take(marks.rgba), take(marks.symbol), take(marks.size)
     spec["color"] = {
-        "rgba": put(encode(c.values[perm], "uint8", components=4))
-        if c.values is not None
-        else None,
+        "rgba": put(encode(rgba, "uint8", components=4)) if rgba is not None else None,
         "solid": c.value,
         "alpha": c.extra.get("alpha", 255),
         "legend": c.legend,
     }
-    s = rec.symbol
     spec["symbol"] = {
-        "values": put(encode(s.values[perm], "uint8")) if s.values is not None else None,
+        "values": put(encode(symbol, "uint8")) if symbol is not None else None,
         "value": s.value,
         "names": list(styling.SYMBOLS),
         "legend": s.legend,
     }
-    z = rec.size
     spec["size"] = {
-        "values": put(encode(z.values[perm], "float32")) if z.values is not None else None,
+        "values": put(encode(size, "float32")) if size is not None else None,
         "value": z.value,
         "legend": z.legend,
     }
-    spec["text"] = put(encode_strings([rec.text[i] for i in perm])) if rec.text else None
-    spec["importance"] = (
-        put(encode(rec.importance[perm], "float32")) if rec.importance is not None else None
-    )
+    text = take(marks.text)
+    spec["text"] = put(encode_strings(text)) if rec.text and text is not None else None
+    imp = take(marks.importance)
+    spec["importance"] = put(encode(imp, "float32")) if imp is not None else None
     spec["tooltip"] = list(rec.tooltip)
     spec["route"] = None
-    if rec.route is not None and rec.groups is not None:
-        segments = _segments(rec.groups[perm], primary_s, order_s)
+    groups = take(marks.groups)
+    if rec.route is not None and groups is not None:
+        segments = _segments(groups, primary, order)
         spec["route"] = {
             "segments": put(encode(segments, "uint32", components=2)),
             "count": len(segments),
             "color": rec.route.color,
             "width": rec.route.width,
         }
-    return Layout(spec, buffers, primary_s, primary_s, lane_s, [(primary_s, order_s)])
+    return spec, buffers
 
 
 def _segments(groups: np.ndarray, primary: np.ndarray, order: np.ndarray) -> np.ndarray:
