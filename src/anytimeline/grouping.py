@@ -67,7 +67,10 @@ def plan(
     tree = tree_record.tree if tree_record is not None else None
     tree_ids = set(tree_record.lanes.tolist()) if tree is not None else set()
     grouped = [r for r in records if getattr(r, "lane_groups", None) is not None]
-    title = next((r.lane_title for r in records if r.lane_title), "")
+    # a tree names its lanes; else the first layer that names them
+    title = (tree_record.lane_title if tree is not None else "") or next(
+        (r.lane_title for r in records if r.lane_title), ""
+    )
 
     # ungrouped: a tree first (when the tree is not grouped), then the other lanes
     head: list[Any] = []

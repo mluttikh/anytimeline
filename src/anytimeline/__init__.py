@@ -5,7 +5,7 @@ from __future__ import annotations
 from anytimeline.page import save_html
 from anytimeline.parts import Annotation, Connection, Marker, Route, Stem
 from anytimeline.plot import Timeline
-from anytimeline.presets import gantt, story
+from anytimeline.presets import compare_traces, gantt, story
 from anytimeline.styling import SYMBOLS
 from anytimeline.view import View
 
@@ -21,6 +21,7 @@ __all__ = [
     "Timeline",
     "View",
     "__version__",
+    "compare_traces",
     "gantt",
     "save_html",
     "story",

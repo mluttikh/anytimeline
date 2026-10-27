@@ -52,7 +52,8 @@ class IntervalsRecord:
     hover: bool
     select: bool
     dropped: int
-    tree: trees.Tree | None = None
+    tree: trees.Tree | None = None  # a lane per bar, in the tree's order
+    nesting: trees.Tree | None = None  # flame: the tree, its lanes depths
     expand: trees.Expand = "auto"
     critical: bool = False
     durations: bool = False
@@ -98,8 +99,12 @@ def build(
     expand: trees.Expand = "auto",
     critical_path: bool = False,
     durations: bool = False,
+    flame: bool = False,
 ) -> IntervalsRecord:
-    """Read an intervals layer from a table."""
+    """Read an intervals layer from a table (``flame``: with ``parent``, a lane per depth of
+    the tree, not per bar)."""
+    if flame and parent is None:
+        raise ValueError("a flame layout needs parent=: its lanes are the depths of a tree")
     if parent is not None and lane is not None:
         raise ValueError("parent= gives each bar its own lane (under its parent): leave out lane=")
     if parent is not None and id is None:
@@ -175,6 +180,11 @@ def build(
         assert parents is not None
         assert shown is not None
         tree = trees.build(lane_values, parents, key, [_label(v) for v in shown], id)
+    nesting = None
+    if tree is not None and flame:
+        nesting, tree = tree, None
+        lane_values = np.empty(len(rows), dtype=object)
+        lane_values[nesting.order] = nesting.depth.tolist()
     elif lane_values is None:
         lane_values = np.full(len(rows), name, dtype=object)
     else:
@@ -212,8 +222,16 @@ def build(
         starts=s,
         ends=e,
         lanes=lane_values,
-        lane_title=(label or id or "") if tree is not None else (lane or ""),
-        lane_declared=tables.categories(table, lane) if lane else None,
+        lane_title="depth"
+        if nesting is not None
+        else (label or id or "")
+        if tree is not None
+        else (lane or ""),
+        lane_declared=list(range(int(nesting.depth.max(initial=0)) + 1))
+        if nesting is not None
+        else tables.categories(table, lane)
+        if lane
+        else None,
         color=color_enc,
         text=texts(table, text, rows) if text is not None else None,
         tooltip={c: tables.column(table, c)[rows] for c in tip_cols},
@@ -225,6 +243,7 @@ def build(
         select=select,
         dropped=int(n - len(rows)),
         tree=tree,
+        nesting=nesting,
         expand=expand,
         critical=critical_path,
         durations=durations,
@@ -384,15 +403,20 @@ def layout(
     kind = np.where(open_s, KIND_OPEN, np.where(hi_s == lo_s, KIND_MILESTONE, 0)).astype(np.uint8)
     n_lanes = max(lane_index.values(), default=-1) + 1
     starts = np.searchsorted(lane_s, np.arange(n_lanes + 1), side="left")
-    row, rows = _pack(lo_s, hi_s, starts, rec.overlap == "pack")
-
     c = rec.color
     inverse = np.empty(n, dtype=np.int64)
     inverse[perm] = np.arange(n)
+    prefer = None
+    if rec.nesting is not None and n:
+        # flame: a span goes on its parent's sub-row where it can (the parent's lane, a depth
+        # less, is packed first)
+        parent = rec.nesting.parent[perm]
+        prefer = np.where(parent >= 0, inverse[np.maximum(parent, 0)], -1)
+    row, rows = _pack(lo_s, hi_s, starts, rec.overlap == "pack", prefer)
     links = inverse[rec.links] if len(rec.links) else np.zeros((0, 2), dtype=np.int64)
     critical = None
-    if rec.critical and rec.tree is not None and n:
-        tree = rec.tree
+    tree = rec.tree if rec.tree is not None else rec.nesting
+    if rec.critical and tree is not None and n:
         # in the tree's order (its lanes may be spread over groups), then as sorted bars
         at = inverse[tree.order]  # tree lane k → its bar
         found = trees.critical_path(lo[tree.order], hi[tree.order], tree.depth, tree.size)
@@ -642,17 +666,18 @@ def window_rows(x_lo: np.ndarray, x_hi: np.ndarray, lane_starts: np.ndarray,
 
 
 def _pack(
-    lo: np.ndarray, hi: np.ndarray, starts: np.ndarray, pack: bool
+    lo: np.ndarray, hi: np.ndarray, starts: np.ndarray, pack: bool, prefer: np.ndarray | None = None
 ) -> tuple[np.ndarray, np.ndarray]:
     """Sub-row per bar (bars of a lane that overlap in time go to different rows; the first row
-    that is free) and the number of rows of each bar's lane."""
+    that is free, or the row of bar ``prefer[i]`` when that one is free) and the number of rows
+    of each bar's lane."""
     n = len(lo)
     row = np.zeros(n, dtype=np.float32)
     rows = np.ones(n, dtype=np.float32)
     if not pack:
         return row, rows
     for a, b in zip(starts[:-1].tolist(), starts[1:].tolist(), strict=True):
-        if b - a < 2:
+        if b - a < 2 and prefer is None:
             continue
         free: list[int] = []  # rows that are free again, smallest first
         busy: list[tuple[float, int]] = []  # (end, row) of bars still running
@@ -660,7 +685,18 @@ def _pack(
         for i in range(a, b):
             while busy and busy[0][0] <= lo[i]:
                 heapq.heappush(free, heapq.heappop(busy)[1])
-            if free:
+            want = int(row[prefer[i]]) if prefer is not None and prefer[i] >= 0 else -1
+            if want in free:
+                free.remove(want)
+                heapq.heapify(free)
+                r = want
+            elif want >= used:
+                # a row not used yet: the ones below it are free from here on
+                free.extend(range(used, want))
+                heapq.heapify(free)
+                used = want + 1
+                r = want
+            elif free:
                 r = heapq.heappop(free)
             else:
                 r = used

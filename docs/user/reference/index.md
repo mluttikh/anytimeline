@@ -8,7 +8,8 @@ Every argument, setting and gesture.
 - [story](story.md): a story timeline in one call.
 - [save_html](save-html.md): several plots in one page.
 - [anytimeline.marimo](marimo.md): the selection as marimo state.
-- [OpenTelemetry](otel.md): read traces in the OTLP/JSON format.
+- [Traces](traces.md): read traces (OTLP, Jaeger, Chrome's format), merge them into a flame
+  graph, compare two.
 - [Parts and views](parts.md): `View`, `Route`, `Stem`, `Marker`, and the names of symbols.
 - [anytimeline.types](types.md): the options of arguments as types, for your own functions.
 - [Example data](synthetic.md): the example logs these pages use.
