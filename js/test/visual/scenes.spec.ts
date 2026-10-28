@@ -20,10 +20,12 @@ async function open(page: Page, scene: string, renderer: string): Promise<string
 
 for (const renderer of RENDERERS) {
   for (const scene of SCENES) {
-    test(`${scene} with ${renderer}`, async ({ page }) => {
+    test(`${scene} with ${renderer}`, async ({ page, browserName }) => {
       const errors = await open(page, scene, renderer);
       const perf = await page.evaluate(() => (window as any).__perf);
       if (renderer === "webgpu" && perf.renderer !== "webgpu") test.skip(true, "no WebGPU here");
+      // Firefox and WebKit on a runner without a GPU have no WebGL2 (Chromium: SwiftShader)
+      if (renderer === "webgl2" && browserName !== "chromium" && perf.renderer !== "webgl2") test.skip(true, "no WebGL2 here");
       expect(perf.renderer).toBe(renderer);
       expect(errors).toEqual([]);
       const plot = page.locator("#plot");
