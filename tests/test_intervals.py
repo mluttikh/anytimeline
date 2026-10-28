@@ -1,9 +1,12 @@
+import itertools
+
 import numpy as np
 import polars as pl
 import pytest
 
 from anytimeline import Annotation, Timeline, gantt
 from anytimeline.codec import decode
+from anytimeline.layers import intervals as iv
 
 
 def buffer(plot, ref):
@@ -57,6 +60,38 @@ def test_overlapping_bars_are_packed_into_rows():
         ._spec["layers"][0]
     )
     assert flat["overlap"] == "overlay"
+
+
+def packed_one_by_one(lo, hi, starts):
+    """Each bar on the lowest row whose bars have all ended by its start, bar by bar."""
+    row = np.zeros(len(lo))
+    rows = np.ones(len(lo))
+    for a, b in itertools.pairwise(starts):
+        ends: list[float] = []  # the last bar's end per row
+        for i in range(a, b):
+            r = next((r for r, e in enumerate(ends) if e <= lo[i]), len(ends))
+            ends[r : r + 1] = [hi[i]]
+            row[i] = r
+        rows[a:b] = max(len(ends), 1)
+    return row, rows
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_packing_puts_each_bar_on_the_lowest_free_row(seed):
+    # runs of one bar, short runs packed side by side, runs deeper than SHORT_ROWS and longer
+    # than SHORT_RUN, milestones and empty lanes
+    rng = np.random.default_rng(seed)
+    lanes = int(rng.integers(1, 6))
+    lane = np.sort(rng.integers(0, lanes, int(rng.integers(0, 300))))
+    lo = np.round(rng.uniform(0, 100, len(lane)), 1)
+    hi = lo + np.where(rng.random(len(lane)) < 0.1, 0, rng.exponential(rng.choice([0.5, 5, 80])))
+    order = np.lexsort((hi, lo, lane))
+    lo, hi, lane = lo[order], hi[order], lane[order]
+    starts = np.searchsorted(lane, np.arange(lanes + 1))
+    row, rows = iv._pack(lo, hi, starts, True)
+    want_row, want_rows = packed_one_by_one(lo, hi, starts)
+    assert row.tolist() == want_row.tolist()
+    assert rows.tolist() == want_rows.tolist()
 
 
 def test_durations_open_ends_and_bad_rows():
@@ -144,7 +179,5 @@ def test_lines_across_all_lanes():
     assert plot.notes[-1] == Annotation("2026-10-10", text="freeze", color="#d62728")
     plot.notes = []
     assert plot._notes == {}
-    with pytest.raises(AttributeError, match="notes = "):
-        plot.clear_markers()
     with pytest.raises(ValueError, match="times"):
         Timeline().events({"step": [1, 2]}, time=None, order="step").annotate(1)

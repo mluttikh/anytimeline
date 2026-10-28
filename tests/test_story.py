@@ -55,13 +55,3 @@ def test_stem_shape_and_width():
         Stem("wavy")  # ty: ignore[invalid-argument-type]
     with pytest.raises(ValueError, match="width"):
         Stem(width=-5)
-
-
-def test_old_spellings_say_the_new_one():
-    data = {"time": np.array([1.0, 2.0]), "title": ["a", "b"]}
-    with pytest.raises(TypeError, match="stems=True"):
-        Timeline().events(data, text="title", labels="stems")  # ty: ignore[unknown-argument]
-    with pytest.raises(TypeError, match=r"stems=Stem\(shape"):
-        Timeline().events(data, text="title", stem_shape="curved")  # ty: ignore[unknown-argument]
-    with pytest.raises(TypeError, match=r"stems=Stem\(width"):
-        story(data, "title", label_width=100)  # ty: ignore[unknown-argument]

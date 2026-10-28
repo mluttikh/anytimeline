@@ -674,18 +674,104 @@ def _pack(
     n = len(lo)
     row = np.zeros(n, dtype=np.float32)
     rows = np.ones(n, dtype=np.float32)
-    if not pack:
+    if not pack or n == 0:
         return row, rows
+    if prefer is not None:
+        return _pack_preferring(lo, hi, starts, prefer)
+    lane = np.repeat(np.arange(len(starts) - 1), np.diff(starts))
+    # a bar starts a run when every bar before it in its lane has ended: a run is packed as if
+    # its lane began there (all rows are free), and a run of one bar is on row 0
+    reach = _running_max(hi, lane)
+    first = np.ones(n, dtype=bool)
+    first[1:] = (lane[1:] != lane[:-1]) | (lo[1:] >= reach[:-1])
+    at = np.flatnonzero(first)
+    size = np.diff(np.append(at, n))
+    used = np.ones(len(at), dtype=np.int64)
+    short = np.flatnonzero((size > 1) & (size <= SHORT_RUN))
+    left = _pack_short(lo, hi, at[short], size[short], row, used, short)
+    long = np.concatenate([np.flatnonzero(size > SHORT_RUN), left])
+    if len(long):
+        lo_l, hi_l = lo.tolist(), hi.tolist()
+        out = row.tolist()
+        heappush, heappop = heapq.heappush, heapq.heappop
+        for k, a in zip(long.tolist(), at[long].tolist(), strict=True):
+            free: list[int] = []  # rows that are free again, smallest first
+            busy: list[tuple[float, int]] = []  # (end, row) of bars still running
+            u = 0
+            for i in range(a, a + int(size[k])):
+                x = lo_l[i]
+                while busy and busy[0][0] <= x:
+                    heappush(free, heappop(busy)[1])
+                if free:
+                    r = heappop(free)
+                else:
+                    r = u
+                    u += 1
+                out[i] = r
+                heappush(busy, (hi_l[i], r))
+            used[k] = u
+        row = np.asarray(out, dtype=np.float32)
+    lane_rows = np.ones(len(starts) - 1, dtype=np.int64)
+    np.maximum.at(lane_rows, lane[at], used)
+    return row, lane_rows[lane].astype(np.float32)
+
+
+SHORT_RUN = 64
+"""Runs of overlapping bars up to this long are packed together, a bar of each at a time."""
+SHORT_ROWS = 16
+"""... in up to this many rows; a run that needs more is packed alone."""
+
+
+def _pack_short(lo: np.ndarray, hi: np.ndarray, at: np.ndarray, size: np.ndarray,
+                row: np.ndarray, used: np.ndarray, which: np.ndarray) -> np.ndarray:  # fmt: skip
+    """Pack the runs that start at ``at`` (``size`` bars each) side by side: the k-th bar of
+    every run at once, on the first row whose last bar has ended. Writes ``row`` and
+    ``used[which]``; returns the runs (of ``which``) that need more than SHORT_ROWS rows."""
+    m = len(at)
+    if m == 0:
+        return which
+    ends = np.full((m, SHORT_ROWS), -np.inf)
+    full = np.zeros(m, dtype=bool)
+    for k in range(int(size.max())):
+        live = np.flatnonzero(size > k)
+        i = at[live] + k
+        free = ends[live] <= lo[i][:, None]
+        r = free.argmax(axis=1)
+        full[live[~free.any(axis=1)]] = True
+        row[i] = r
+        ends[live, r] = hi[i]
+    used[which] = (ends > -np.inf).sum(axis=1)
+    return which[full]
+
+
+def _running_max(x: np.ndarray, group: np.ndarray) -> np.ndarray:
+    """The largest of ``x[:i + 1]`` within each run of equal ``group`` (sorted)."""
+    if len(x) == 0:
+        return x.copy()
+    order = np.argsort(x, kind="stable")
+    rank = np.empty(len(x), dtype=np.int64)
+    rank[order] = np.arange(len(x))
+    # the group first, then the rank: a running maximum that never crosses into the next group
+    key = np.maximum.accumulate(group.astype(np.int64) * len(x) + rank)
+    return x[order[key % len(x)]]
+
+
+def _pack_preferring(
+    lo: np.ndarray, hi: np.ndarray, starts: np.ndarray, prefer: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """``_pack`` with a preferred row per bar (flame charts): bar by bar, lane by lane."""
+    n = len(lo)
+    out = [0] * n
+    rows = np.ones(n, dtype=np.float32)
+    lo_l, hi_l, prefer_l = lo.tolist(), hi.tolist(), prefer.tolist()
     for a, b in zip(starts[:-1].tolist(), starts[1:].tolist(), strict=True):
-        if b - a < 2 and prefer is None:
-            continue
         free: list[int] = []  # rows that are free again, smallest first
         busy: list[tuple[float, int]] = []  # (end, row) of bars still running
         used = 0
         for i in range(a, b):
-            while busy and busy[0][0] <= lo[i]:
+            while busy and busy[0][0] <= lo_l[i]:
                 heapq.heappush(free, heapq.heappop(busy)[1])
-            want = int(row[prefer[i]]) if prefer is not None and prefer[i] >= 0 else -1
+            want = out[prefer_l[i]] if prefer_l[i] >= 0 else -1
             if want in free:
                 free.remove(want)
                 heapq.heapify(free)
@@ -701,7 +787,7 @@ def _pack(
             else:
                 r = used
                 used += 1
-            row[i] = r
-            heapq.heappush(busy, (float(hi[i]), r))
+            out[i] = r
+            heapq.heappush(busy, (hi_l[i], r))
         rows[a:b] = max(used, 1)
-    return row, rows
+    return np.asarray(out, dtype=np.float32), rows

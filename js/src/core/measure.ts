@@ -1,5 +1,7 @@
 // Measuring: the time between two ends, each a mark's start or end (snapped to within
-// SNAP_PX of the pointer, in the lane under it) or, with Shift, a free time. The Measure
+// SNAP_PX of the pointer, in the lane under it; a sample of a values layer is a mark whose
+// start and end are its time) or, with Shift, a free time. Between two samples of one layer
+// a measure shows the change in value too. The Measure
 // tool measures what a drag spans; the key `m` fixes one end and then the other, with the
 // line following the pointer in between; `M` measures the mark pointed at; `>` and `<` move
 // the selected (or newest) measure's second end to the next or previous edge in its lane.
@@ -8,8 +10,9 @@
 // small menu offers removing it and, in a page, copying it as Python.
 
 import { globalIndex, type Hit } from "./common";
-import { between, type NoteEnd, type NoteMeasure, type Side } from "./notes";
+import { between, changeOf, changeText, type NoteEnd, type NoteMeasure, type Side } from "./notes";
 import { lowerBound, upperBound } from "./scene";
+import { fmtNumber } from "./time";
 import type { TimelineView } from "./view";
 
 /** How near the pointer (CSS px) an edge must be to be taken. */
@@ -72,8 +75,18 @@ function barEdge(view: TimelineView, k: number, i: number, side: Side): NoteEnd 
   return { x: first ? d.start[i] : d.end[i], r: first ? d.rankStart[i] : d.rankEnd[i], lane: d.lane[i], side, layer: d.spec.name, index };
 }
 
+/** Sample i of values layer k as an end: its time is its start (and its end). */
+function sampleEdge(view: TimelineView, k: number, i: number, lane: number): NoteEnd {
+  const v = view.values[k];
+  const d = v.data;
+  const t = d.time[i];
+  const value = d.value[i];
+  const r = view.seq?.count ? view.seq.position(t) : null;
+  return { x: t, r, lane, side: "start", layer: d.spec.name, index: v.globalIndex(i), value: Number.isNaN(value) ? null : value };
+}
+
 /** Every edge of the marks held in a lane from `lo` to `hi` on the scale shown, with its
- * place there. */
+ * place there (a sample's: its time, its place between the events). */
 function edgesIn(view: TimelineView, lane: number, lo: number, hi: number): { at: number; edge: NoteEnd }[] {
   const out: { at: number; edge: NoteEnd }[] = [];
   const order = view.xscale === "order";
@@ -102,6 +115,19 @@ function edgesIn(view: TimelineView, lane: number, lo: number, hi: number): { at
       }
     }
   });
+  if (view.values.length) {
+    const vv = view.valueView();
+    view.values.forEach((v, k) => {
+      const d = v.data;
+      const xs = order ? v.xs(vv) : d.time;
+      for (let run = 0; run < d.runLane.length; run++) {
+        if (d.runLane[run] !== lane) continue;
+        const i0 = lowerBound(xs, lo, d.runStarts[run], d.runStarts[run + 1]);
+        const i1 = upperBound(xs, hi, i0, d.runStarts[run + 1]);
+        for (let i = i0; i < i1; i++) if (!Number.isNaN(d.value[i])) out.push({ at: xs[i], edge: sampleEdge(view, k, i, lane) });
+      }
+    });
+  }
   return out;
 }
 
@@ -146,9 +172,10 @@ export function endAt(view: TimelineView, p: { x: number; y: number }, free: boo
   return freeEnd(view, v);
 }
 
-/** Whether a layer in sight holds bins, not marks, there (Python then finds the edge). */
+/** Whether a layer in sight holds bins, not marks, there, or some of its samples (Python
+ * then finds the edge). */
 function binned(view: TimelineView): boolean {
-  return view.layers.some((l) => !!l.detail?.shown) || view.bars.some((b) => !!b.detail);
+  return view.layers.some((l) => !!l.detail?.shown) || view.bars.some((b) => !!b.detail) || view.values.some((v) => !!v.detail);
 }
 
 /** The end at a point, asking Python when what is held there are bins. */
@@ -175,7 +202,7 @@ export function commit(view: TimelineView, a: NoteEnd, b: NoteEnd, lane: number 
     return;
   }
   const id = -1 - view.localMeasures.length;
-  view.localMeasures = [...view.localMeasures, { a, b, span: b.x - a.x, events: between(a.r, b.r), lane, text: null, color: null, id }];
+  view.localMeasures = [...view.localMeasures, { a, b, span: b.x - a.x, events: between(a.r, b.r), change: changeOf(a, b), lane, text: null, color: null, id }];
   view.selectMeasure(null);
 }
 
@@ -254,7 +281,7 @@ export function moveEnd(view: TimelineView, m: NoteMeasure, end: "a" | "b", to: 
   view.localMeasures = view.localMeasures.map((n) => {
     if (n.id !== m.id) return n;
     const moved = { ...n, [end]: to };
-    return { ...moved, span: moved.b.x - moved.a.x, events: between(moved.a.r, moved.b.r) };
+    return { ...moved, span: moved.b.x - moved.a.x, events: between(moved.a.r, moved.b.r), change: changeOf(moved.a, moved.b) };
   });
   view.requestRender();
 }
@@ -321,7 +348,8 @@ export function handleAt(view: TimelineView, p: { x: number; y: number }): { m: 
   return null;
 }
 
-/** A measure's tooltip: both ends' times and the time between, exactly. */
+/** A measure's tooltip: both ends' times and the time between, exactly; between samples,
+ * their values, the change and its rate. */
 export function describe(view: TimelineView, m: NoteMeasure): string[][] {
   const axis = view.axis;
   if (!axis) return [];
@@ -331,6 +359,11 @@ export function describe(view: TimelineView, m: NoteMeasure): string[][] {
     ["time", axis.formatMeasureExact(m.span)],
   ];
   if (m.events !== null) rows.push(["events between", String(m.events)]);
+  if (m.change !== null && m.change !== undefined) {
+    rows.push(["values", `${fmtNumber(m.a.value ?? NaN)} → ${fmtNumber(m.b.value ?? NaN)}`], ["change", changeText(m.change)]);
+    const rate = axis.formatRate(m.change, m.span);
+    if (rate) rows.push(["rate", rate]);
+  }
   if (m.id >= 0) rows.push(["in Python", `plot.notes[${m.id}]`]);
   return rows;
 }

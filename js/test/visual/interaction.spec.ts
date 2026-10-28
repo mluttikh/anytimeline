@@ -808,6 +808,35 @@ test("Measure: a drag between edges, a double-click on a bar, m; a measure's lab
   expect(await sent("note_remove")).toEqual([expect.objectContaining({ id: 0 })]);
 });
 
+test("Measure: between two samples of a values layer, with the change in value", async ({ page }) => {
+  await open(page, "latency_series");
+  await page.getByRole("button", { name: "Measure" }).click();
+  // two samples of the first lane's first line (at the same time as the second line's)
+  const [a, b] = await view(page).evaluate((root: any) => {
+    const v = root.__view;
+    const vv = v.valueView();
+    const box = root.querySelector(".atl-stage").getBoundingClientRect();
+    return [10, 30].map((i) => {
+      const p = v.values[0].position(i, vv);
+      return { x: box.x + p.x, y: box.y + p.y, value: v.values[0].data.value[i] };
+    });
+  });
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 6 });
+  await page.mouse.up();
+  const [sent] = await page.evaluate(() => (window as any).__log.filter((m: any) => m.type === "measure"));
+  expect(sent.a).toEqual({ layer: "values", index: 10, side: "start" });
+  expect(sent.b).toEqual({ layer: "values", index: 30, side: "start" });
+  // drawn as Python sends it back: the change in its label
+  const end = (index: number, x: number, value: number) => ({ x, r: null, lane: 0, side: "start", layer: "values", index, value });
+  await page.evaluate((n) => {
+    (window as any).__model.state._notes = n;
+    (window as any).__model.emit("change:_notes");
+  }, { measures: [{ a: end(10, 0, a.value), b: end(30, 600, b.value), span: 600, events: null, change: b.value - a.value, lane: null, text: null, color: null, id: 0 }] });
+  await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits[0]?.text ?? "")).toContain("Δ");
+});
+
 test("Undo: Ctrl/Cmd+Z asks Python to take back a change of the selection, Shift for redo", async ({ page }) => {
   await open(page, "service_time");
   await view(page).click({ position: { x: 4, y: 4 } });

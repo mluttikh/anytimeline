@@ -18,6 +18,7 @@ import numpy as np
 
 from anytimeline.layers import events as ev
 from anytimeline.layers import intervals as iv
+from anytimeline.layers import values as vl
 
 MAX_MATCHES = 1000
 """The most matches a search answers (the earliest); the count tells how many there are."""
@@ -39,13 +40,25 @@ class Marks:
 
 
 def marks_of(
-    records: Mapping[str, Any], laid: Mapping[str, Any], ranks: Mapping[str, np.ndarray]
+    records: Mapping[str, Any],
+    laid: Mapping[str, Any],
+    ranks: Mapping[str, np.ndarray],
+    order: np.ndarray | None = None,
+    samples: bool = False,
 ) -> list[Marks]:
+    """The marks of the events and bars layers; with ``samples``, of the values layers too
+    (what a measure's end snaps to), placed between the instants of ``order``."""
     out = []
     for k, (name, rec) in enumerate(records.items()):
+        lay = laid[name]
+        if samples and isinstance(rec, vl.ValuesRecord):
+            x = np.asarray(lay.lo, np.float64)
+            at = vl.places(order, x)
+            r = at if at is not None else x
+            out.append(Marks(name, k, x, x, r, r, np.asarray(lay.lanes), None))
+            continue
         if not isinstance(rec, ev.EventsRecord | iv.IntervalsRecord):
             continue
-        lay = laid[name]
         rk = ranks.get(name)
         r = rk[:, 0] if rk is not None and len(rk) else np.asarray(lay.lo, dtype=np.float64)
         r2 = rk[:, -1] if rk is not None and len(rk) else r

@@ -1,36 +1,10 @@
-"""Arguments and attributes that were renamed or removed in 0.4.0: an old spelling raises an
-error that gives the new one, instead of Python's "unexpected keyword argument". They go in
-a later release."""
+"""Attributes that were removed in 0.5.0: an old name raises an error that gives the new one,
+instead of Python's "has no attribute". They go in a later release."""
 
 from __future__ import annotations
 
-import functools
 from collections.abc import Callable
-from typing import Any, TypeVar
-
-F = TypeVar("F", bound=Callable[..., Any])
-
-
-def renamed(**moves: str) -> Callable[[F], F]:
-    """Decorate a function so that each old keyword in ``moves`` raises a TypeError with its
-    new spelling, e.g. ``@renamed(label="lane=")``. The signature stays the function's own
-    (``inspect.signature`` follows ``__wrapped__``)."""
-
-    def decorate(fn: F) -> F:
-        @functools.wraps(fn)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            old = [k for k in kwargs if k in moves]
-            if old:
-                where = getattr(fn, "__qualname__", "").replace(".__init__", "")
-                raise TypeError(
-                    "; ".join(f"{where}({k}=...) is now {moves[k]}" for k in old)
-                    + " (see the changelog)"
-                )
-            return fn(*args, **kwargs)
-
-        return wrapper  # ty: ignore[invalid-return-type]
-
-    return decorate
+from typing import Any
 
 
 def gone(name: str, now: str) -> property:

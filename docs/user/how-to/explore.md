@@ -72,15 +72,20 @@ plot.measure(atl.start(12), atl.end(12))              # row 12's own length
 plot.measure(atl.start(3, "jobs"), atl.start(4, "jobs"))  # start to start, layer "jobs"
 plot.measure("2026-10-12T08:20", atl.start(40))       # a time to a mark
 plot.measure(t0, t1, "budget: {time}")                # two times, with its own text
+plot.measure(atl.start(8, "cpu"), atl.start(20, "cpu"))   # two samples: the time and ΔY
 ```
 
 [`atl.start`][anytimeline.start] and [`atl.end`][anytimeline.end] name a mark's edge by its
 row in the table (and its layer, with several): the measure stays on the mark. An event's
-start and end are its time.
+start and end are its time, and so are a sample's.
+
+Between two samples of one values layer a measure shows the change in value too, as an
+oscilloscope's cursors do: "1.5 h · Δ −1.19", with a dot on each sample. Its tooltip has both
+values and the rate of change ("−0.79 per h"), and `{change}` in its text is the change.
 
 In the plot, choose the **Measure** tool (the ruler in the toolbar, or `plot.tool =
-"measure"`) and drag from one mark to another: each end takes the start or end of a mark
-under the pointer (a tick shows which), or with <kbd>Shift</kbd> the time there. A
+"measure"`) and drag from one mark to another: each end takes the start or end of a mark (or
+a sample) under the pointer (a tick shows which), or with <kbd>Shift</kbd> the time there. A
 double-click on a bar measures its length. Without the tool, <kbd>m</kbd> with the pointer at
 one end and <kbd>m</kbd> again at the other measures too, <kbd>M</kbd> measures the bar under
 the pointer, and <kbd>&gt;</kbd> <kbd>&lt;</kbd> move the newest measure's second end to the
@@ -92,7 +97,8 @@ it: drag its ends to other edges, press <kbd>Delete</kbd> to remove it, or use i
 Measures made in the plot come to Python, and `plot.measured` is a table of them all, of the
 type you plotted, a row per measure: its index in `plot.notes`, its text, both ends' times,
 the time between as a duration (`b - a`, so negative when `b` is earlier), the events
-between, and the mark and side of each end. In a page without Python (`save_html`), measures
+between, the values of ends that are samples and the change between them, and the mark and
+side of each end. In a page without Python (`save_html`), measures
 made in it are gone when the page is closed; each one's menu has **Copy as Python**, the line
 that makes it again.
 

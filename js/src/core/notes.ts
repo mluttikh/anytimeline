@@ -6,6 +6,7 @@
 // Python, which keeps them; a page keeps its own measures until it is closed.
 
 import { globalIndex, type Hit } from "./common";
+import { fmtNumber } from "./time";
 import type { TimelineView } from "./view";
 
 export type Side = "start" | "end";
@@ -19,6 +20,8 @@ export interface NoteEnd {
   side: Side | null;
   layer?: string;
   index?: number;
+  /** A sample's value (an end that is a sample of a values layer; null: a gap). */
+  value?: number | null;
 }
 
 export interface NoteBand {
@@ -51,9 +54,11 @@ export interface NoteMeasure {
   span: number;
   /** Instants of the order strictly between the ends (null: no order). */
   events: number | null;
+  /** b's value − a's, when both are samples of one values layer (else null or absent). */
+  change?: number | null;
   /** The lane its line is in when its ends say none; null: theirs, or the top. */
   lane: number | null;
-  /** Its own text (`{time}`, `{events}` filled in); null: the time between. */
+  /** Its own text (`{time}`, `{events}`, `{change}` filled in); null: the time between. */
   text: string | null;
   color: string | null;
   /** Its index in Python's list of notes; a page's own measures: −1, −2, ... */
@@ -86,6 +91,8 @@ type Rect = { x: number; y: number; w: number; h: number };
 
 /** The length of a measure's arrowheads (px). */
 export const ARROW_LEN = 7;
+/** The radius of the dot on a sample a measure ends at (px). */
+const SAMPLE_DOT = 2.5;
 
 /** The mark of a hit, as Python knows it (null: a bin, or merged bars). */
 export function markOf(view: TimelineView, h: Hit | null): MarkRef | null {
@@ -143,14 +150,27 @@ export function between(ra: number | null, rb: number | null): number | null {
   return Math.max(0, Math.ceil(Math.max(ra, rb)) - Math.floor(Math.min(ra, rb)) - 1);
 }
 
-/** A measure's label: its text with `{time}` and `{events}` filled in; without text the
- * time, and on the Order scale the events between too. */
+/** A measure's label: its text with `{time}`, `{events}` and `{change}` filled in; without
+ * text the time, on the Order scale the events between too, and between samples the change
+ * in value. */
 export function measureText(view: TimelineView, m: NoteMeasure): string {
   const time = view.axis ? view.axis.formatMeasure(Math.abs(m.span)) : String(Math.abs(m.span));
   const n = m.events;
   const count = n === null ? "" : `${n.toLocaleString("en-US").replace(/,/g, " ")} event${n === 1 ? "" : "s"}`;
-  if (m.text === null || m.text === undefined) return view.xscale === "order" && count ? `${time} · ${count}` : time;
-  return m.text.replace(/\{time\}/g, time).replace(/\{events\}/g, count);
+  const change = m.change === null || m.change === undefined ? "" : changeText(m.change);
+  if (m.text === null || m.text === undefined) return [time, view.xscale === "order" ? count : "", change ? `Δ ${change}` : ""].filter((p) => p).join(" · ");
+  return m.text.replace(/\{time\}/g, time).replace(/\{events\}/g, count).replace(/\{change\}/g, change);
+}
+
+/** A change in value, signed, to three digits. */
+export function changeText(change: number): string {
+  return (change > 0 ? "+" : change < 0 ? "−" : "") + fmtNumber(Math.abs(change), 3);
+}
+
+/** The change in value from end a to end b: both samples of one values layer (else null). */
+export function changeOf(a: NoteEnd, b: NoteEnd): number | null {
+  if (a.value === undefined || a.value === null || b.value === undefined || b.value === null || a.layer !== b.layer) return null;
+  return b.value - a.value;
 }
 
 /** A measure as drawn: where its ends are (px), the rows of their marks, the row of its line
@@ -161,6 +181,8 @@ export interface MeasureLaid {
   xa: number;
   xb: number;
   rows: [number | null, number | null];
+  /** Where an end that is a sample is (px; null: the middle of its mark's row). */
+  ys: [number | null, number | null];
   row: number | null;
   text: string;
   tw: number;
@@ -187,7 +209,8 @@ export function layoutMeasures(view: TimelineView, ctx: CanvasRenderingContext2D
       row = shown.length ? Math.min(...shown) : null;
     }
     const text = measureText(view, m);
-    geoms.push({ m, xa: px(a), xb: px(b), rows, row, text, tw: ctx.measureText(text).width + 8, color: m.color ?? view.theme.accent });
+    const ys: [number | null, number | null] = [sampleY(view, m.a), sampleY(view, m.b)];
+    geoms.push({ m, xa: px(a), xb: px(b), rows, ys, row, text, tw: ctx.measureText(text).width + 8, color: m.color ?? view.theme.accent });
   }
   geoms.sort((p, q) => Math.min(p.xa, p.xb) - Math.min(q.xa, q.xb));
   const step = view.fs + 8;
@@ -216,6 +239,13 @@ export function layoutMeasures(view: TimelineView, ctx: CanvasRenderingContext2D
   return out;
 }
 
+/** Where an end that is a sample is drawn (null: it is not a sample, or not shown). */
+function sampleY(view: TimelineView, e: NoteEnd): number | null {
+  if (e.value === undefined || e.value === null || e.lane === null) return null;
+  const v = view.values.find((l) => l.data.spec.name === e.layer);
+  return v ? v.yAt(e.lane, e.value, view.valueView()) : null;
+}
+
 function head(ctx: CanvasRenderingContext2D, x: number, y: number, tip: number): void {
   const base = x - tip * ARROW_LEN;
   ctx.beginPath();
@@ -226,9 +256,10 @@ function head(ctx: CanvasRenderingContext2D, x: number, y: number, tip: number):
   ctx.fill();
 }
 
-/** A measure: an extension line from each end's mark to the line's height (a short tick
- * through the line at a time), the line with an arrowhead at each end (outside, pointing in,
- * when the line is short), the label on the background. Selected: thicker, with handles. */
+/** A measure: an extension line from each end's mark to the line's height (from a sample: a
+ * dot on it; a short tick through the line at a time), the line with an arrowhead at each end
+ * (outside, pointing in, when the line is short), the label on the background. Selected:
+ * thicker, with handles. */
 function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: MeasureLaid, plot: Rect, laneTop: number, selected: boolean): void {
   const y = d.y;
   const lo = Math.min(d.xa, d.xb);
@@ -238,11 +269,15 @@ function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: Measu
   ctx.fillStyle = d.color;
   ctx.lineWidth = 1;
   ctx.setLineDash([3, 2]);
-  const ends: [number, number | null][] = [[d.xa, d.rows[0]], [d.xb, d.rows[1]]];
-  for (const [x, row] of ends) {
+  const ends: [number, number | null, number | null][] = [[d.xa, d.rows[0], d.ys[0]], [d.xb, d.rows[1], d.ys[1]]];
+  for (const [x, row, ys] of ends) {
     let y0 = y - 5;
     let y1 = y + 5;
-    if (row !== null) {
+    if (ys !== null) {
+      const away = y > ys ? 1 : -1;
+      y0 = ys;
+      y1 = y + away * 4;
+    } else if (row !== null) {
       const yc = laneTop + (row + 0.5) * view.laneH;
       const away = y > yc ? 1 : -1;
       y0 = yc + away * Math.min(6, view.laneH / 4);
@@ -280,6 +315,12 @@ function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: Measu
       ctx.stroke();
       head(ctx, x, y, -way);
     }
+  }
+  for (const [x, , ys] of ends) {
+    if (ys === null || ys < plot.y || ys > plot.y + plot.h) continue;
+    ctx.beginPath();
+    ctx.arc(x, ys, SAMPLE_DOT, 0, Math.PI * 2);
+    ctx.fill();
   }
   if (selected) {
     for (const x of [d.xa, d.xb]) {

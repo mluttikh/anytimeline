@@ -10,7 +10,7 @@
 // with Layer.index the index of each among the layer's).
 
 import { BarLayer, type BarView, decodeBars } from "./bars";
-import { type BarLayerDraw, barBox, type MarkLayerDraw } from "./renderers/renderer";
+import { type BarLayerDraw, barBox, FLAG_SELECTED, type MarkLayerDraw } from "./renderers/renderer";
 import { decodeEvents, type EventsData, fillSolid, lowerBound, specBufferIds, SYMBOLS, upperBound, view as bytes } from "./scene";
 import type { Sequence } from "./sequence";
 import type { BarLevelsSpec, DataSource, EventsLayerSpec, IntervalsLayerSpec, LevelSpec, LevelsSpec, ValueLevelsSpec, ValuesLayerSpec, WindowAnswer, XScale } from "./types";
@@ -98,6 +98,7 @@ export class BinsLayer {
   private slotFor: Int32Array | null = null;
   private scaleFor = NaN;
   private accentFor = "";
+  private markedFor: Float64Array | undefined;
 
   constructor(readonly data: BinsData) {
     const d = data;
@@ -207,6 +208,30 @@ export class BinsLayer {
       this.bars.color.version++;
       this.marks.color.version++;
     }
+  }
+
+  /** Flag the bins that hold a selected event (`marked`: time, place in the order and lane of
+   * each, as Python sends them), so that a selection fades the others. */
+  select(marked: Float64Array | undefined): void {
+    if (marked === this.markedFor) return;
+    this.markedFor = marked;
+    const d = this.data;
+    const held = new Uint8Array(d.count);
+    const starts = d.laneStarts;
+    const at = d.scale === "order" ? 1 : 0;
+    for (let k = 0; marked && k + 2 < marked.length; k += 3) {
+      const lane = marked[k + 2];
+      if (lane + 1 >= starts.length) continue;
+      const x = marked[k + at];
+      const i = lowerBound(d.hi, x, starts[lane], starts[lane + 1]);
+      if (i < starts[lane + 1] && d.lo[i] <= x) held[i] = 1;
+    }
+    const bf = this.bars.flags.data;
+    for (let j = 0; j < this.barBin.length; j++) bf[4 * j] = held[this.barBin[j]] ? FLAG_SELECTED : 0;
+    const sf = this.marks.sf.data;
+    for (let j = 0; j < this.markBin.length; j++) sf[4 * j + 1] = held[this.markBin[j]] ? FLAG_SELECTED : 0;
+    this.bars.flags.version++;
+    this.marks.sf.version++;
   }
 
   /** The bins of the lanes on rows r0..r1 that reach into [a, b]; counts their events. */

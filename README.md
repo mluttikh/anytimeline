@@ -111,7 +111,7 @@ uv run pytest                         # Python tests
 (cd js && npm run typecheck && npm test)
 uv run ruff check . && uv run ruff format --check . && uv run ty check
 uv run python scripts/make_scenes.py  # scenes for the visual tests
-(cd js && npx playwright install chromium && npm run test:visual)  # every scene × backend, marimo
+(cd js && npx playwright install chromium firefox webkit && npm run test:visual)  # scenes × backends × browsers
 uv run nbstripout --install           # once per clone: commit notebooks without outputs
 uv run python scripts/build_docs.py   # user documentation into site/ (examples run; warnings fail)
 uv run python scripts/build_docs.py serve   # preview it at http://localhost:8000

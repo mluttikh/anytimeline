@@ -4,7 +4,9 @@ times as a table (``Timeline.measured``).
 
 An end of a note is an ``Edge`` (a mark's start or end, found where the mark is laid out) or
 a time. On the Order scale a time is placed between the instants around it, an edge at its
-mark's own place, so a measure from a bar's start to its end spans its own instants.
+mark's own place, so a measure from a bar's start to its end spans its own instants. A
+sample of a values layer is a mark whose start and end are its time; a measure between two
+samples of one layer has the change in value too.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from typing import Any
 import numpy as np
 
 from anytimeline.data import NotFoundError
+from anytimeline.layers.values import places
 from anytimeline.parts import Annotation, Connection, Edge, Measure, Note
 from anytimeline.timebase import TimeBase
 
@@ -53,7 +56,7 @@ def end_of(ctx: Context, end: Any) -> dict[str, Any]:
         layer = ctx.layer_named(end.layer)
         m = ctx.mark_at(layer, end.row)
         first = end.side == "start"
-        return {
+        out = {
             "x": m["x"] if first else m["x2"],
             "r": m["r"] if first else m["r2"],
             "lane": m["lane"],
@@ -62,6 +65,11 @@ def end_of(ctx: Context, end: Any) -> dict[str, Any]:
             "row": end.row,
             "index": m["index"],
         }
+        if "value" in m:  # a sample: its place between the instants, and its value
+            at = places(ctx.order, np.asarray([out["x"]]))
+            out["r"] = None if at is None else float(at[0])
+            out["value"] = m["value"]
+        return out
     x = ticks(ctx, end)
     return {"x": x, "r": place(ctx, x), "lane": None, "side": None}
 
@@ -107,6 +115,8 @@ def _browser_end(e: Mapping[str, Any]) -> dict[str, Any]:
     if "layer" in e:
         out["layer"] = e["layer"]
         out["index"] = e["index"]
+    if "value" in e:
+        out["value"] = e["value"]
     return out
 
 
@@ -116,15 +126,25 @@ def arrow(ctx: Context, c: Connection) -> dict[str, Any]:
     return {"a": _browser_end(a), "b": _browser_end(b), "text": c.text, "color": c.color}
 
 
+def change(a: Mapping[str, Any], b: Mapping[str, Any]) -> float | None:
+    """The change in value from end a to end b: both samples of one values layer (None:
+    not, or a gap)."""
+    va, vb = a.get("value"), b.get("value")
+    if va is None or vb is None or a.get("layer") != b.get("layer"):
+        return None
+    return vb - va
+
+
 def measure(ctx: Context, m: Measure) -> dict[str, Any]:
-    """A measure: its ends, the time between (``span``, ticks, b − a) and the instants
-    between (``events``; None without an order)."""
+    """A measure: its ends, the time between (``span``, ticks, b − a), the instants between
+    (``events``; None without an order) and, between samples, the change in value."""
     a, b = end_of(ctx, m.a), end_of(ctx, m.b)
     return {
         "a": _browser_end(a),
         "b": _browser_end(b),
         "span": b["x"] - a["x"],
         "events": between(a["r"], b["r"]),
+        "change": change(a, b),
         "lane": lane_index(ctx, m.lane, "measure in"),
         "text": m.text,
         "color": m.color,
@@ -194,6 +214,14 @@ def table(ctx: Context, notes: Sequence[Note], like: Any) -> Any:
     cols["events"] = np.asarray(
         [-1 if (e := between(r["a"]["r"], r["b"]["r"])) is None else e for r in rows],
         dtype=np.int64,
+    )
+    nan = float("nan")
+    for key in ("a", "b"):
+        cols[f"{key}_value"] = np.asarray(
+            [nan if (v := r[key].get("value")) is None else v for r in rows], dtype=np.float64
+        )
+    cols["change"] = np.asarray(
+        [nan if (c := change(r["a"], r["b"])) is None else c for r in rows], dtype=np.float64
     )
     for key in ("a", "b"):
         cols[f"{key}_layer"] = np.asarray([r[key].get("layer") for r in rows], dtype=object)

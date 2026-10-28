@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { asPython, nearestHeld, stepHeld, timePython } from "../src/core/measure";
+import { asPython, commit, describe as describeMeasure, nearestHeld, stepHeld, timePython } from "../src/core/measure";
 import { between, layoutMeasures, measureText, type NoteEnd, type NoteMeasure } from "../src/core/notes";
 import { TimeAxis } from "../src/core/time";
 import type { TimeSpec } from "../src/core/types";
@@ -87,6 +87,42 @@ describe("measures: snapping to edges", () => {
   it("uses the places in the order on the Order scale", () => {
     const v = fakeView({ xscale: "order", xsrc: (l: { data: { rank: Float64Array } }) => l.data.rank });
     expect(nearestHeld(v, 0, 2.2, 0.5)).toMatchObject({ x: 4, r: 2, side: "end", layer: "b" });
+  });
+});
+
+/** fakeView with a values layer "cpu": lane 0, samples at 3 (10), 7 (NaN, a gap) and 11 (4). */
+function withSamples(over: Partial<Record<string, unknown>> = {}): TimelineView {
+  const cpu = {
+    data: { spec: { name: "cpu" }, time: new Float64Array([3, 7, 11]), value: new Float32Array([10, NaN, 4]), runStarts: new Uint32Array([0, 3]), runLane: new Uint32Array([0]) },
+    xs: () => new Float64Array([3, 7, 11]),
+    globalIndex: (i: number) => i,
+  };
+  return fakeView({ values: [cpu], valueView: () => ({}), seq: null, localMeasures: [], callbacks: {}, selectMeasure: () => {}, ...over });
+}
+
+describe("measures: samples of a values layer", () => {
+  it("are ends: their time, their value; gaps are not", () => {
+    const v = withSamples();
+    expect(nearestHeld(v, 0, 3.4, 0.8)).toMatchObject({ x: 3, side: "start", layer: "cpu", index: 0, value: 10 });
+    expect(nearestHeld(v, 0, 7, 0.8)).toBeNull();
+    expect(stepHeld(v, 0, 9.5, true)).toMatchObject({ x: 11, layer: "cpu", index: 2, value: 4 });
+  });
+
+  it("measured from one to another, show the change in value and its rate", () => {
+    const v = withSamples();
+    const a = nearestHeld(v, 0, 3, 0.5)!;
+    const b = nearestHeld(v, 0, 11, 0.5)!;
+    commit(v, a, b, null);
+    const [m] = v.localMeasures;
+    expect(m.change).toBe(-6);
+    expect(measureText(v, m)).toBe("8 s · Δ \u22126");
+    expect(measureText(v, { ...m, text: "{change} in {time}" })).toBe("\u22126 in 8 s");
+    expect(describeMeasure(v, m)).toContainEqual(["change", "\u22126"]);
+    expect(describeMeasure(v, m)).toContainEqual(["rate", "\u22120.75 per s"]);
+    // a sample and a bar's edge: no change
+    commit(v, a, nearestHeld(v, 0, 4, 0.5)!, null);
+    expect(v.localMeasures[1].change).toBeNull();
+    expect(measureText(v, v.localMeasures[1])).toBe("1 s");
   });
 });
 

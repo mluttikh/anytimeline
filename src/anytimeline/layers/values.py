@@ -25,6 +25,26 @@ KINDS = get_args(ValuesKind)
 SCALES = get_args(ValuesScale)
 
 
+def places(order: np.ndarray | None, ticks: np.ndarray) -> np.ndarray | None:
+    """Where samples at ``ticks`` are on the Order scale (``Sequence.position``): an instant's
+    place at its time, else between the instants before and after, as far along as its time
+    is between theirs. None: no order."""
+    if order is None or not len(order):
+        return None
+    t = np.asarray(ticks, dtype=np.float64)
+    n = len(order)
+    j = np.searchsorted(order, t, "left")
+    at = np.minimum(j, n - 1)
+    t0 = order[np.maximum(j - 1, 0)]
+    t1 = order[at]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        f = np.where(t1 > t0, (t - t0) / (t1 - t0), 1.0)
+    out = j - 1 + f
+    out = np.where(j == 0, -0.5, out)
+    out = np.where(j >= n, n - 0.5, out)
+    return np.where((j < n) & (order[at] == t), j, out).astype(np.float64)
+
+
 @dataclass
 class ValuesRecord:
     """A values layer as read from its table (rows with a time)."""

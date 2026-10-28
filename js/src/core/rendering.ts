@@ -133,11 +133,13 @@ export function renderFrame(view: TimelineView): void {
         l.draw.visibleCount = 0;
         if (what) {
           what.update(view.base, view.slot, view.markScale, view.theme.accent);
+          what.select(view.marked[l.data.spec.name]);
           for (const d of [what.bars, what.marks]) {
             d.offset = view.camera.left - view.base;
             d.scale = view.camera.scale;
             d.laneTop = laneTop;
             d.laneHeight = view.laneH;
+            d.fade = fade;
           }
           frame.bars.push(what.bars);
           frame.layers.push(what.marks);
