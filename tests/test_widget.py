@@ -243,17 +243,9 @@ def test_dev_perf_and_benchmark(monkeypatch):
     assert sent == [({"type": "benchmark", "frames": 30}, None)]
 
 
-def test_removed_names_say_what_replaced_them():
+def test_selection_mode_none():
     _, plot = plot_of_log()
-    with pytest.raises(AttributeError, match=r"plot.view"):
-        plot.range  # noqa: B018
-    with pytest.raises(AttributeError, match=r"plot.dev.perf"):
-        plot.perf  # noqa: B018
-    with pytest.raises(AttributeError, match=r"plot.widget.observe"):
-        plot.observe(print, "tool")
-    with pytest.raises(ValueError, match="'order'"):
-        Timeline(xscale="sequence")  # ty: ignore[invalid-argument-type]
-    with pytest.raises(ValueError, match="selection_mode=None"):
+    with pytest.raises(ValueError, match="selection_mode"):
         plot.selection_mode = "none"
     plot.selection_mode = None
     assert plot.widget.selection_mode is None

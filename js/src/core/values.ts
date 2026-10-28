@@ -103,6 +103,13 @@ export class ValueLayer {
     return this.seqX;
   }
 
+  /** Where a value is drawn in lane `lane` (CSS px; null: the lane is not shown). */
+  yAt(lane: number, value: number, v: ValueView): number | null {
+    const row = v.slot[lane];
+    if (row === undefined || row < 0 || 2 * lane + 1 >= this.data.ylim.length) return null;
+    return this.yOf(lane, row, v)(value);
+  }
+
   /** The band of lane `lane` on row `row`: value → y. */
   private yOf(lane: number, row: number, v: ValueView): (value: number) => number {
     const lo = this.data.ylim[2 * lane];

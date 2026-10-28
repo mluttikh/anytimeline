@@ -140,8 +140,6 @@ def test_box_selection_with_folded_lanes():
 def test_parent_needs_id_and_no_lane():
     with pytest.raises(ValueError, match="needs id="):
         Timeline().intervals(SPANS, parent="parent_id")
-    with pytest.raises(TypeError, match="is now lane="):
-        Timeline().intervals(SPANS, parent="parent_id", id="span_id", label="name")  # ty: ignore[unknown-argument]
     with pytest.raises(ValueError, match="needs parent="):
         Timeline().intervals(SPANS, lane="name", critical_path=True)
 

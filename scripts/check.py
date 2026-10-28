@@ -6,9 +6,10 @@ checkout (.github/workflows/ci.yml).
     uv run python scripts/check.py --keep-going
 
 ``python`` runs on this checkout's Python (CI: 3.12 to 3.15, and Windows); ``browser`` needs
-Chromium for Playwright (``cd js && npx playwright install chromium``) and, here as on CI,
-compares screenshots on macOS only. Each step's output shows as it runs; a summary of the
-steps and their times ends the run, which fails when a step failed.
+Chromium, Firefox and WebKit for Playwright (``cd js && npx playwright install chromium
+firefox webkit``) and, here as on CI, compares screenshots on macOS only (in Chromium).
+Each step's output shows as it runs; a summary of the steps and their times ends the run,
+which fails when a step failed.
 """
 
 from __future__ import annotations

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import math
 import uuid
 import warnings
 import weakref
@@ -29,7 +30,7 @@ from anytimeline.layers import intervals as iv
 from anytimeline.layers import states as st
 from anytimeline.layers import values as vl
 from anytimeline.parts import Annotation, Connection, Edge, Measure, Note, Route, Stem
-from anytimeline.renamed import gone, gone_method, renamed
+from anytimeline.renamed import gone, gone_method
 from anytimeline.settings import (
     at_least,
     between,
@@ -106,18 +107,6 @@ def _notes(value: Any, name: str) -> list[Note]:
     return list(value)
 
 
-def _xscale(value: Any, name: str) -> Any:
-    if value == "sequence":
-        raise ValueError(f"{name}='order' is the Order scale ('sequence' was 0.3's)")
-    return one_of(XSCALES)(value, name)
-
-
-def _selection_mode(value: Any, name: str) -> Any:
-    if value == "none":
-        raise ValueError(f"{name}=None: nothing can be selected ('none' was 0.3's)")
-    return one_of(SELECTION_MODES)(value, name)
-
-
 class Timeline:
     """An interactive timeline: layers of events on lanes, drawn on the GPU.
 
@@ -178,7 +167,7 @@ class Timeline:
     """Height in pixels; 0 sizes the plot to its lanes."""
     title: str = setting("", text)
     """Shown above the plot."""
-    xscale: XScale = setting("time", _xscale)
+    xscale: XScale = setting("time", one_of(XSCALES))
     """``"time"`` or ``"order"``; also the Time / Order switch in the plot."""
     renderer: Renderer = setting("auto", one_of(RENDERERS))
     """The drawing backend; ``"auto"`` picks the first that works."""
@@ -206,7 +195,7 @@ class Timeline:
     summary_panel: bool = setting(True, flag)
     """Show the selection in numbers in a panel while something is selected; see
     [`summary`][anytimeline.Timeline.summary]."""
-    selection_mode: SelectionMode | None = setting("multiple", _selection_mode)
+    selection_mode: SelectionMode | None = setting("multiple", one_of(SELECTION_MODES))
     """``"multiple"``: boxes, and Shift/Ctrl/Cmd-clicks that add; ``"single"``: one mark;
     ``None``: no selection (the Select tool is not offered)."""
     selection: dict[str, list[int]] = setting({}, mapping)
@@ -255,17 +244,11 @@ class Timeline:
     _link: dict[str, Any] = setting({})
     """The group of linked plots: ``{"group": id, "align": "time" | "start"}``, or empty."""
 
-    # removed in 0.4.0: what replaced them
-    range = gone("Timeline.range", "plot.view: its start and end")
-    perf = gone("Timeline.perf", "plot.dev.perf")
-    clear_markers = gone_method("Timeline.clear_markers", "plot.notes = []")
     # removed in 0.5.0: one list of notes; a marker is an annotation across all lanes
     markers = gone("Timeline.markers", "plot.notes (a marker: an Annotation at one time)")
     annotations = gone("Timeline.annotations", "plot.notes")
     connections = gone("Timeline.connections", "plot.notes")
     marker = gone_method("Timeline.marker", "plot.annotate(time, text=label)")
-    observe = gone_method("Timeline.observe", "plot.widget.observe (the plot is no widget)")
-    unobserve = gone_method("Timeline.unobserve", "plot.widget.unobserve")
 
     def __init__(
         self,
@@ -334,6 +317,7 @@ class Timeline:
         self._perf: dict[str, Any] = {}
         self._tooltip_cache: dict[tuple[str, int], list[list[str]]] = {}
         self._findable: list[find.Marks] | None = None
+        self._snappable: list[find.Marks] | None = None
         """What search and stepping see (made when first asked; again after a change)."""
         self._undo: list[dict[str, list[int]]] = []
         """The selections before the last changes, the latest last (``undo_selection``)."""
@@ -460,11 +444,6 @@ class Timeline:
 
     # ------------------------------------------------------------------ layers
 
-    @renamed(
-        labels="stems=True (labels='stems'), or leave it out (labels='beside')",
-        stem_shape="stems=Stem(shape=...), or stems='curved'",
-        label_width="stems=Stem(width=...)",
-    )
     def events(
         self,
         data: Any,
@@ -570,7 +549,6 @@ class Timeline:
         )
         return self._add(record, data, group)
 
-    @renamed(label="lane= (with parent=: the column that names each bar's lane)")
     def intervals(
         self,
         data: Any,
@@ -735,8 +713,6 @@ class Timeline:
             select: Whether its states can be selected (as the rows that start them).
             name: The layer's name; adding a layer with an existing name replaces it.
         """
-        if text is False:
-            raise TypeError("states(text=None) leaves the text out (text=False was 0.3's)")
         tooltip = _columns(tooltip, "tooltip")
         data = tables.read_once(data, *_arguments(locals()))
         record = st.build(
@@ -828,7 +804,6 @@ class Timeline:
         )
         return self._add(record, data, group)
 
-    @renamed(label="lane= (the column that names each span's lane)")
     def spans(
         self,
         data: Any,
@@ -1031,7 +1006,8 @@ class Timeline:
         """Add a [`Measure`][anytimeline.Measure] to [`notes`][anytimeline.Timeline.notes]:
         the time from ``a`` to ``b``, drawn as a dimension line with the time at its middle.
         An end is a mark's start or end (an [`Edge`][anytimeline.Edge], made by
-        [`start`][anytimeline.start] or [`end`][anytimeline.end]) or a time.
+        [`start`][anytimeline.start] or [`end`][anytimeline.end]) or a time. Between two
+        samples of a values layer it shows the change in value too (ΔY).
         [`measured`][anytimeline.Timeline.measured] gives the times as a table. In the plot,
         the Measure tool, or the key ``m`` on one mark and then on another, adds one too.
 
@@ -1043,14 +1019,17 @@ class Timeline:
         plot.measure(atl.start(3, "db"), atl.start(4, "db"))  # start to start, layer "db"
         plot.measure("2026-10-28T10:00:00.250", atl.start(40))  # a time to a mark
         plot.measure(t0, t1, "budget: {time}")       # two times, with its own text
+        plot.measure(atl.start(8, "cpu"), atl.start(20, "cpu"))  # two samples: time and ΔY
         ```
 
         Args:
             a: Where it starts: an edge, or a time of the data's kind (datetime, ISO text,
                 duration or number). A plain number is a time, never a row.
             b: Where it ends: an edge or a time.
-            text: Written at its middle; ``None``: the time between. ``{time}`` in it is
-                the time between, ``{events}`` the number of events between in the order.
+            text: Written at its middle; ``None``: the time between (and the change in
+                value between two samples). ``{time}`` in it is the time between,
+                ``{events}`` the number of events between in the order, ``{change}`` the
+                change in value.
             lane: The lane it is drawn in when neither end is an edge (a lane's name);
                 ``None``: at the top of the plot.
             color: Its colour (default: the accent colour).
@@ -1075,6 +1054,9 @@ class Timeline:
           is before ``a``;
         - ``events``: how many events (and bars' starts and ends) lie between the ends in the
           order;
+        - ``a_value``, ``b_value``: the value of an end that is a sample of a values layer
+          (NaN for others); ``change``: ``b_value - a_value`` when both ends are samples of
+          one layer;
         - ``a_layer``, ``a_row``, ``a_side`` and the same for ``b``: the mark of an end that
           is an edge (``None``, -1 and ``None`` for a time).
 
@@ -1219,6 +1201,7 @@ class Timeline:
         self._marked = self._marked_of(self._marks)
         self._summary = self._panel(self.selection)
         self._findable = None
+        self._snappable = None
         self._notes = self._notes_of()
         self._spec = made.spec
 
@@ -1531,13 +1514,14 @@ class Timeline:
 
     def _mark_at(self, layer: str, row: int) -> dict[str, Any]:
         """Where the mark of table row ``row`` is: its index in the browser, its start and
-        end (ticks), its place in the order, and its lane."""
+        end (ticks), its place in the order, and its lane; a sample's start and end are its
+        time, and it has a value (its place in the order: None, found from its time)."""
         layer = self._layer_named(layer)
         if self._scene is None:
             self._update_spec()
         rec = self._layers[layer]
-        if not isinstance(rec, ev.EventsRecord | iv.IntervalsRecord):
-            raise ValueError(f"layer {layer!r} has no marks with a start and an end (samples)")
+        if not isinstance(rec, ev.EventsRecord | iv.IntervalsRecord | vl.ValuesRecord):
+            raise ValueError(f"layer {layer!r} has no marks with a start and an end")
         pos = summaries.positions(rec, [row])
         if not len(pos):
             raise NotFoundError(f"layer {layer!r} draws no row {row}")
@@ -1545,6 +1529,19 @@ class Timeline:
         inverse[rec.perm] = np.arange(len(rec.perm))
         i = int(inverse[pos[0]])
         lay = self._laid[layer]
+        if isinstance(rec, vl.ValuesRecord):
+            value = float(rec.values[pos[0]])
+            x = float(lay.lo[i])
+            return {
+                "layer": layer,
+                "index": i,
+                "x": x,
+                "x2": x,
+                "r": None,
+                "r2": None,
+                "lane": int(lay.lanes[i]),
+                "value": value if math.isfinite(value) else None,
+            }
         ranks = self._ranks.get(layer)
         r = (
             (float(ranks[i, 0]), float(ranks[i, -1]))
@@ -1642,7 +1639,12 @@ class Timeline:
         """The edge a measure's end snaps to (``{"type": "snap"}``): the nearest start or end
         in a lane, within a distance on the scale shown; or, with ``forward``, the next or
         previous one (keys ``>`` and ``<``)."""
-        marks = self._marks_to_find()
+        if self._scene is None:
+            self._update_spec()
+        if self._snappable is None:
+            order = self._scene.order if self._scene is not None else None
+            self._snappable = find.marks_of(self._layers, self._laid, self._ranks, order, True)
+        marks = self._snappable
         lane, at, scale = int(content["lane"]), float(content["at"]), str(content.get("scale"))
         if "forward" in content:
             return {"edge": find.step_edge(marks, lane, at, bool(content["forward"]), scale)}
@@ -1959,8 +1961,6 @@ def _columns(value: str | Sequence[str] | None, name: str) -> list[str] | None:
 
 def _expand(value: Any) -> Any:
     """``expand=`` as the tree reads it: a number, "auto", or None for every level."""
-    if value is None:
-        raise ValueError("expand='all' shows every level (expand=None was 0.3's)")
     if value == "all":
         return None
     if value == "auto" or (isinstance(value, int) and not isinstance(value, bool)):

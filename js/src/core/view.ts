@@ -255,7 +255,7 @@ export class TimelineView implements DetailView {
     input.bindInput(this);
     this.stage.dataset.tool = this.tool;
     this.updateToolbar();
-    this.resizeObserver = new ResizeObserver(() => this.layout());
+    this.resizeObserver = new ResizeObserver(this.onResize);
     this.resizeObserver.observe(this.root);
     // the host's light or dark theme: the OS's, or an attribute of <html> or <body> that
     // JupyterLab, VS Code, marimo and documentation themes switch
@@ -1488,6 +1488,18 @@ export class TimelineView implements DetailView {
     times.sort((a, b) => a - b);
     return { median_ms: times[Math.floor(times.length / 2)], p95_ms: times[Math.floor(times.length * 0.95)] };
   }
+
+  private layoutRequested = false;
+  /** The root changed size: lay out in the next frame. Inside the observer's callback the
+   * stage's new height (and so the root's) could not be delivered: a loop error. */
+  private readonly onResize = (): void => {
+    if (this.layoutRequested) return;
+    this.layoutRequested = true;
+    requestAnimationFrame(() => {
+      this.layoutRequested = false;
+      if (this.root.isConnected) this.layout();
+    });
+  };
 
   private readonly themeWatch: MutationObserver;
   private readonly themeMedia: MediaQueryList | null;

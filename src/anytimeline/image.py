@@ -154,6 +154,12 @@ def _rgb(hex_color: str) -> tuple[int, int, int]:
     return (v >> 16) & 255, (v >> 8) & 255, v & 255
 
 
+def change_text(change: float) -> str:
+    """A change in value, signed, to three digits (``changeText``)."""
+    sign = "+" if change > 0 else "\u2212" if change < 0 else ""
+    return sign + ax.fmt_number(abs(change), 3)
+
+
 def _hex(r: int, g: int, b: int) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
@@ -603,6 +609,7 @@ class _Picture:
         self.binned: set[str] = set()
         """Events layers drawn as bins (their selection as rings over them)."""
         self.values_drawn: list[tuple[np.ndarray, np.ndarray]] = []
+        self.values_ylim: dict[str, np.ndarray] = {}  # per values layer: its lanes' bands
         """Per values layer drawn: its runs' lanes and its lanes' bands (the scales)."""
         self.stems_fit: set[str] = set()
         """Stems layers whose text is in boxes on stems (else beside the marks)."""
@@ -1138,6 +1145,7 @@ class _Picture:
             else np.full(n, float(layer["size"]["value"] or 8))
         ) * f.mark_scale
         top = math.log1p(max(2, spec["most"]))
+        held = self._held(layer["name"], starts, lo, hi) if f.fade else None
         vis = []
         for r in range(l0, l1 + 1):
             lane = f.lane_at[r]
@@ -1152,6 +1160,7 @@ class _Picture:
         for i in vis:
             row = int(f.slot[lanes[i]])
             c = color[i]
+            faded = held is not None and not held[i]
             if counts[i] > 1:
                 x0, x1 = f.px(lo[i]), f.px(hi[i])
                 x1 = max(x1, x0 + 1)
@@ -1167,19 +1176,39 @@ class _Picture:
                 )
                 a0 = max(x0, px - 8)
                 b0 = min(max(x1 - (1 if x1 - x0 > 3 else 0), x0 + 1), px + pw + 8)
-                self._clipped_rect(
-                    a0, cy - h / 2, max(1, b0 - a0), h, _hex(*c[:3].tolist()), c[3] / 255
-                )
+                a = c[3] / 255 * (0.22 if faded else 1)
+                self._clipped_rect(a0, cy - h / 2, max(1, b0 - a0), h, _hex(*c[:3].tolist()), a)
             else:
                 x = f.px(lo[i])
                 y = f.lane_top + (row + 0.5) * f.lane_h
                 r = size[i] / 2
                 if px <= x <= px + pw and py <= y <= py + ph:
-                    key = (int(c[0]), int(c[1]), int(c[2]), round(c[3] / 255, 2))
+                    a = c[3] / 255 * (0.2 if faded else 1)
+                    key = (int(c[0]), int(c[1]), int(c[2]), round(a, 2))
                     marks.setdefault(key, []).append(symbol_path(int(symbol[i]), x, y, r))
         for (r, g, b, a), paths in marks.items():
             self.svg.path("".join(paths), fill=_hex(r, g, b), fill_opacity=a if a < 1 else None)
         self.binned.add(layer["name"])
+
+    def _held(self, name: str, starts: np.ndarray, lo: np.ndarray, hi: np.ndarray) -> np.ndarray:
+        """Which bins hold a selected event (``BinsLayer.select``): those a selection does
+        not fade."""
+        held = np.zeros(len(lo), dtype=bool)
+        at = self.plot._marked.get(name)
+        if not at:
+            return held
+        rows = np.frombuffer(at, dtype="<f8").reshape(-1, 3)
+        xs, lanes = rows[:, 1 if self.f.order else 0], rows[:, 2].astype(np.int64)
+        for lane in np.unique(lanes):
+            if lane + 1 >= len(starts):
+                continue
+            s0, s1 = int(starts[lane]), int(starts[lane + 1])
+            x = xs[lanes == lane]
+            i = s0 + np.searchsorted(hi[s0:s1], x, "left")
+            ok = i < s1
+            i, x = i[ok], x[ok]
+            held[i[lo[i] <= x]] = True
+        return held
 
     def _marked(self, l0: int, l1: int) -> None:
         """The selected events of layers drawn as bins: rings over the bins (``drawMarked``)."""
@@ -1789,6 +1818,7 @@ class _Picture:
         run_lane = d.arr(runs["lane"]).astype(np.int64)
         run_color = d.arr(runs["color"]).reshape(-1, 4).astype(np.int64)
         ylim = d.arr(got["ylim"]).astype(np.float64)
+        self.values_ylim[spec["name"]] = ylim
         color = spec["color"]
         theme_color = not color.get("legend") and (
             not color.get("solid") or color["solid"] == "theme"
@@ -2136,15 +2166,18 @@ class _Picture:
             self._note_label(n["text"], (xa + xb) / 2 - w / 2, (ya + yb) / 2 - f.fs / 2 - 2, color)
 
     def _measure_text(self, n: dict[str, Any]) -> str:
-        """A measure's label (``measureText``): its text, ``{time}`` and ``{events}`` filled
-        in; without text the time, and on the Order scale the events between."""
+        """A measure's label (``measureText``): its text, ``{time}``, ``{events}`` and
+        ``{change}`` filled in; without text the time, on the Order scale the events between,
+        and between samples the change in value."""
         time = self.time_axis.format_measure(abs(n["span"]))
         events = n.get("events")
         count = "" if events is None else f"{ax.fmt_number(events)} event{'s' * (events != 1)}"
+        change = "" if n.get("change") is None else change_text(n["change"])
         text = n.get("text")
         if text is None:
-            return f"{time} · {count}" if self.f.order and count else time
-        return text.replace("{time}", time).replace("{events}", count)
+            parts = [time, count if self.f.order else "", f"Δ {change}" if change else ""]
+            return " · ".join(p for p in parts if p)
+        return text.replace("{time}", time).replace("{events}", count).replace("{change}", change)
 
     def _measures(self, measures: list[dict[str, Any]]) -> None:
         """Measures as dimension lines (``drawMeasures``): from each end's mark an extension
@@ -2176,6 +2209,7 @@ class _Picture:
                     "xa": f.px(xs[0]),
                     "xb": f.px(xs[1]),
                     "rows": rows,
+                    "ys": [self._sample_y(n[k]) for k in ("a", "b")],
                     "row": row,
                     "text": text,
                     "tw": text_width(text, size) + 8,
@@ -2183,6 +2217,17 @@ class _Picture:
                 }
             )
         return out
+
+    def _sample_y(self, end: dict[str, Any]) -> float | None:
+        """Where an end that is a sample is drawn (``sampleY``; None: no sample, not shown)."""
+        ylim = self.values_ylim.get(end.get("layer") or "")
+        lane, value = end.get("lane"), end.get("value")
+        if ylim is None or lane is None or value is None or 2 * lane + 1 >= len(ylim):
+            return None
+        row = int(self.f.slot[lane])
+        if row < 0:
+            return None
+        return self._y_of(float(ylim[2 * lane]), float(ylim[2 * lane + 1]), row)(value)
 
     def _dimension(self, d: dict[str, Any]) -> None:
         f = self.f
@@ -2193,8 +2238,11 @@ class _Picture:
         lo, hi = min(d["xa"], d["xb"]), max(d["xa"], d["xb"])
         if hi < px - 1 or lo > px + pw + 1 or y < py or y > py + ph:
             return
-        for x, row in ((d["xa"], d["rows"][0]), (d["xb"], d["rows"][1])):
-            if row is None:  # a time: a short tick through the line
+        ends = ((d["xa"], d["rows"][0], d["ys"][0]), (d["xb"], d["rows"][1], d["ys"][1]))
+        for x, row, ys in ends:
+            if ys is not None:  # a sample: from its dot
+                y0, y1 = ys, y + (1 if y > ys else -1) * 4
+            elif row is None:  # a time: a short tick through the line
                 y0, y1 = y - 5, y + 5
             else:
                 yc = f.lane_top + (row + 0.5) * f.lane_h
@@ -2224,6 +2272,13 @@ class _Picture:
                 base = x + way * ARROW_LEN
             head = [(x, y), (base, y - 3.5), (base, y + 3.5)]
             self.svg.path(_path(head, close=True), fill=color)
+        dots = [
+            symbol_path(0, x, ys, SAMPLE_DOT)
+            for x, _, ys in ends
+            if ys is not None and px <= x <= px + pw and py <= ys <= py + ph
+        ]
+        if dots:
+            self.svg.path("".join(dots), fill=color)
         if d["text"]:
             self._note_label(d["text"], d["lx"], y - (f.fs + 4) / 2, color)
 
@@ -2466,6 +2521,8 @@ def _fit_range(a: float, b: float, margin: float, time: Mapping[str, Any]) -> tu
 
 ARROW_LEN = 7
 """The length of a measure's arrowheads, in pixels."""
+SAMPLE_DOT = 2.5
+"""The radius of the dot on a sample a measure ends at, in pixels."""
 
 
 def layout_measures(

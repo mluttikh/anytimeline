@@ -9,7 +9,6 @@ from typing import Any
 from anytimeline import traces
 from anytimeline.parts import Stem
 from anytimeline.plot import Timeline
-from anytimeline.renamed import renamed
 from anytimeline.types import StemShape
 
 
@@ -83,7 +82,6 @@ def gantt(
     return plot
 
 
-@renamed(stem_shape="stems=Stem(shape=...), or stems='curved'", label_width="stems=Stem(width=...)")
 def story(
     data: Any,
     text: str,

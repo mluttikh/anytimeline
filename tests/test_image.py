@@ -12,8 +12,8 @@ import numpy as np
 import pytest
 from kinds import every_kind
 
-from anytimeline import Timeline, View
-from anytimeline.synthetic import service_log
+from anytimeline import Timeline, View, levels
+from anytimeline.synthetic import instants, service_log
 
 SVG = "{http://www.w3.org/2000/svg}"
 
@@ -117,6 +117,19 @@ def test_layers_sent_as_levels_draw_their_bins_or_their_marks() -> None:
     b = base.to_value(lo + (hi - lo) * 0.5005)
     zoomed = plot.to_svg(view=View(a, b))
     assert zoomed != plot.to_svg()
+
+
+def test_a_selection_fades_the_bins_that_hold_none_of_it(monkeypatch) -> None:
+    monkeypatch.setattr(levels, "LEVELS_FROM", 200)
+    monkeypatch.setattr(levels, "RAW_MARKS", 50)
+    plot = Timeline().events(instants(4000, lanes=6), lane="lane")
+    assert 'fill-opacity="0.22"' not in plot.to_svg()
+    plot.selection = {"events": [0]}
+    svg = plot.to_svg()
+    bins = [r for r in parse(svg).iter(f"{SVG}rect") if r.get("fill") == "#1f77b4"]
+    faded = [r for r in bins if r.get("fill-opacity") == "0.22"]
+    assert len(bins) - len(faded) == 1  # the bin of the selected event
+    assert len(faded) > 100
 
 
 def test_dark_theme() -> None:

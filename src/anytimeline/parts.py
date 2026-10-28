@@ -97,8 +97,9 @@ SIDES = get_args(Side)
 class Edge:
     """A mark's start or end: where a [`Measure`][anytimeline.Measure], a
     [`Connection`][anytimeline.Connection] or an [`Annotation`][anytimeline.Annotation] may
-    begin or end, so that it stays on the mark. An event's start and end are its time.
-    [`start`][anytimeline.start] and [`end`][anytimeline.end] make one.
+    begin or end, so that it stays on the mark. An event's start and end are its time, and
+    so are a sample's (a row of a values layer). [`start`][anytimeline.start] and
+    [`end`][anytimeline.end] make one.
 
     Args:
         row: The mark: a row of its layer's table.
@@ -121,7 +122,8 @@ class Edge:
 
 
 def start(row: int, layer: str | None = None) -> Edge:
-    """The start of a mark: an [`Edge`][anytimeline.Edge] (an event's start is its time).
+    """The start of a mark: an [`Edge`][anytimeline.Edge] (an event's or a sample's start is
+    its time).
 
     Args:
         row: The mark: a row of its layer's table.
@@ -131,7 +133,8 @@ def start(row: int, layer: str | None = None) -> Edge:
 
 
 def end(row: int, layer: str | None = None) -> Edge:
-    """The end of a mark: an [`Edge`][anytimeline.Edge] (an event's end is its time).
+    """The end of a mark: an [`Edge`][anytimeline.Edge] (an event's or a sample's end is its
+    time).
 
     Args:
         row: The mark: a row of its layer's table.
@@ -216,8 +219,10 @@ class Measure:
         a: Where it starts: an edge, or a time of the data's kind (a datetime, ISO text, a
             duration or a number).
         b: Where it ends: an edge or a time.
-        text: Written at its middle; ``None``: the time between. ``{time}`` in it is the time
-            between, ``{events}`` the number of events between them in the order.
+        text: Written at its middle; ``None``: the time between (and, between two samples
+            of a values layer, the change in value). ``{time}`` in it is the time between,
+            ``{events}`` the number of events between them in the order, ``{change}`` the
+            change in value.
         lane: The lane it is drawn in when neither end is an edge (a lane's name); ``None``:
             at the top of the plot.
         color: Its colour; ``None``: the accent colour.

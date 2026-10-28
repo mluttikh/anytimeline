@@ -353,6 +353,17 @@ export class TimeAxis {
     if (this.kind === "number") return fmtNumber(dx, 10);
     return formatDuration(dx * this.perNs, 0, true);
   }
+
+  /** A change in value over a span of ticks as a rate: per the largest unit of time the span
+   * reaches ("+8.2 per h"), or per one on a plot of numbers (null: no span, or no times). */
+  formatRate(change: number, dx: number): string | null {
+    if (!dx || this.kind === "order") return null;
+    const signed = (v: number) => (v > 0 ? "+" : v < 0 ? "\u2212" : "") + fmtNumber(Math.abs(v), 4);
+    if (this.kind === "number") return `${signed(change / dx)} per 1`;
+    const ns = dx * this.perNs;
+    const [unit, name] = DURATION_UNITS.find(([u]) => Math.abs(ns) >= u) ?? [1, "ns"];
+    return `${signed(change / (ns / unit))} per ${name}`;
+  }
 }
 
 function spacingFor(stepNs: number): number {

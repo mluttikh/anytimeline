@@ -2,6 +2,22 @@ import { defineConfig } from "@playwright/test";
 
 // Visual tests (npm run test:visual). esbuild bundles the harness and serves js/.
 // Scenes come from `uv run python scripts/make_scenes.py`.
+
+// full Chromium in new headless mode uses the real GPU; the minimal headless shell cannot
+// present WebGPU canvases
+const chromium = {
+  channel: "chromium",
+  launchOptions: {
+    args: [
+      "--enable-unsafe-webgpu",
+      "--ignore-gpu-blocklist",
+      ...(process.env.CI ? ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] : []),
+    ],
+  },
+};
+
+const OTHER_BROWSERS = ["**/scenes.spec.ts", "**/interaction.spec.ts", "**/linked.spec.ts", "**/saved.spec.ts"];
+
 export default defineConfig({
   testDir: "test/visual",
   testMatch: "*.spec.ts",
@@ -16,22 +32,16 @@ export default defineConfig({
     screenshot: process.env.CI ? "only-on-failure" : "off",
     trace: process.env.CI ? "retain-on-failure" : "off",
     deviceScaleFactor: 1,
-    // full Chromium in new headless mode uses the real GPU; the minimal headless shell
-    // cannot present WebGPU canvases
-    channel: "chromium",
-    launchOptions: {
-      args: [
-        "--enable-unsafe-webgpu",
-        "--ignore-gpu-blocklist",
-        ...(process.env.CI ? ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] : []),
-      ],
-    },
   },
   // notebooks (a JupyterLab, a marimo with kernels) after the rest: they start servers and
   // kernels, which a machine busy drawing every scene on every backend slows down too much
+  // Firefox and WebKit: the scenes, interactions, linked plots and pages, without comparing
+  // screenshots (their fonts and antialiasing differ from Chromium's)
   projects: [
-    { name: "browser", testIgnore: ["**/jupyterlab.spec.ts", "**/notebook.spec.ts", "**/levels.spec.ts"] },
-    { name: "notebooks", testMatch: ["**/jupyterlab.spec.ts", "**/notebook.spec.ts", "**/levels.spec.ts"], dependencies: ["browser"] },
+    { name: "browser", use: chromium, testIgnore: ["**/jupyterlab.spec.ts", "**/notebook.spec.ts", "**/levels.spec.ts"] },
+    { name: "notebooks", use: chromium, testMatch: ["**/jupyterlab.spec.ts", "**/notebook.spec.ts", "**/levels.spec.ts"], dependencies: ["browser"] },
+    { name: "firefox", use: { browserName: "firefox" }, testMatch: OTHER_BROWSERS, ignoreSnapshots: true },
+    { name: "webkit", use: { browserName: "webkit" }, testMatch: OTHER_BROWSERS, ignoreSnapshots: true },
   ],
   webServer: {
     command:

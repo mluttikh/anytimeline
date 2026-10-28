@@ -292,6 +292,72 @@ def test_the_plot_asks_python_for_edges() -> None:
     assert p._snap({"lane": 1, "at": ticks(p, 5), "forward": True, "scale": "time"})["edge"] is None
 
 
+# ---------------------------------------------------------------------- samples
+
+
+def with_samples() -> Timeline:
+    """``plot()`` and a values layer ``cpu`` in lane b: 10, 40, NaN (a gap), 25 at 2, 3, 3.5
+    and 4 h."""
+    samples = {
+        "time": T0 + np.array([4, 6, 7, 8]) * H / 2,
+        "task": np.array(["b"] * 4, dtype=object),
+        "cpu": [10.0, 40.0, np.nan, 25.0],
+    }
+    return plot().values(samples, lane="task", value="cpu", name="cpu")
+
+
+def test_a_measure_between_samples_has_the_change_in_value() -> None:
+    p = with_samples().measure(atl.start(0, "cpu"), atl.end(3, "cpu"))
+    (m,) = p._notes["measures"]
+    assert (m["a"]["x"], m["b"]["x"]) == (ticks(p, 2), ticks(p, 4))
+    assert (m["a"]["value"], m["b"]["value"], m["change"]) == (10.0, 25.0, 15.0)
+    assert (m["a"]["lane"], m["b"]["side"]) == (1, "end")
+    # on the Order scale a sample is where the browser draws it: at an instant of its time
+    # (b's start, place 1), else as far between the instants around it as its time is
+    assert m["a"]["r"] == 1.0
+    assert m["b"]["r"] == pytest.approx(2 + 2 / 3)  # from a's end (2 h) to c's start (5 h)
+    assert m["events"] == 1  # a's end
+    # a sample and a bar's edge, or a gap: no change
+    p.measure(atl.end(0, "intervals"), atl.start(1, "cpu"))
+    p.measure(atl.start(0, "cpu"), atl.start(2, "cpu"))
+    assert [n["change"] for n in p._notes["measures"][1:]] == [None, None]
+    assert p._notes["measures"][2]["b"]["value"] is None
+
+
+def test_measured_has_the_values_and_the_change() -> None:
+    p = with_samples().measure(atl.start(1, "cpu"), atl.start(3, "cpu"), "{change}")
+    p.measure(atl.end(0, "intervals"), atl.start(1, "cpu"))
+    t = p.measured
+    assert t["a_value"][0] == 40.0
+    assert np.isnan(t["a_value"][1])
+    assert t["b_value"].tolist() == [25.0, 40.0]
+    assert t["change"][0] == -15.0
+    assert np.isnan(t["change"][1])
+    assert t["a_layer"].tolist() == ["cpu", "intervals"]
+
+
+def test_samples_are_ends_in_the_plot_and_in_pictures() -> None:
+    p = with_samples()
+    snap = p._snap({"lane": 1, "at": ticks(p, 3.1), "within": ticks(p, 0.5), "scale": "time"})
+    assert snap["edge"] == {
+        "layer": "cpu",
+        "index": 1,
+        "side": "start",
+        "x": ticks(p, 3),
+        "r": pytest.approx(2 + 1 / 3),
+        "lane": 1,
+    }
+    step = p._snap({"lane": 1, "at": ticks(p, 3), "forward": True, "scale": "time"})
+    assert step["edge"]["x"] == ticks(p, 3.5)  # samples of gaps too: Python finds every one
+    w = p.widget
+    ends = {"a": {"layer": "cpu", "index": 0, "side": "start"}, "b": snap["edge"]}
+    w._on_msg(w, {"type": "measure", **ends, "lane": None}, [])
+    assert p.notes == [Measure(Edge(0, "start", "cpu"), Edge(1, "start", "cpu"))]
+    assert "1 h · Δ +30" in p.to_svg()
+    p.notes = [Measure(atl.start(1, "cpu"), atl.start(3, "cpu"), "fell {change} in {time}")]
+    assert "fell \u221215 in 1 h" in p.to_svg()
+
+
 def test_the_measure_tool_is_a_setting() -> None:
     p = plot()
     p.tool = "measure"

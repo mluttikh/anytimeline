@@ -4,6 +4,39 @@ All notable changes to anytimeline. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **ΔY**: a sample of a values layer is a mark a measure may end at
+  (`plot.measure(atl.start(8, "cpu"), atl.start(20, "cpu"))`, or the Measure tool, whose ends
+  snap to samples). Between two samples of one layer a measure shows the change in value
+  with the time ("1.5 h · Δ −1.19") and a dot on each sample; its tooltip has both values and
+  the rate of change, `{change}` in its text is the change, and `plot.measured` has the
+  columns `a_value`, `b_value` and `change`.
+
+### Changed
+
+- Bars are packed into sub-rows about three times as fast (0.08 s for a million bars that
+  rarely overlap, from 0.33 s); runs of many bars that all overlap take as long as before.
+- The browser tests run in Firefox and WebKit too (the scenes, interactions, linked plots
+  and pages).
+
+### Removed
+
+- The errors that named the new spelling of what 0.4.0 renamed or removed (`plot.range`,
+  `plot.perf`, `plot.observe`, `plot.clear_markers()`, `xscale="sequence"`,
+  `selection_mode="none"`, `expand=None`, `states(text=False)`, `label=` of `intervals` and
+  `spans`, `labels=`, `stem_shape=` and `label_width=`): they now fail as any unknown name
+  or value does. The errors for what 0.5.0 removed stay for a release.
+
+### Fixed
+
+- A selection fades the bins of events too (a layer of many events zoomed out), except the
+  bins that hold a selected event, in the plot and in pictures.
+- The plot laid itself out inside the browser's resize callback, which Safari reported as
+  "ResizeObserver loop completed with undelivered notifications" when the toolbar wrapped.
+
 ## [0.5.0] - 2026-10-28
 
 Traces in depth: flame charts, flame graphs of many traces, two traces compared, and traces
@@ -288,6 +321,7 @@ drawn with WebGPU, WebGL2 or Canvas 2D.
   that follow the notebook.
 - Synthetic example data (`anytimeline.synthetic`) and documentation with live examples.
 
+[Unreleased]: https://github.com/mluttikh/anytimeline/compare/v0.5.0...HEAD
 [0.5.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.5.0
 [0.4.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.4.0
 [0.3.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.3.0
