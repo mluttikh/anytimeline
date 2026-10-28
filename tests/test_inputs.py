@@ -1,8 +1,9 @@
 """Every kind of table gives the same plot: the same spec and data sent to the browser, and
 the same rows selected. Polars (eager and lazy), PyArrow, pandas (NumPy, nullable and Arrow
-dtypes), DuckDB and a dict of arrays, with missing values in each kind of column."""
+dtypes), DuckDB, Ibis and a dict of arrays, with missing values in each kind of column."""
 
 import duckdb
+import ibis
 import numpy as np
 import pandas as pd
 import polars as pl
@@ -45,6 +46,7 @@ TABLES = {
     "pandas-arrow": lambda: polars().to_pandas(types_mapper=pd.ArrowDtype),
     # a relation of its own connection: DuckDB reads the Arrow table by its name
     "duckdb": lambda: duckdb.connect().from_arrow(polars().to_arrow()).order("seq"),
+    "ibis": lambda: ibis.memtable(polars().to_arrow()).order_by("seq"),
 }
 
 

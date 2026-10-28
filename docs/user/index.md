@@ -58,7 +58,7 @@ print(plot._embed_html())
   zoomed out and the events themselves where you zoom in, so it opens at once and pans
   smoothly ([how to](how-to/large.md)).
 
-It reads Polars, pandas, PyArrow and DuckDB tables, and works in JupyterLab, VS Code and
+It reads Polars, pandas, PyArrow, DuckDB and Ibis tables, and works in JupyterLab, VS Code and
 marimo.
 
 **Example notebooks** to run yourself: [event charts](https://github.com/mluttikh/anytimeline/blob/main/examples/event_charts.ipynb),

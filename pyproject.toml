@@ -66,6 +66,7 @@ dev = [
     "hypothesis>=6.100",
     "duckdb>=1.1",
     "resvg-py>=0.5",
+    "ibis-framework[duckdb]>=10",
 ]
 
 [build-system]

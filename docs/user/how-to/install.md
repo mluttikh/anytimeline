@@ -15,7 +15,7 @@ Node.js. It needs Python 3.12 or newer, and a notebook that shows
 [anywidget](https://anywidget.dev) widgets: JupyterLab, Jupyter Notebook 7, VS Code or
 marimo.
 
-To read tables, install the library you use: Polars, pandas, PyArrow or DuckDB. A dict of
+To read tables, install the library you use: Polars, pandas, PyArrow, DuckDB or Ibis. A dict of
 NumPy arrays works without any of them.
 
 ## From the source
