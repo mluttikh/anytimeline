@@ -35,7 +35,7 @@ export type Gesture =
 export type SelectMode = "replace" | "add" | "remove" | "toggle";
 
 /** What a drag does: set when it starts, from the tool, the keys held and where it starts. */
-export type DragMode = "pan" | "zoom" | "select" | "axis" | "note";
+export type DragMode = "pan" | "zoom" | "select" | "axis" | "note" | "measure" | "handle";
 /** A zoom range (a band over all lanes), a selection box, or a time range to select. */
 export type BoxKind = "range" | "select" | "range-select";
 export interface Box {

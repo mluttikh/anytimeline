@@ -5,8 +5,8 @@
 import { ICONS } from "./icons";
 import type { XScale } from "./types";
 
-export type Tool = "pan" | "zoom" | "select";
-export const TOOLS: Tool[] = ["pan", "zoom", "select"];
+export type Tool = "pan" | "zoom" | "select" | "measure";
+export const TOOLS: Tool[] = ["pan", "zoom", "select", "measure"];
 
 export interface ToolbarActions {
   tool(tool: Tool): void;
@@ -58,6 +58,7 @@ const TOOL_TIPS: Record<Tool, string> = {
   pan: "Pan: drag to move through time and lanes · key p",
   zoom: "Zoom: drag over a time range to show it; click to zoom in, Alt-click to zoom out · key z",
   select: "Select: drag a box, or click an event; Shift adds, Alt removes · key s",
+  measure: "Measure: drag from one mark's start or end to another's; double-click a bar for its length · key m measures from the keyboard",
 };
 
 /** What a drag does with each tool: the hint next to the counts. */
@@ -65,6 +66,7 @@ export const HINTS: Record<Tool, string> = {
   pan: "Drag: pan · Shift-drag: zoom to a range",
   zoom: "Drag: zoom to a time range · Alt-click: zoom out",
   select: "Drag: select a box · Shift: add · Alt: remove",
+  measure: "Drag: measure between edges · Shift: a free time · double-click: a bar's length",
 };
 
 function button(icon: string, label: string, tip: string, onClick: () => void): HTMLButtonElement {
@@ -142,6 +144,7 @@ export class Toolbar {
       pan: button(ICONS.pan, "Pan", TOOL_TIPS.pan, () => actions.tool("pan")),
       zoom: button(ICONS.zoom, "Zoom", TOOL_TIPS.zoom, () => actions.tool("zoom")),
       select: button(ICONS.select, "Select", TOOL_TIPS.select, () => actions.tool("select")),
+      measure: button(ICONS.measure, "Measure", TOOL_TIPS.measure, () => actions.tool("measure")),
     };
     this.toolGroup.append(...TOOLS.map((t) => this.toolButtons[t]));
 

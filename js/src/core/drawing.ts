@@ -1,5 +1,5 @@
 // The front canvas: the time axis, lane names and bands' text, labels, stems and their
-// boxes, gaps, markers, value scales, the hover ring and the zoom or selection box.
+// boxes, gaps, value scales, the hover ring and the zoom or selection box.
 
 import type { BarView } from "./bars";
 import { FLAG_SELECTED } from "./renderers/renderer";
@@ -628,46 +628,6 @@ export function drawBarText(view: TimelineView, ctx: CanvasRenderingContext2D, v
   ctx.textAlign = "left";
   const span = (t: number) => (view.axis ? view.axis.formatSpan(t) : fmtNumber(t));
   if (labels) for (const b of view.bars) b.drawLabels(ctx, v, view.theme.text, view.theme.bg, view.theme.muted, span);
-  ctx.restore();
-}
-
-/** Vertical lines at times set in Python (Timeline.marker), labelled at the top. */
-export function drawMarkers(view: TimelineView, ctx: CanvasRenderingContext2D, plot: { x: number; y: number; w: number; h: number }): void {
-  const markers = view.spec?.markers ?? [];
-  if (!markers.length) return;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(plot.x, 0, plot.w, plot.y + plot.h);
-  ctx.clip();
-  ctx.font = view.font(-1);
-  ctx.textBaseline = "alphabetic";
-  for (const m of markers) {
-    let at = m.x;
-    if (view.xscale === "order") {
-      if (!view.seq?.count) continue;
-      at = view.seq.lower(m.x) - 0.5;
-    }
-    const x = Math.round(plot.x + view.camera.toPx(at)) + 0.5;
-    if (x < plot.x - 1 || x > plot.x + plot.w + 1) continue;
-    const color = m.color ?? view.theme.select;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 3]);
-    ctx.beginPath();
-    ctx.moveTo(x, plot.y);
-    ctx.lineTo(x, plot.y + plot.h);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    if (m.label) {
-      const w = ctx.measureText(m.label).width + 8;
-      const lx = Math.min(x + 3, plot.x + plot.w - w);
-      const y = plot.y + 3;
-      ctx.fillStyle = view.theme.bg;
-      ctx.fillRect(lx, y, w, view.fs + 4);
-      ctx.fillStyle = color;
-      ctx.fillText(m.label, lx + 4, y + view.fs);
-    }
-  }
   ctx.restore();
 }
 

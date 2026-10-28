@@ -381,6 +381,14 @@ class TimeAxis:
             return fmt_number(dx, 3)
         return format_duration(dx * self.per_ns, 0, sig=2)
 
+    def format_measure(self, dx: float) -> str:
+        """A measured span of ticks, to three significant digits (``formatMeasure``)."""
+        if self.kind == "order":
+            return f"{fmt_number(dx)} events"
+        if self.kind == "number":
+            return fmt_number(dx, 3)
+        return format_duration(dx * self.per_ns, 0, sig=3)
+
 
 def _spacing_for(step_ns: int) -> int:
     return MIN_SPACING["long"] if step_ns < 10**6 else MIN_SPACING["medium"]

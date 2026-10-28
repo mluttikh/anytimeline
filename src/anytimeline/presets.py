@@ -1,5 +1,5 @@
 """Presets: plots set up for a common chart in one call. Each returns a ``Timeline`` with its
-layers added, so everything else (more layers, markers, settings) works as usual."""
+layers added, so everything else (more layers, notes, settings) works as usual."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def gantt(
         name="tasks",
     )
     if today is not None:
-        plot.marker(today, "today")
+        plot.annotate(today, text="today")
     return plot
 
 
@@ -142,7 +142,7 @@ def story(
         name="events",
     )
     if today is not None:
-        plot.marker(today, "today")
+        plot.annotate(today, text="today")
     return plot
 
 

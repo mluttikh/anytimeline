@@ -7,9 +7,28 @@ All notable changes to anytimeline. The format follows
 ## [Unreleased]
 
 Traces in depth: flame charts, flame graphs of many traces, two traces compared, and traces
-from Jaeger and from Chrome's trace format.
+from Jaeger and from Chrome's trace format. And measuring: the time from one mark's start or
+end to another's, made in Python or in the plot, with all notes in one list.
 
 ### Added
+
+- **Measures**: `plot.measure(a, b)` draws the time between two ends as a dimension line
+  with the time at its middle (and, on the Order scale, the events between). An end is a
+  mark's start or end, `atl.start(row)` or `atl.end(row, layer)` (an `Edge`), or a time, so
+  a measure spans a gap, start to start, a bar's own length, or a time to a mark.
+  `plot.measured` is a table of them: both times, the time between as a duration, the
+  events between, and the mark and side of each end.
+- **The Measure tool** (`plot.tool = "measure"`, the ruler in the toolbar): a drag from one
+  mark to another measures between their nearest starts or ends (Shift: a free time); a
+  double-click measures a bar. The keys `m` (one end, then the other), `M` (the bar under
+  the pointer) and `>` `<` (move the second end to the next or previous edge) work with any
+  tool. A measure's label shows both times exactly when hovered; clicked, it selects the
+  measure, whose ends can then be dragged and which `Delete` removes. Measures made in the
+  plot come to Python; a page keeps its own until it is closed, and offers each one as
+  Python to copy.
+- Connections and annotations take edges too: `plot.connect(atl.start(3), atl.start(4))`
+  draws start to start (and end to end, start to end), and
+  `plot.annotate(atl.start(3), atl.end(3))` stays on a mark.
 
 - **Flame charts**: `spans(..., layout="flame")` puts the spans on a lane per depth, each
   under the span that called it and named in its bar, so a deep trace stays a few lanes
@@ -34,6 +53,14 @@ from Jaeger and from Chrome's trace format.
 
 ### Changed
 
+- **Breaking: one list of notes.** `plot.notes` holds the annotations, connections and
+  measures, in the order they were made, and replaces `plot.annotations`,
+  `plot.connections` and `plot.markers` (each now raises an error that says so).
+- **Breaking: markers are annotations.** `Marker` and `plot.marker(time, label)` are gone:
+  `plot.annotate(time, text=label)` draws the same line across all lanes, in the selection
+  colour, its label on top (`gantt(today=)` and `schedule(today=)` make one).
+- **Breaking:** a `Connection`'s ends are `Edge`s; `(layer, row)` still means that mark's
+  end for `a` and its start for `b`, as `plot.connect(3, 4)` still does.
 - `spans()` marks the critical path and writes durations by default in a waterfall only
   (`critical_path=` and `durations=` default to `None`); `height=` defaults to 0.6 in a
   waterfall and 0.9 in a flame chart.

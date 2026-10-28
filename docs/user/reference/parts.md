@@ -8,11 +8,21 @@ The parts of a layer whose settings only matter together, and what a plot shows.
 
 ::: anytimeline.Stem
 
-::: anytimeline.Marker
+## Notes
+
+What [`Timeline.notes`][anytimeline.Timeline.notes] holds, and their ends.
 
 ::: anytimeline.Annotation
 
 ::: anytimeline.Connection
+
+::: anytimeline.Measure
+
+::: anytimeline.Edge
+
+::: anytimeline.start
+
+::: anytimeline.end
 
 ## Symbols
 

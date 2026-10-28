@@ -47,6 +47,16 @@ export function helpSections(tools: Tool[], fullscreen: boolean, tree = false): 
       ],
     ]);
   }
+  sections.push([
+    "Measure",
+    [
+      ["Drag", "from a mark's start or end to another's: the time between"],
+      ["Shift + drag", "to or from a free time"],
+      ["Double-click a bar", "its length"],
+      ["Click a measure's time", "select it: drag its ends, Delete removes it"],
+      ["Hover a measure's time", "both times, and the time between exactly"],
+    ],
+  ]);
   if (tree) {
     sections.push([
       "Lanes in a tree",
@@ -74,6 +84,9 @@ export function helpSections(tools: Tool[], fullscreen: boolean, tree = false): 
       ["F", "fit the view to that mark"],
       ["a", "annotate: drag over a time range, or click a time"],
       ["c", "on a mark, then on another: an arrow between them"],
+      ["m", "on one end, then on the other: measure the time between"],
+      ["M", "on a bar: measure its length"],
+      ["> · <", "move a measure's second end to the next · previous edge"],
       ["l · f · ?", "legend · full screen · this help"],
     ],
   ]);

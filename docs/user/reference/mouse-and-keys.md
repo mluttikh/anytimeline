@@ -5,17 +5,17 @@ click into it).
 
 ## Tools
 
-The toolbar's first three buttons choose what a drag does; `plot.tool` sets it from Python.
+The toolbar's first four buttons choose what a drag does; `plot.tool` sets it from Python.
 
-| | Pan (default) | Zoom | Select |
-| --- | --- | --- | --- |
-| Drag | move through time and lanes | zoom to the time range | select the events in a box |
-| Shift + drag | zoom to a time range | the same | add what is in the box |
-| Click | nothing | zoom in 2× | select the event |
-| Shift / Ctrl / ⌘ + click | add or remove the event | — | add or remove the event |
-| Alt + click | remove the event | zoom out 2× | remove the event |
-| Alt + drag | — | — | remove what is in the box |
-| Double-click | the whole timeline | — | — |
+| | Pan (default) | Zoom | Select | Measure |
+| --- | --- | --- | --- | --- |
+| Drag | move through time and lanes | zoom to the time range | select the events in a box | measure from one mark's start or end to another's |
+| Shift + drag | zoom to a time range | the same | add what is in the box | measure to or from a free time |
+| Click | nothing | zoom in 2× | select the event | nothing |
+| Shift / Ctrl / ⌘ + click | add or remove the event | — | add or remove the event | — |
+| Alt + click | remove the event | zoom out 2× | remove the event | — |
+| Alt + drag | — | — | remove what is in the box | — |
+| Double-click | the whole timeline | — | — | measure the bar's length |
 
 Select is offered while something can be selected (`selection_mode` is not `"none"`) and a
 notebook is running.
@@ -29,6 +29,8 @@ notebook is running.
 | Hold Space + drag | pan |
 | Drag on the time axis | zoom to that range (with Select: select that range in all lanes) |
 | Hover | the event's details |
+| Hover a measure's time | both ends' times, and the time between exactly |
+| Click a measure's time | select it, with its menu: drag its ends, <kbd>Delete</kbd> removes it |
 
 ## Lanes in a tree
 
@@ -60,11 +62,15 @@ For spans ([`spans`](../how-to/traces.md)) and tasks with sub-tasks (`parent=`):
 | <kbd>F</kbd> | fit the view to that mark |
 | <kbd>a</kbd> | annotate: then drag over a time range, or click a time, and type its text |
 | <kbd>c</kbd> | on a mark, then on another: an arrow between them |
+| <kbd>m</kbd> | at one end, then at the other: measure the time between (an end snaps to a mark's start or end near the pointer) |
+| <kbd>M</kbd> | on a bar: measure its length |
+| <kbd>&gt;</kbd> <kbd>&lt;</kbd> | move the selected (else the newest) measure's second end to the next, the previous edge in its lane |
+| <kbd>Delete</kbd> | remove the selected measure |
 | <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd> | undo a change of the selection (with <kbd>Shift</kbd>: redo) |
 | <kbd>?</kbd> | this list |
-| <kbd>Esc</kbd> | cancel a box being drawn, close the search box, drop the mark found, else clear the selection; in full screen, leave it |
+| <kbd>Esc</kbd> | cancel a box being drawn or a measure being made, unselect a measure, close the search box, drop the mark found, else clear the selection; in full screen, leave it |
 
-See [Summarise, find and annotate](../how-to/explore.md).
+See [Summarise, find, measure and annotate](../how-to/explore.md).
 
 ## Touch
 
@@ -73,6 +79,6 @@ two pinch to zoom, until you tap outside the plot.
 
 ## The toolbar
 
-From left to right: Pan, Zoom, Select · Time, Order · Back, Home · Clear the selection (while
+From left to right: Pan, Zoom, Select, Measure · Time, Order · Back, Home · Clear the selection (while
 there is one) · Legend · Display (text size, mark size, spreading) · Save as PNG · Full screen ·
 Mouse and keys (?).

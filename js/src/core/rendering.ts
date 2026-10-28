@@ -172,7 +172,6 @@ export function renderFrame(view: TimelineView): void {
   drawing.drawMarked(view, frontCtx, plot, laneTop, l0, l1);
   if (inView <= LABEL_BUDGET) drawing.drawLabels(view, frontCtx, plot, laneTop);
   drawNotes(view, frontCtx, plot, laneTop);
-  drawing.drawMarkers(view, frontCtx, plot);
   drawing.drawValueScales(view, frontCtx, plot, l0, l1);
   drawing.drawLinkedCursor(view, frontCtx, plot);
   if (gaps.length) drawing.drawGaps(view, frontCtx, plot, gaps);

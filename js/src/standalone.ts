@@ -33,7 +33,7 @@ interface Payload {
   marked?: Record<string, string>;
   /** The selection in numbers (Timeline.summary), for its panel. */
   summary?: LayerSummary[];
-  /** Annotations and connections (Timeline.annotate, Timeline.connect). */
+  /** The notes (Timeline.notes: annotations, connections, measures). */
   notes?: Notes;
   /** The group of linked plots it is in (Timeline.link), or null. */
   link?: { group: string; align: "time" | "start" } | null;

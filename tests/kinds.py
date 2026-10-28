@@ -138,7 +138,7 @@ def every_kind() -> dict[str, Timeline]:
     )
 
     marked = Timeline(title="Marked").events(log, lane="service")
-    marked.marker(log["time"][10], "deploy", color="#c62828")
+    marked.annotate(log["time"][10], text="deploy", color="#c62828")
     marked.zoom_to(log["time"][0], log["time"][50])
     marked.selection = {"events": [1, 2, 3]}
     plots["markers_zoom_selection"] = marked

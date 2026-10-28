@@ -25,7 +25,6 @@ from anytimeline.layers import events as ev
 from anytimeline.layers import intervals as iv
 from anytimeline.layers import values as vl
 from anytimeline.layers.common import lexsort
-from anytimeline.parts import Marker
 from anytimeline.timebase import TimeBase, time_base
 
 Record = ev.EventsRecord | iv.IntervalsRecord | vl.ValuesRecord
@@ -76,6 +75,7 @@ class Scene:
     ranks: dict[str, np.ndarray]  # per layer: each mark's place(s) in the order
     detail: dict[str, Detail | ValueDetail | BarDetail] = dataclasses.field(default_factory=dict)
     sequence: np.ndarray | None = None  # every instant's time, in the order
+    order: np.ndarray | None = None  # the same for every plot, levels or not (notes)
 
     def full_bytes(self) -> int:
         """About how many bytes the layers sent as levels take with every event (the order's
@@ -217,12 +217,11 @@ def make(
     sort: LaneSort | None,
     group_order: Sequence[Any] | None,
     lane_names: bool,
-    markers: Sequence[Marker],
     levels: bool = True,
     windows: bool = True,
 ) -> Scene:
     """Lay the layers out together. Raises ValueError for layers that do not fit together
-    (times and no times; two trees) or markers without times; the layers are unchanged
+    (times and no times; two trees); the layers are unchanged
     then, except their ``perm``, which is set only when it all fits.
 
     ``levels``: send layers of more than LEVELS_FROM events as levels (False: every mark);
@@ -329,7 +328,6 @@ def make(
         },
         "layers": [lay.spec for lay in laid.values()],
         "sequence": sequence,
-        "markers": _markers(markers, base),
         "t": time.time(),
     }
     detail: dict[str, Detail | ValueDetail | BarDetail] = {}
@@ -353,8 +351,27 @@ def make(
         orig.perm = rec.perm
     return Scene(
         spec, {b.id: b.data for b in buffers}, base, laid, ranks, detail,
-        seq_times if instants_levelled else None,
+        seq_times if instants_levelled else None, seq_times if len(seq_times) else None,
     )  # fmt: skip
+
+
+def with_table_rows(
+    spec: dict[str, Any], buffers: dict[str, bytes], records: Mapping[str, Any]
+) -> tuple[dict[str, Any], dict[str, bytes]]:
+    """A page's spec and buffers: with each mark's table row (``table_rows``) in the layers of
+    marks, by which a page copies a measure as Python (``atl.start(row)``). A layer sent as
+    levels has no marks of its own."""
+    spec = {**spec, "layers": list(spec.get("layers", []))}
+    buffers = dict(buffers)
+    for k, ls in enumerate(spec["layers"]):
+        rec = records.get(ls["name"])
+        if ls["type"] == "values" or ls.get("levels") or rec is None or not len(rec.rows):
+            continue
+        rows = np.asarray(rec.rows)[rec.perm]
+        enc = encode(rows, "uint32" if rows.max() < 2**32 else "float64")
+        buffers[enc.id] = enc.data
+        spec["layers"][k] = {**ls, "table_rows": enc.descriptor}
+    return spec, buffers
 
 
 def _levels(
@@ -547,11 +564,3 @@ def _order(
         buffers.append(seq)
         sequence = {"times": seq.descriptor, "count": len(perm)}
     return ranks, sequence, (float(prim.min()), float(prim.max())), times
-
-
-def _markers(markers: Sequence[Marker], base: TimeBase | None) -> list[dict[str, Any]]:
-    if not markers:
-        return []
-    if base is None:
-        raise ValueError("markers need layers with times")
-    return [{"x": base.to_ticks(m.time), "label": m.label, "color": m.color} for m in markers]

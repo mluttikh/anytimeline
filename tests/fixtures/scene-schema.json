@@ -236,6 +236,10 @@
           ],
           "description": "States layers (Python: Timeline.states): each bar's state, and the state column's name. The tooltip then shows every lane's state at the pointer's time."
         },
+        "table_rows": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "A page's bars: the table row of each (to copy a measure as Python)."
+        },
         "text": {
           "anyOf": [
             {
@@ -732,6 +736,10 @@
           ],
           "type": "object"
         },
+        "table_rows": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "A page's events: the table row of each (to copy a measure as Python)."
+        },
         "text": {
           "anyOf": [
             {
@@ -987,6 +995,10 @@
             }
           ],
           "description": "States layers (Python: Timeline.states): each bar's state, and the state column's name. The tooltip then shows every lane's state at the pointer's time."
+        },
+        "table_rows": {
+          "$ref": "#/definitions/BufferRef",
+          "description": "A page's bars: the table row of each (to copy a measure as Python)."
         },
         "text": {
           "anyOf": [
@@ -1263,30 +1275,6 @@
       ],
       "type": "object"
     },
-    "MarkerSpec": {
-      "additionalProperties": false,
-      "properties": {
-        "color": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "label": {
-          "type": "string"
-        },
-        "x": {
-          "description": "Time in ticks.",
-          "type": "number"
-        }
-      },
-      "required": [
-        "x",
-        "label",
-        "color"
-      ],
-      "type": "object"
-    },
     "SceneSpec": {
       "additionalProperties": false,
       "properties": {
@@ -1326,12 +1314,6 @@
         "layers": {
           "items": {
             "$ref": "#/definitions/LayerSpec"
-          },
-          "type": "array"
-        },
-        "markers": {
-          "items": {
-            "$ref": "#/definitions/MarkerSpec"
           },
           "type": "array"
         },
