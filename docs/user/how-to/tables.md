@@ -10,9 +10,9 @@ plot.events(df, time="timestamp", lane="host", color="severity")
 ## Supported tables
 
 Any table [narwhals](https://narwhals-dev.github.io/narwhals/) reads: a Polars DataFrame or
-LazyFrame, a pandas DataFrame, a PyArrow Table, a DuckDB relation, and more; or a dict of
-arrays. A lazy table (a Polars LazyFrame, a DuckDB relation) is read once, when its layer is
-added, with only the columns the layer uses.
+LazyFrame, a pandas DataFrame, a PyArrow Table, a DuckDB relation, an Ibis table, and more;
+or a dict of arrays. A lazy table (a Polars LazyFrame, a DuckDB relation, an Ibis table) is
+read once, when its layer is added, with only the columns the layer uses.
 
 ```python exec="on" source="above" html="true"
 import numpy as np
@@ -42,7 +42,7 @@ print(plot._embed_html())
 [`selected`][anytimeline.Timeline.selected] gives the rows selected in the plot as a table of
 the type you plotted: a pandas DataFrame keeps its index, a dict gives a dict. A lazy table
 gives the rows of the read the plot drew (a Polars DataFrame for a LazyFrame, a PyArrow table
-for DuckDB), so they are the rows you selected even when the database returns its rows in
+for DuckDB and Ibis), so they are the rows you selected even when the database returns its rows in
 another order next time.
 
 ```python

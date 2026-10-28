@@ -63,6 +63,30 @@ def test_a_lazy_table_is_read_once_with_the_columns_used():
     assert plot.selected()["user"].to_list() == [LOG["user"][0], LOG["user"][3]]
 
 
+def test_an_ibis_table_is_read_once_with_the_columns_used():
+    import ibis
+    import pyarrow as pa
+
+    table = ibis.memtable(pl.DataFrame(LOG).to_arrow()).order_by("seq")
+    plot = Timeline().events(table, lane="service", color=None, tooltip=["user"], order="seq")
+    read = plot._tables["events"]
+    assert isinstance(read, pa.Table)
+    assert sorted(read.column_names) == ["seq", "service", "time", "user"]
+    plot.selection = {"events": [0, 3]}
+    assert plot.selected()["user"].to_pylist() == [LOG["user"][0], LOG["user"][3]]
+
+
+def test_an_ibis_table_gives_intervals():
+    import ibis
+
+    bars = {"lane": ["a", "b", "a"], "start": [0.0, 1.0, 2.0], "end": [1.5, 3.0, 2.5]}
+    table = ibis.memtable(pl.DataFrame(bars).to_arrow()).order_by("start")
+    plot = Timeline().intervals(table, start="start", end="end", lane="lane")
+    assert plot._tables["intervals"].num_rows == 3
+    plot.selection = {"intervals": [1]}
+    assert plot.selected()["lane"].to_pylist() == ["b"]
+
+
 def test_a_route_reads_its_group_column():
     from anytimeline import Route
 
