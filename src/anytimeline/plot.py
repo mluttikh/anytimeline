@@ -108,13 +108,13 @@ def _notes(value: Any, name: str) -> list[Note]:
 
 def _xscale(value: Any, name: str) -> Any:
     if value == "sequence":
-        raise ValueError(f"{name}='order' is the Order scale ('sequence' was 0.4's)")
+        raise ValueError(f"{name}='order' is the Order scale ('sequence' was 0.3's)")
     return one_of(XSCALES)(value, name)
 
 
 def _selection_mode(value: Any, name: str) -> Any:
     if value == "none":
-        raise ValueError(f"{name}=None: nothing can be selected ('none' was 0.4's)")
+        raise ValueError(f"{name}=None: nothing can be selected ('none' was 0.3's)")
     return one_of(SELECTION_MODES)(value, name)
 
 
@@ -255,11 +255,11 @@ class Timeline:
     _link: dict[str, Any] = setting({})
     """The group of linked plots: ``{"group": id, "align": "time" | "start"}``, or empty."""
 
-    # removed in 0.5: what replaced them
+    # removed in 0.4.0: what replaced them
     range = gone("Timeline.range", "plot.view: its start and end")
     perf = gone("Timeline.perf", "plot.dev.perf")
     clear_markers = gone_method("Timeline.clear_markers", "plot.notes = []")
-    # removed after 0.4.0: one list of notes; a marker is an annotation across all lanes
+    # removed in 0.5.0: one list of notes; a marker is an annotation across all lanes
     markers = gone("Timeline.markers", "plot.notes (a marker: an Annotation at one time)")
     annotations = gone("Timeline.annotations", "plot.notes")
     connections = gone("Timeline.connections", "plot.notes")
@@ -736,7 +736,7 @@ class Timeline:
             name: The layer's name; adding a layer with an existing name replaces it.
         """
         if text is False:
-            raise TypeError("states(text=None) leaves the text out (text=False was 0.4's)")
+            raise TypeError("states(text=None) leaves the text out (text=False was 0.3's)")
         tooltip = _columns(tooltip, "tooltip")
         data = tables.read_once(data, *_arguments(locals()))
         record = st.build(

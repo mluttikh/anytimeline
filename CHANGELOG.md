@@ -4,7 +4,7 @@ All notable changes to anytimeline. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.0] - 2026-10-28
 
 Traces in depth: flame charts, flame graphs of many traces, two traces compared, and traces
 from Jaeger and from Chrome's trace format. And measuring: the time from one mark's start or
@@ -71,7 +71,8 @@ end to another's, made in Python or in the plot, with all notes in one list.
 
 ### Fixed
 
-- The error for `expand=None` said it was 0.4's spelling; it was 0.3's.
+- The errors for `expand=None`, `xscale="sequence"`, `selection="none"` and
+  `states(text=False)` said these were 0.4's spellings; they were 0.3's.
 
 ## [0.4.0] - 2026-10-27
 
@@ -287,7 +288,7 @@ drawn with WebGPU, WebGL2 or Canvas 2D.
   that follow the notebook.
 - Synthetic example data (`anytimeline.synthetic`) and documentation with live examples.
 
-[Unreleased]: https://github.com/mluttikh/anytimeline/compare/v0.4.0...HEAD
+[0.5.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.5.0
 [0.4.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.4.0
 [0.3.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.3.0
 [0.2.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.2.0
