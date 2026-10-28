@@ -140,3 +140,67 @@ def step(
         if best is None or (key < best[0] if forward else key > best[0]):
             best = (key, m, i)
     return _match(best[1], best[2]) if best is not None else None
+
+
+def _edge(m: Marks, i: int, side: str) -> dict[str, Any]:
+    first = side == "start"
+    return {
+        "layer": m.layer,
+        "index": i,
+        "side": side,
+        "x": float(m.x[i] if first else m.x2[i]),
+        "r": float(m.r[i] if first else m.r2[i]),
+        "lane": int(m.lanes[i]),
+    }
+
+
+def _sides(m: Marks, scale: str) -> tuple[tuple[str, np.ndarray], tuple[str, np.ndarray]]:
+    """A layer's starts and ends on the scale shown."""
+    order = scale == "order"
+    return ("start", m.r if order else m.x), ("end", m.r2 if order else m.x2)
+
+
+def nearest_edge(
+    marks: Sequence[Marks], lane: int, at: float, within: float, scale: str
+) -> dict[str, Any] | None:
+    """The start or end of a mark of lane ``lane`` nearest to ``at`` on the scale, no
+    farther than ``within`` (ties: the earlier layer, then the lower index, start first);
+    None when there is none that near. What a measure's end snaps to (key ``m``)."""
+    best: tuple[tuple[float, int, int, int], Marks, int, str] | None = None
+    for m in marks:
+        idx = np.flatnonzero(m.lanes == lane)
+        if not len(idx):
+            continue
+        for k, (side, xs) in enumerate(_sides(m, scale)):
+            d = np.abs(xs[idx] - at)
+            j = int(np.argmin(d))
+            if d[j] > within:
+                continue
+            key = (float(d[j]), m.rank, int(idx[j]), k)
+            if best is None or key < best[0]:
+                best = (key, m, int(idx[j]), side)
+    return _edge(best[1], best[2], best[3]) if best is not None else None
+
+
+def step_edge(
+    marks: Sequence[Marks], lane: int, at: float, forward: bool, scale: str
+) -> dict[str, Any] | None:
+    """The start or end of a mark of lane ``lane`` next after (``forward``) or before the
+    place ``at`` on the scale: where the keys ``>`` and ``<`` move a measure's end."""
+    best: tuple[tuple[float, int, int, int], Marks, int, str] | None = None
+    for m in marks:
+        idx = np.flatnonzero(m.lanes == lane)
+        if not len(idx):
+            continue
+        for k, (side, xs) in enumerate(_sides(m, scale)):
+            v = xs[idx]
+            ok = v > at if forward else v < at
+            if not ok.any():
+                continue
+            cand = np.flatnonzero(ok)
+            j = int(cand[np.argmin(v[cand])] if forward else cand[np.argmax(v[cand])])
+            x = float(v[j])
+            key = (x if forward else -x, m.rank, int(idx[j]), k)
+            if best is None or key < best[0]:
+                best = (key, m, int(idx[j]), side)
+    return _edge(best[1], best[2], best[3]) if best is not None else None

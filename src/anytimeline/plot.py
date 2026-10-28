@@ -5,6 +5,7 @@ pages and images need none (``page.py``)."""
 from __future__ import annotations
 
 import copy
+import dataclasses
 import uuid
 import warnings
 import weakref
@@ -18,6 +19,7 @@ from ipywidgets import CallbackDispatcher
 
 from anytimeline import data as tables
 from anytimeline import find, grouping, image, page, scene
+from anytimeline import notes as notelist
 from anytimeline import summary as summaries
 from anytimeline.data import NotFoundError
 from anytimeline.lanes import LANE_SORTS
@@ -26,7 +28,7 @@ from anytimeline.layers import events as ev
 from anytimeline.layers import intervals as iv
 from anytimeline.layers import states as st
 from anytimeline.layers import values as vl
-from anytimeline.parts import Annotation, Connection, Marker, Route, Stem
+from anytimeline.parts import Annotation, Connection, Edge, Measure, Note, Route, Stem
 from anytimeline.renamed import gone, gone_method, renamed
 from anytimeline.settings import (
     at_least,
@@ -83,27 +85,24 @@ its bins (all of them once zoomed in to its events)."""
 """How many windows' buffers a plot keeps for the browser to ask for (layers sent as levels)."""
 """The smallest and largest text size, in pixels."""
 
-_LAYOUT = ("markers", "timezone", "lane_order", "sort", "group_order", "align", "lane_names")
+_LAYOUT = ("timezone", "lane_order", "sort", "group_order", "align", "lane_names")
 """Settings that change how the layers are laid out: the plot is laid out again."""
 _NOT_COPIED = ("_widget", "_watchers", "_select_handlers", "_snapshot_paths")
 """What a pickled or copied plot leaves out (``__getstate__``)."""
 
 
-def _annotations(value: Any, name: str) -> list[Annotation]:
-    if isinstance(value, Annotation) or not isinstance(value, Sequence | tuple):
-        raise TypeError(f"{name} must be a list of Annotations, got {value!r}")
-    for a in value:
-        if not isinstance(a, Annotation):
-            raise TypeError(f"{name} must be a list of Annotations, got {a!r} among them")
-    return list(value)
-
-
-def _connections(value: Any, name: str) -> list[Connection]:
-    if isinstance(value, Connection) or not isinstance(value, Sequence | tuple):
-        raise TypeError(f"{name} must be a list of Connections, got {value!r}")
-    for c in value:
-        if not isinstance(c, Connection):
-            raise TypeError(f"{name} must be a list of Connections, got {c!r} among them")
+def _notes(value: Any, name: str) -> list[Note]:
+    kinds = (Annotation, Connection, Measure)
+    if isinstance(value, kinds) or not isinstance(value, Sequence | tuple):
+        raise TypeError(
+            f"{name} must be a list of Annotations, Connections and Measures, got {value!r}"
+        )
+    for n in value:
+        if not isinstance(n, kinds):
+            raise TypeError(
+                f"{name} must be a list of Annotations, Connections and Measures, got {n!r} "
+                "among them"
+            )
     return list(value)
 
 
@@ -117,15 +116,6 @@ def _selection_mode(value: Any, name: str) -> Any:
     if value == "none":
         raise ValueError(f"{name}=None: nothing can be selected ('none' was 0.4's)")
     return one_of(SELECTION_MODES)(value, name)
-
-
-def _markers(value: Any, name: str) -> list[Marker]:
-    if isinstance(value, Marker) or not isinstance(value, Sequence | tuple):
-        raise TypeError(f"{name} must be a list of Markers, got {value!r}")
-    for m in value:
-        if not isinstance(m, Marker):
-            raise TypeError(f"{name} must be a list of Markers, got {m!r} among them")
-    return list(value)
 
 
 class Timeline:
@@ -166,7 +156,8 @@ class Timeline:
             time (durations since then), so groups of different periods (days, runs,
             traces) compare from their start.
         renderer: ``"auto"`` (WebGPU, then WebGL2, then Canvas 2D), or one of them.
-        tool: The tool the plot starts with: ``"pan"``, ``"zoom"`` or ``"select"``.
+        tool: The tool the plot starts with: ``"pan"``, ``"zoom"``, ``"select"`` or
+            ``"measure"``.
         font_size: The size of the plot's text in pixels (8 to 24).
         mark_scale: The size of event marks, as a factor of the layers' own (0.25 to 4).
         dodge: Spread events that would overlap over the lane's height (default), or draw
@@ -193,9 +184,11 @@ class Timeline:
     """The drawing backend; ``"auto"`` picks the first that works."""
     tool: Tool = setting("pan", one_of(TOOLS))
     """The plot's tool: ``"pan"`` (drag pans; Shift-drag zooms to a range; a plain click does
-    nothing), ``"zoom"`` (drag zooms to a time range; click zooms in, Alt-click out) or
-    ``"select"`` (drag selects a box; click selects an event). Also the toolbar and keys
-    ``p``, ``z``, ``s``."""
+    nothing), ``"zoom"`` (drag zooms to a time range; click zooms in, Alt-click out),
+    ``"select"`` (drag selects a box; click selects an event) or ``"measure"`` (drag from a
+    mark's start or end to another's measures the time between: a
+    [`Measure`][anytimeline.Measure] in ``notes``). Also the toolbar and keys ``p``, ``z``,
+    ``s``."""
     font_size: int = setting(12, between(*FONT_SIZES, kind=whole, unit=" pixels"))
     """The size of the plot's text in pixels (8 to 24): lane names, the time axis, labels,
     legend, tooltips. Also in the toolbar's Display panel."""
@@ -227,17 +220,14 @@ class Timeline:
     saved widget state. Zoom, pan, hover, Time / Order, folding, full screen and linking
     work there; selecting does not, and a change made in Python shows when the plot is
     shown again."""
-    markers: list[Marker] = setting([], _markers, sync=False)
-    """The plot's [`Marker`][anytimeline.Marker]s: vertical lines across the lanes at a time.
-    [`marker`][anytimeline.Timeline.marker] adds one; ``plot.markers = []`` removes them."""
-    annotations: list[Annotation] = setting([], _annotations, sync=False)
-    """The plot's [`Annotation`][anytimeline.Annotation]s: notes on a time range or a time,
-    over a lane or all. [`annotate`][anytimeline.Timeline.annotate] adds one, as does the key
-    ``a`` in the plot; ``plot.annotations = []`` removes them."""
-    connections: list[Connection] = setting([], _connections, sync=False)
-    """The plot's [`Connection`][anytimeline.Connection]s: arrows from one mark to another.
-    [`connect`][anytimeline.Timeline.connect] adds one, as does the key ``c`` in the plot
-    (on one mark, then on another); ``plot.connections = []`` removes them."""
+    notes: list[Note] = setting([], _notes, sync=False)
+    """The plot's notes, in drawing order: [`Annotation`][anytimeline.Annotation]s (a time
+    range or a time, over a lane or all), [`Connection`][anytimeline.Connection]s (arrows
+    between marks) and [`Measure`][anytimeline.Measure]s (the time between two ends).
+    [`annotate`][anytimeline.Timeline.annotate], [`connect`][anytimeline.Timeline.connect]
+    and [`measure`][anytimeline.Timeline.measure] add one, as do the keys ``a``, ``c`` and
+    ``m`` and the Measure tool in the plot; ``plot.notes = []`` removes them all. They show
+    in the plot, in pages and in images."""
     timezone: str | None = setting(None, text_or_none, sync=False)
     """The time zone datetimes are shown in; None: the time column's own, else UTC."""
     lane_order: list[Any] | None = setting(None, values_or_none, sync=False)
@@ -258,7 +248,7 @@ class Timeline:
     """Per events layer sent as levels: where its selected events are (time, order and lane,
     float64), so that they show over its bins; at most MARKED of them."""
     _notes: dict[str, Any] = setting({})
-    """The annotations and connections as the browser draws them (ticks, lane indices)."""
+    """The notes as the browser draws them (ticks, places in the order, lane indices)."""
     _summary: list[dict[str, Any]] = setting([])
     """What the summary panel shows: per layer with something selected, its numbers as text."""
     _zoom: dict[str, Any] = setting({})
@@ -268,7 +258,12 @@ class Timeline:
     # removed in 0.5: what replaced them
     range = gone("Timeline.range", "plot.view: its start and end")
     perf = gone("Timeline.perf", "plot.dev.perf")
-    clear_markers = gone_method("Timeline.clear_markers", "plot.markers = []")
+    clear_markers = gone_method("Timeline.clear_markers", "plot.notes = []")
+    # removed after 0.4.0: one list of notes; a marker is an annotation across all lanes
+    markers = gone("Timeline.markers", "plot.notes (a marker: an Annotation at one time)")
+    annotations = gone("Timeline.annotations", "plot.notes")
+    connections = gone("Timeline.connections", "plot.notes")
+    marker = gone_method("Timeline.marker", "plot.annotate(time, text=label)")
     observe = gone_method("Timeline.observe", "plot.widget.observe (the plot is no widget)")
     unobserve = gone_method("Timeline.unobserve", "plot.widget.unobserve")
 
@@ -968,18 +963,6 @@ class Timeline:
             raise
         return self
 
-    def marker(self, time: Any, label: str = "", *, color: str | None = None) -> Self:
-        """Add a [`Marker`][anytimeline.Marker]: a vertical line across the lanes at a time,
-        such as now or a deadline. ``plot.markers = []`` removes them all.
-
-        Args:
-            time: A time of the data's kind (datetime, ISO text, duration or number).
-            label: Written at the top of the line.
-            color: The line's colour (default: the selection colour).
-        """
-        self.markers = [*self.markers, Marker(time, label, color)]
-        return self
-
     def annotate(
         self,
         start: Any,
@@ -989,56 +972,117 @@ class Timeline:
         lane: Any = None,
         color: str | None = None,
     ) -> Self:
-        """Add an [`Annotation`][anytimeline.Annotation]: a note on a time range (or, without
-        ``end``, at a time), over one lane or all of them. It shows in the plot, in pages
-        and in images; ``plot.annotations = []`` removes them all. In the plot, the key
-        ``a`` and then a drag over a range (or a click at a time) adds one too.
+        """Add an [`Annotation`][anytimeline.Annotation] to [`notes`][anytimeline.Timeline.notes]:
+        a note on a time range (or, without ``end``, at a time), over one lane or all of
+        them. A note at one time across all lanes is a line from top to bottom, such as now
+        or a deadline. In the plot, the key ``a`` and then a drag over a range (or a click
+        at a time) adds one too.
 
         Args:
             start: Where it starts: a time of the data's kind (datetime, ISO text, duration
-                or number).
-            end: Where it ends; ``None``: a note at one time.
+                or number), or an [`Edge`][anytimeline.Edge]: then it stays on that mark.
+            end: Where it ends (a time or an edge); ``None``: a note at one time.
             text: Written at its top.
             lane: The lane it is in (a lane's name); ``None``: across all lanes.
-            color: Its colour (default: the accent colour).
+            color: Its colour (default: the accent colour; a line across all lanes: the
+                selection colour).
         """
-        note = Annotation(start, end, text, lane, color)
-        if self._layers:
-            self._note_of(note)  # wrong times and lanes raise here
-        self.annotations = [*self.annotations, note]
-        return self
+        return self._add_note(Annotation(start, end, text, lane, color))
 
     def connect(
         self,
-        a: int | tuple[str, int],
-        b: int | tuple[str, int],
+        a: int | tuple[str, int] | Edge,
+        b: int | tuple[str, int] | Edge,
         text: str = "",
         *,
         color: str | None = None,
     ) -> Self:
-        """Add a [`Connection`][anytimeline.Connection]: an arrow from mark ``a`` to mark
-        ``b`` (from an event or a bar's end, to an event or a bar's start), with ``text`` at
-        its middle. It shows in the plot, in pages and in images;
-        ``plot.connections = []`` removes them all. In the plot, the key ``c`` on one mark
-        and then on another adds one too.
+        """Add a [`Connection`][anytimeline.Connection] to [`notes`][anytimeline.Timeline.notes]:
+        an arrow from ``a`` to ``b``, with ``text`` at its middle. In the plot, the key
+        ``c`` on one mark and then on another adds one too.
+
+        ```python
+        plot.connect(3, 4)                         # from row 3's end to row 4's start
+        plot.connect(atl.start(3), atl.start(4))   # start to start
+        ```
 
         Args:
-            a: The mark it starts at: a row of the plot's one layer, or ``(layer, row)``.
-            b: The mark it points to.
+            a: Where it starts: an [`Edge`][anytimeline.Edge], or a mark (a row of the
+                plot's one layer, or ``(layer, row)``): its end.
+            b: Where it points to: an edge, or a mark: its start.
             text: Written at its middle.
             color: Its colour (default: the accent colour).
         """
-        ends = []
-        for end in (a, b):
-            if isinstance(end, tuple):
-                ends.append((str(end[0]), end[1]))
-            else:
-                ends.append((self._layer_named(None), end))
-        link = Connection(ends[0], ends[1], text, color)
-        for layer, row in ends:
-            self._mark_at(layer, int(row))  # an unknown layer or row raises here
-        self.connections = [*self.connections, link]
+        ends = [
+            e if isinstance(e, Edge | tuple) else Edge(e, side)
+            for e, side in ((a, "end"), (b, "start"))
+        ]
+        return self._add_note(Connection(ends[0], ends[1], text, color))
+
+    def measure(
+        self,
+        a: Any,
+        b: Any,
+        text: str | None = None,
+        *,
+        lane: Any = None,
+        color: str | None = None,
+    ) -> Self:
+        """Add a [`Measure`][anytimeline.Measure] to [`notes`][anytimeline.Timeline.notes]:
+        the time from ``a`` to ``b``, drawn as a dimension line with the time at its middle.
+        An end is a mark's start or end (an [`Edge`][anytimeline.Edge], made by
+        [`start`][anytimeline.start] or [`end`][anytimeline.end]) or a time.
+        [`measured`][anytimeline.Timeline.measured] gives the times as a table. In the plot,
+        the Measure tool, or the key ``m`` on one mark and then on another, adds one too.
+
+        ```python
+        import anytimeline as atl
+
+        plot.measure(atl.end(12), atl.start(40))     # the gap between two marks
+        plot.measure(atl.start(12), atl.end(12))     # one bar's own length
+        plot.measure(atl.start(3, "db"), atl.start(4, "db"))  # start to start, layer "db"
+        plot.measure("2026-10-28T10:00:00.250", atl.start(40))  # a time to a mark
+        plot.measure(t0, t1, "budget: {time}")       # two times, with its own text
+        ```
+
+        Args:
+            a: Where it starts: an edge, or a time of the data's kind (datetime, ISO text,
+                duration or number). A plain number is a time, never a row.
+            b: Where it ends: an edge or a time.
+            text: Written at its middle; ``None``: the time between. ``{time}`` in it is
+                the time between, ``{events}`` the number of events between in the order.
+            lane: The lane it is drawn in when neither end is an edge (a lane's name);
+                ``None``: at the top of the plot.
+            color: Its colour (default: the accent colour).
+        """
+        return self._add_note(Measure(a, b, text, lane, color))
+
+    def _add_note(self, note: Note) -> Self:
+        if self._layers:
+            notelist.check(self._note_context(), note)  # an unknown row or lane raises here
+        self.notes = [*self.notes, note]
         return self
+
+    @property
+    def measured(self) -> Any:
+        """The [`Measure`][anytimeline.Measure]s in [`notes`][anytimeline.Timeline.notes] as a
+        table of the type plotted (Polars, PyArrow, pandas, or a dict of arrays), a row per
+        measure, also those made in the plot:
+
+        - ``note``: its index in ``plot.notes``; ``text``: its own text (None: the time);
+        - ``a``, ``b``: its ends' times, of the data's kind (in the plot's time zone);
+        - ``time``: ``b - a``, a duration (numbers on a plot of numbers); negative when ``b``
+          is before ``a``;
+        - ``events``: how many events (and bars' starts and ends) lie between the ends in the
+          order;
+        - ``a_layer``, ``a_row``, ``a_side`` and the same for ``b``: the mark of an end that
+          is an edge (``None``, -1 and ``None`` for a time).
+
+        Measures whose marks the plot no longer has are left out. Of a plot of several
+        layers, the table is of the type of the first layer's table.
+        """
+        like = next(iter(self._tables.values()), {})
+        return notelist.table(self._note_context(), self.notes, like)
 
     @property
     def layers(self) -> list[str]:
@@ -1159,7 +1203,6 @@ class Timeline:
             sort=self.sort,
             group_order=self.group_order,
             lane_names=self.lane_names,
-            markers=self.markers,
             levels=levels,
             windows=windows,
         )
@@ -1261,12 +1304,14 @@ class Timeline:
         """The spec and buffers a page holds: those the widget gets; for a plot with layers
         sent as levels, every event when they come to at most ``page.FULL_BYTES``, else the
         levels alone (a page has no Python to send windows)."""
-        if self._scene is None or not self._scene.detail:
-            return self._spec, self._buffers
         if self._page is None:
-            full = self._scene.full_bytes() <= page.FULL_BYTES
-            made = self._make(levels=False) if full else self._make(windows=False)
-            self._page = (made.spec, made.buffers)
+            if self._scene is None or not self._scene.detail:
+                spec, buffers = self._spec, self._buffers
+            else:
+                full = self._scene.full_bytes() <= page.FULL_BYTES
+                made = self._make(levels=False) if full else self._make(windows=False)
+                spec, buffers = made.spec, made.buffers
+            self._page = scene.with_table_rows(spec, buffers, self._layers)
         return self._page
 
     def _warn_if_large(self) -> None:
@@ -1470,32 +1515,19 @@ class Timeline:
         rows = [[names[c], f"{int(counts[c]):,}"] for c in np.argsort(-counts, kind="stable")]
         return [r for r in rows if r[1] != "0"][:8]
 
-    # ------------------------------------------------------------------ annotations
+    # ------------------------------------------------------------------ notes
 
-    def _note_of(self, a: Annotation) -> dict[str, Any]:
-        """An annotation as the browser draws it: ticks, and its lane's index (None: all)."""
+    def _note_context(self) -> notelist.Context:
         if self._scene is None:
             self._update_spec()
-        if self._base is None:
-            raise ValueError("annotations need layers with times")
-        x0 = self._base.to_ticks(a.start)
-        x1 = x0 if a.end is None else self._base.to_ticks(a.end)
-        if x1 < x0:
-            raise ValueError(f"an annotation ends before it starts: {a.start!r} to {a.end!r}")
-        lane = None
-        if a.lane is not None:
-            names = [str(n) for n in self._spec["lanes"]["names"]]
-            if str(a.lane) not in names:
-                raise NotFoundError(f"no lane {a.lane!r} to annotate")
-            lane = names.index(str(a.lane))
-        return {
-            "x0": x0,
-            "x1": x1,
-            "point": a.end is None,
-            "lane": lane,
-            "text": a.text,
-            "color": a.color,
-        }
+        lanes = self._spec.get("lanes") or {}
+        return notelist.Context(
+            self._base,
+            [str(n) for n in lanes.get("names", [])],
+            self._scene.order if self._scene is not None else None,
+            self._mark_at,
+            self._layer_named,
+        )
 
     def _mark_at(self, layer: str, row: int) -> dict[str, Any]:
         """Where the mark of table row ``row`` is: its index in the browser, its start and
@@ -1504,6 +1536,8 @@ class Timeline:
         if self._scene is None:
             self._update_spec()
         rec = self._layers[layer]
+        if not isinstance(rec, ev.EventsRecord | iv.IntervalsRecord):
+            raise ValueError(f"layer {layer!r} has no marks with a start and an end (samples)")
         pos = summaries.positions(rec, [row])
         if not len(pos):
             raise NotFoundError(f"layer {layer!r} draws no row {row}")
@@ -1528,23 +1562,27 @@ class Timeline:
         }
 
     def _notes_of(self) -> dict[str, Any]:
-        """``_notes``: the annotations and connections that can be drawn (those of lanes and
-        rows the plot no longer has are left out)."""
-        if not self._layers or (not self.annotations and not self.connections):
+        """``_notes``: the notes that can be drawn (those of lanes and rows the plot no longer
+        has are left out)."""
+        if not self._layers or not self.notes:
             return {}
-        bands, arrows = [], []
-        for a in self.annotations:
-            try:
-                bands.append(self._note_of(a))
-            except (LookupError, ValueError, TypeError):
-                continue
-        for c in self.connections:
-            try:
-                ends = [self._mark_at(layer, int(row)) for layer, row in (c.a, c.b)]
-            except (LookupError, ValueError):
-                continue
-            arrows.append({"a": ends[0], "b": ends[1], "text": c.text, "color": c.color})
-        return {"bands": bands, "arrows": arrows}
+        return notelist.payload(self._note_context(), self.notes)
+
+    def _edge_from(self, end: Mapping[str, Any], side: str) -> Edge:
+        """A mark's edge from the browser: its layer, its index there, and a side."""
+        layer = str(end["layer"])
+        if layer not in self._layers:
+            raise NotFoundError(f"no layer {layer!r}; layers: {self.layers}")
+        rec = self._layers[layer]
+        row = int(rec.rows[rec.perm[int(end["index"])]])
+        return Edge(row, end.get("side") or side, layer)  # ty: ignore[invalid-argument-type]
+
+    def _end_from(self, end: Mapping[str, Any], side: str) -> Any:
+        """A note's end from the browser: an edge (a mark), or a time in ticks."""
+        if end.get("layer") is not None:
+            return self._edge_from(end, side)
+        assert self._base is not None
+        return self._base.to_value(float(end["x"]))
 
     def _annotate_from(self, content: Mapping[str, Any]) -> None:
         """An annotation made in the plot (``{"type": "annotate"}``): ticks, a lane index."""
@@ -1560,13 +1598,55 @@ class Timeline:
 
     def _connect_from(self, content: Mapping[str, Any]) -> None:
         """A connection made in the plot (``{"type": "connect"}``): marks by their index."""
-        ends = []
-        for key in ("a", "b"):
-            end = content[key]
-            layer = str(end["layer"])
-            rec = self._layers[layer]
-            ends.append((layer, int(rec.rows[rec.perm[int(end["index"])]])))
-        self.connect(ends[0], ends[1], str(content.get("text", "")))
+        a = self._edge_from(content["a"], "end")
+        b = self._edge_from(content["b"], "start")
+        self.connect(a, b, str(content.get("text", "")))
+
+    def _measure_from(self, content: Mapping[str, Any]) -> None:
+        """A measure made in the plot (``{"type": "measure"}``): each end a mark's edge
+        (layer, index, side) or a time (ticks)."""
+        if self._base is None:
+            return
+        a = self._end_from(content["a"], "start")
+        b = self._end_from(content["b"], "start")
+        text = content.get("text")
+        lane = content.get("lane")
+        names = self._spec["lanes"]["names"]
+        name = names[int(lane)] if lane is not None and 0 <= int(lane) < len(names) else None
+        self.measure(a, b, None if text is None else str(text), lane=name)
+
+    def _note_end_from(self, content: Mapping[str, Any]) -> None:
+        """An end of a note moved in the plot (``{"type": "note_end"}``): the note's index,
+        which end (``"a"``, ``"b"``), and where it is now."""
+        i, key = int(content["id"]), str(content["end"])
+        if not 0 <= i < len(self.notes) or key not in ("a", "b"):
+            return
+        note = self.notes[i]
+        if not isinstance(note, Measure | Connection):
+            return
+        side = "end" if key == "a" and isinstance(note, Connection) else "start"
+        to = self._end_from(content["to"], side)
+        if isinstance(note, Connection) and not isinstance(to, Edge):
+            return
+        moved = dataclasses.replace(note, **{key: to})
+        notelist.check(self._note_context(), moved)
+        self.notes = [*self.notes[:i], moved, *self.notes[i + 1 :]]
+
+    def _note_remove_from(self, content: Mapping[str, Any]) -> None:
+        """A note removed in the plot (``{"type": "note_remove"}``): its index."""
+        i = int(content["id"])
+        if 0 <= i < len(self.notes):
+            self.notes = [*self.notes[:i], *self.notes[i + 1 :]]
+
+    def _snap(self, content: Mapping[str, Any]) -> dict[str, Any]:
+        """The edge a measure's end snaps to (``{"type": "snap"}``): the nearest start or end
+        in a lane, within a distance on the scale shown; or, with ``forward``, the next or
+        previous one (keys ``>`` and ``<``)."""
+        marks = self._marks_to_find()
+        lane, at, scale = int(content["lane"]), float(content["at"]), str(content.get("scale"))
+        if "forward" in content:
+            return {"edge": find.step_edge(marks, lane, at, bool(content["forward"]), scale)}
+        return {"edge": find.nearest_edge(marks, lane, at, float(content["within"]), scale)}
 
     # ------------------------------------------------------------------ find and step
 
@@ -1750,7 +1830,7 @@ class Timeline:
         self._marked = self._marked_of(self._marks)
         self._summary = self._panel(change["new"])
 
-    @observes("annotations", "connections")
+    @observes("notes")
     def _notes_changed(self, change: dict[str, Any]) -> None:
         if self._scene is not None:
             self._notes = self._notes_of()

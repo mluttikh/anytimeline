@@ -79,7 +79,10 @@ print(chart._embed_html())
 `gantt()` returns a [`Timeline`][anytimeline.Timeline], so everything else works on it:
 
 ```python
-chart.marker("2026-10-30", "code freeze", color="#d62728")  # more lines
+import anytimeline as atl
+
+chart.annotate("2026-10-30", text="code freeze", color="#d62728")  # more lines
+chart.measure(atl.end(2), atl.start(5))  # the slack between two tasks
 chart.events(meetings, time="time", lane="task", symbol="x")  # events on the tasks' lanes
 chart.selection  # selected tasks, as rows
 ```

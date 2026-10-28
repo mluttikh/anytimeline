@@ -1,7 +1,7 @@
 // anywidget entry (AFM): connects a Python Timeline model to TimelineView.
 
 import type { Found, Match } from "./core/find";
-import type { Notes } from "./core/notes";
+import type { NoteEnd, Notes } from "./core/notes";
 import type { LayerSummary } from "./core/summary";
 import { BufferStore, type PutMessage } from "./core/transport";
 import type { RendererPreference, SceneSpec, WindowAnswer, XScale } from "./core/types";
@@ -183,6 +183,10 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
     onUndo: (redo) => send(model, { type: redo ? "redo" : "undo" }),
     onAnnotate: (note) => send(model, { type: "annotate", ...note }),
     onConnect: (a, b) => send(model, { type: "connect", a, b }),
+    onMeasure: (a, b, lane) => send(model, { type: "measure", a, b, lane }),
+    onNoteEnd: (id, end, to) => send(model, { type: "note_end", id, end, to }),
+    onNoteRemove: (id) => send(model, { type: "note_remove", id }),
+    onSnap: (q) => ask(model, s, { type: "snap", ...q }).then((msg) => (msg.edge ?? null) as NoteEnd | null),
     onFind: (q, scale) => ask(model, s, { type: "find", q, scale }) as Promise<Found>,
     onStep: (lane, after, forward, scale) => ask(model, s, { type: "step", lane, after, forward, scale }).then((msg) => (msg.match ?? null) as Match | null),
     onWindow: (layer, scale, range, k) => ask(model, s, { type: "window", layer, scale, range, k }) as Promise<WindowAnswer>,

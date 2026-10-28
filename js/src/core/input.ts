@@ -4,12 +4,15 @@ import { type Box, type BoxKind, boxMode, clickMode, DOUBLE_CLICK_MS, type DragM
 import * as folding from "./folding";
 import * as drawing from "./drawing";
 import * as picking from "./picking";
-import { askText, markOf } from "./notes";
+import * as measure from "./measure";
+import { askText, markOf, type NoteMeasure } from "./notes";
 import type { TimelineView } from "./view";
 
 export function cancelDrag(view: TimelineView): void {
+  if (view.drag?.mode === "measure") view.measureDraft = null;
   view.drag = null;
   view.box = null;
+  view.handleDrag = null;
   view.stage.classList.remove("atl-panning");
   view.requestRender();
 }
@@ -75,14 +78,29 @@ export function bindInput(view: TimelineView): void {
     view.root.focus({ preventScroll: true });
     const p = local(e);
     const plot = view.plot();
+    // a measure's label selects it (and opens its menu); an end of the selected one drags
+    const handle = measure.handleAt(view, p);
+    const label = handle ? null : measure.labelAt(view, p);
+    if (label) {
+      openMeasure(view, label, p);
+      return;
+    }
+    if (!handle && view.selectedMeasure !== null) view.selectMeasure(null);
     stage.setPointerCapture(e.pointerId);
     let mode: DragMode;
-    if (view.annotating) mode = "note";
+    if (handle) {
+      mode = "handle";
+      view.handleDrag = { id: handle.m.id, end: handle.end, to: handle.m[handle.end] };
+    } else if (view.annotating) mode = "note";
     else if (view.spaceDown) mode = "pan";
     else if (p.y < plot.y && p.x >= plot.x) mode = "axis";
     else if (view.tool === "zoom") mode = "zoom";
     else if (view.tool === "select") mode = "select";
-    else mode = e.shiftKey ? "zoom" : "pan";
+    else if (view.tool === "measure") {
+      mode = "measure";
+      const a = measure.endAt(view, p, e.shiftKey);
+      view.measureDraft = { a, lane: a.lane ?? measure.laneAtY(view, p.y), b: null };
+    } else mode = e.shiftKey ? "zoom" : "pan";
     view.drag = { x: p.x, y: p.y, left: view.camera.left, scrollY: view.scrollY, mode, moved: false };
   });
 
@@ -113,7 +131,13 @@ export function bindInput(view: TimelineView): void {
         picking.setHovered(view, null);
       }
       if (!d.moved) return;
-      if (d.mode === "pan") {
+      if (d.mode === "measure" || d.mode === "handle") {
+        const at = measure.endAt(view, p, e.shiftKey);
+        if (d.mode === "measure" && view.measureDraft) view.measureDraft.b = at;
+        if (d.mode === "handle" && view.handleDrag) view.handleDrag.to = at;
+        view.snapEdge = at.side ? at : null;
+        view.requestRender();
+      } else if (d.mode === "pan") {
         view.camera.left = d.left;
         view.camera.pan(dx);
         view.scrollY = d.scrollY - dy;
@@ -124,6 +148,23 @@ export function bindInput(view: TimelineView): void {
         view.requestRender();
       }
       return;
+    }
+    if (view.tool === "measure" || view.measureDraft) {
+      // the edge an end would take, and the line of a measure begun with `m`
+      const at = measure.endAt(view, p, e.shiftKey);
+      view.snapEdge = at.side ? at : null;
+      if (view.measureDraft) view.measureDraft.b = at;
+      view.requestRender();
+    }
+    const label = view.menuOpen ? null : measure.labelAt(view, p);
+    if (label) {
+      picking.setHovered(view, null);
+      picking.showRows(view, `m${label.id}`, measure.describe(view, label));
+      return;
+    }
+    if (view.tooltipKey.startsWith("m")) {
+      view.tooltipKey = "";
+      view.tooltip.classList.remove("atl-show");
     }
     if (view.hoverEnabled) picking.setHovered(view, picking.pick(view, p.x, p.y));
     const plotNow = view.plot();
@@ -162,6 +203,22 @@ export function bindInput(view: TimelineView): void {
       view.requestRender();
       return;
     }
+    if (d.mode === "measure" || d.mode === "handle") {
+      view.snapEdge = null;
+      if (d.mode === "handle") {
+        const h = view.handleDrag;
+        view.handleDrag = null;
+        const m = h && view.measureHits.find((x) => x.m.id === h.id)?.m;
+        if (d.moved && h && m) measure.moveEnd(view, m, h.end, h.to);
+      } else {
+        const draft = view.measureDraft;
+        view.measureDraft = null;
+        if (d.moved && draft) void finishMeasure(view, draft, p, e.shiftKey);
+        else measureClick(view, p);
+      }
+      view.requestRender();
+      return;
+    }
     if (d.moved && box && d.mode !== "pan") {
       if (box.kind === "select" || box.kind === "range-select") {
         if (wide || box.kind === "select") selectBox(view, box, boxMode(e));
@@ -189,6 +246,10 @@ export function bindInput(view: TimelineView): void {
   });
   stage.addEventListener("pointerleave", () => {
     view.pointer = null;
+    if (view.snapEdge) {
+      view.snapEdge = null;
+      view.requestRender();
+    }
     view.shareCursor(null);
     if (!view.drag) picking.setHovered(view, null);
   });
@@ -229,6 +290,48 @@ function note(view: TimelineView, p: { x: number; y: number }, box: Box | null):
   askText(view, xa, (lane === null ? plot.y : laneTop + Math.max(0, r0) * view.laneH) + 2, (text) => {
     if (text !== null) view.callbacks.onAnnotate?.({ x0, x1, lane, text });
   });
+}
+
+/** The Measure tool's drag ended at `p`: the measure (its second end found exactly when
+ * Python holds the marks there). */
+async function finishMeasure(view: TimelineView, draft: measure.MeasureDraft, p: { x: number; y: number }, free: boolean): Promise<void> {
+  const b = await measure.endAtExact(view, p, free);
+  measure.commit(view, draft.a, b, draft.a.side || b.side ? null : draft.lane);
+  view.requestRender();
+}
+
+/** A click with the Measure tool: a double-click on a bar measures its length. */
+function measureClick(view: TimelineView, p: { x: number; y: number }): void {
+  const now = performance.now();
+  if (now - view.lastTap < DOUBLE_CLICK_MS) {
+    view.lastTap = 0;
+    measure.measureMark(view, picking.pick(view, p.x, p.y));
+    return;
+  }
+  view.lastTap = now;
+}
+
+/** A measure's label clicked: select it, with its menu (remove; in a page, copy it as
+ * Python). */
+function openMeasure(view: TimelineView, m: NoteMeasure, p: { x: number; y: number }): void {
+  const items: [string, () => void][] = [];
+  if (measure.editable(view, m)) items.push(["Remove", () => measure.remove(view, m.id)]);
+  if (!view.callbacks.onMeasure) {
+    items.push(["Copy as Python", () => void copy(view, measure.asPython(view, m))]);
+  }
+  items.push(["Copy the time", () => void copy(view, view.axis?.formatMeasureExact(m.span) ?? String(m.span))]);
+  view.tooltipKey = "";
+  view.tooltip.classList.remove("atl-show");
+  view.selectMeasure(m.id, { x: p.x, y: p.y + 10 }, items);
+}
+
+async function copy(view: TimelineView, text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    view.flashNotice(`Copied: ${text}`);
+  } catch {
+    view.flashNotice(text);
+  }
 }
 
 export function boxKind(view: TimelineView, mode: DragMode): BoxKind {
@@ -372,7 +475,8 @@ export function key(view: TimelineView, e: KeyboardEvent): void {
       view.resetView();
       break;
     case "Backspace":
-      view.previousView();
+      if (view.selectedMeasure !== null) measure.remove(view, view.selectedMeasure);
+      else view.previousView();
       break;
     case "+":
     case "=":
@@ -408,7 +512,22 @@ export function key(view: TimelineView, e: KeyboardEvent): void {
     case "/":
       view.finder.open();
       break;
+    case "m":
+      void measure.keyM(view);
+      break;
+    case "M":
+      if (!measure.measureMark(view, view.hovered)) view.flashNotice("Point at a bar, then press M");
+      break;
+    case ">":
+    case "<":
+      void measure.stepEnd(view, e.key === ">");
+      break;
+    case "Delete":
+      if (view.selectedMeasure === null) return;
+      measure.remove(view, view.selectedMeasure);
+      break;
     case "a":
+      view.measureDraft = null;
       if (!view.callbacks.onAnnotate) {
         view.flashNotice("Annotations are made in Python here");
         break;
@@ -418,6 +537,7 @@ export function key(view: TimelineView, e: KeyboardEvent): void {
       view.setMode(view.annotating ? "Annotate: drag over a time range, or click a time · Esc cancels" : null);
       break;
     case "c": {
+      view.measureDraft = null;
       if (!view.callbacks.onConnect) {
         view.flashNotice("Connections are made in Python here");
         break;
@@ -457,11 +577,13 @@ export function key(view: TimelineView, e: KeyboardEvent): void {
     case "Escape":
       if (view.helpEl) view.toggleHelp();
       else if (view.drag) cancelDrag(view);
-      else if (view.annotating || view.connectFrom) {
+      else if (view.annotating || view.connectFrom || view.measureDraft) {
         view.annotating = false;
         view.connectFrom = null;
+        view.measureDraft = null;
         view.setMode(null);
       }
+      else if (view.selectedMeasure !== null) view.selectMeasure(null);
       else if (view.finder.isOpen) view.finder.close();
       else if (view.focus) view.setFocus(null);
       else if (Object.values(view.marks).some((m) => m.length)) view.callbacks.onGesture?.({ kind: "clear" });

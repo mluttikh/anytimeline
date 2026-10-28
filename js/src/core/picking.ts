@@ -239,6 +239,26 @@ export function statesAt(view: TimelineView, h: Hit): [string, string, string?][
   return rows;
 }
 
+/** A tooltip of rows of name and value (a measure's), under key `key`. */
+export function showRows(view: TimelineView, key: string, rows: string[][]): void {
+  if (view.tooltipKey === key) return placeTooltip(view);
+  view.tooltipKey = key;
+  view.tooltip.replaceChildren(
+    ...rows.map(([k, v]) => {
+      const row = div("atl-tip-row");
+      const kk = document.createElement("span");
+      kk.className = "atl-tip-key";
+      kk.textContent = k;
+      const vv = document.createElement("span");
+      vv.textContent = v;
+      row.append(kk, vv);
+      return row;
+    }),
+  );
+  view.tooltip.classList.add("atl-show");
+  placeTooltip(view);
+}
+
 export function placeTooltip(view: TimelineView): void {
   if (!view.pointer) return;
   const tw = view.tooltip.offsetWidth;

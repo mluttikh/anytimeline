@@ -71,6 +71,8 @@ export interface EventsLayerSpec {
   importance: BufferRef | null;
   tooltip: string[];
   route: { segments: BufferRef; count: number; color: string | null; width: number } | null;
+  /** A page's events: the table row of each (to copy a measure as Python). */
+  table_rows?: BufferRef;
   /** A layer of many events (Python: levels.LEVELS_FROM) is sent as levels: its events
    * counted per lane and bin; the events themselves (none here) come in windows. */
   levels?: LevelsSpec | null;
@@ -147,6 +149,8 @@ export interface IntervalsLayerSpec {
   progress: BufferRef | null;
   text: BufferRef | null;
   tooltip: string[];
+  /** A page's bars: the table row of each (to copy a measure as Python). */
+  table_rows?: BufferRef;
   /** Pairs of bar indices: an arrow from the end of the first to the start of the second. */
   links: { pairs: BufferRef; count: number } | null;
   unit_ns: number;
@@ -244,13 +248,6 @@ export interface ValueLevelSpec extends ValuesLayerSpec {
 
 export type LayerSpec = EventsLayerSpec | IntervalsLayerSpec | ValuesLayerSpec;
 
-export interface MarkerSpec {
-  /** Time in ticks. */
-  x: number;
-  label: string;
-  color: string | null;
-}
-
 /**
  * Lanes that form a tree (the first depth.length lanes; Timeline.intervals with parent=), in
  * depth-first order: lane l's descendants are the lanes l + 1 .. l + size[l] - 1.
@@ -275,7 +272,6 @@ export interface SceneSpec {
   /** Every instant's time, in the order (the Order scale). With layers sent as levels, every
    * `step`-th (and the last), and the long gaps between them (rows of rank, span). */
   sequence: { times: BufferRef; count: number; step?: number; gaps?: BufferRef } | null;
-  markers?: MarkerSpec[];
   /** When Python made it (seconds since the epoch): a new spec is always a change, so it syncs. */
   t?: number;
 }

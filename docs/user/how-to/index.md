@@ -27,7 +27,8 @@ Recipes for a task. They assume you know the basics from the
 
 **In the plot**
 
-- [Summarise, find and annotate](explore.md): the selection in numbers, search, notes
+- [Summarise, find, measure and annotate](explore.md): the selection in numbers, search,
+  the time between marks, notes
 - [Zoom from Python](zoom.md)
 - [Text and mark size, height and full screen](size.md)
 - [Plot many events](large.md)

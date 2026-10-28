@@ -139,10 +139,11 @@ class TimelineWidget(anywidget.AnyWidget):
             except Exception as err:
                 answer["error"] = str(err)
             self.send(answer)
-        elif kind in ("find", "step"):
+        elif kind in ("find", "step", "snap"):
             answer = {"type": "answer", "request": content.get("request")}
             try:
-                answer.update(plot._find(content) if kind == "find" else plot._step(content))
+                ask = {"find": plot._find, "step": plot._step, "snap": plot._snap}[kind]
+                answer.update(ask(content))
             except Exception as err:
                 answer["error"] = str(err)
             self.send(answer)
@@ -154,6 +155,12 @@ class TimelineWidget(anywidget.AnyWidget):
             plot._annotate_from(content)
         elif kind == "connect":
             plot._connect_from(content)
+        elif kind == "measure":
+            plot._measure_from(content)
+        elif kind == "note_end":
+            plot._note_end_from(content)
+        elif kind == "note_remove":
+            plot._note_remove_from(content)
         elif kind == "view":
             plot._shown(content)
         elif kind == "image":

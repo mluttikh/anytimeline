@@ -65,7 +65,7 @@ plot.save_image("db.svg", view=View(start, end, lanes=["db"]), theme="dark")
 An SVG holds only shapes, lines and text (no clip paths, filters or images), so PowerPoint,
 Keynote and Google Slides import it as shapes you can recolour and edit. A PNG needs the
 optional `resvg-py`: `pip install 'anytimeline[png]'`. `plot.to_svg()` gives the SVG as
-text. The picture has the lanes, axis, marks, text, markers, annotations, legend, title and
+text. The picture has the lanes, axis, marks, text, notes (annotations, arrows and measures), legend, title and
 the selection; folded lanes are folded as the plot starts, and a story's text goes beside
 its marks rather than in boxes on stems.
 

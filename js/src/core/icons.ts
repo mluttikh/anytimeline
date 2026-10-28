@@ -11,6 +11,8 @@ export const ICONS = {
   zoom: svg('<circle cx="6.75" cy="6.75" r="4.5"/><path d="m10 10 3.75 3.75M4.75 6.75h4M6.75 4.75v4"/>'),
   /** Select: a dashed box around two events. */
   select: svg('<rect x="2.25" y="3.25" width="11.5" height="9.5" rx="0.5" stroke-dasharray="2.2 1.8"/><g fill="currentColor" stroke="none"><circle cx="6" cy="8" r="1.4"/><circle cx="10.25" cy="8" r="1.4"/></g>'),
+  /** Measure: a dimension line between two extension lines. */
+  measure: svg('<path d="M2.25 3v10M13.75 3v10M4 8h8"/><path d="M5.75 6.25 4 8l1.75 1.75M10.25 6.25 12 8l-1.75 1.75"/>'),
   /** Time: events on a time axis, at their time (gaps that grow). */
   time: svg('<path d="M1.75 13.25h12.5"/><path d="M2.75 3v7.5M4.75 3v7.5M8 3v7.5M13.25 3v7.5"/>'),
   /** Order: events on an axis, evenly spaced. */

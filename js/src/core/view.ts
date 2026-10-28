@@ -16,7 +16,8 @@ import { buildHelp } from "./help";
 import { buildLegend } from "./legend";
 import { type FindAsk, Finder, type Match, reveal, revealLane, type StepAsk, stepHeld } from "./find";
 import { buildSummary, type LayerSummary } from "./summary";
-import { type MarkRef, type NewNote, type Notes } from "./notes";
+import { type MarkRef, type MeasureLaid, type NewNote, type NoteEnd, type NoteMeasure, type Notes } from "./notes";
+import type { EndRef, MeasureDraft, SnapAsk } from "./measure";
 import { FLAG_SELECTED, type MarkLayerDraw, type Renderer } from "./renderers/renderer";
 import { createRenderer } from "./renderers/select";
 import { type Align, compatible, convert, frameOf, join, leave, type LinkFrame, type LinkPeer, type LinkSpec, others } from "./link";
@@ -24,7 +25,7 @@ import { download, fileName, legendPainter } from "./snapshot";
 import type { StemPlaced } from "./stems";
 import { decodeValues, ValueLayer, type ValueView } from "./values";
 import { BarDetail, Detail, type DetailView, ValueDetail, type WindowAsk } from "./levels";
-import { decodeEvents, type EventsData, fillSolid, lowerBound, specBufferIds } from "./scene";
+import { decodeEvents, type EventsData, fillSolid, lowerBound, specBufferIds, view as bufferView } from "./scene";
 import { Sequence } from "./sequence";
 import { fmtNumber, TimeAxis, UNIT_NS } from "./time";
 import { FONT_SIZES, type Tool, Toolbar, TOOLS } from "./toolbar";
@@ -75,6 +76,15 @@ export interface ViewCallbacks {
   onAnnotate?: (note: NewNote) => void;
   /** An arrow made in the plot (key `c` on two marks); without, the plot makes none. */
   onConnect?: (a: MarkRef, b: MarkRef) => void;
+  /** A measure made in the plot (the Measure tool, or `m` on two ends); `lane`: the lane
+   * its line goes in when neither end is a mark's. Without, the page keeps its own. */
+  onMeasure?: (a: EndRef, b: EndRef, lane: number | null) => void;
+  /** An end of note `id` (its index in plot.notes) moved. */
+  onNoteEnd?: (id: number, end: "a" | "b", to: EndRef) => void;
+  /** Note `id` removed. */
+  onNoteRemove?: (id: number) => void;
+  /** The edge nearest to a place, or next to it (Python, which holds every mark). */
+  onSnap?: SnapAsk;
 }
 
 export class TimelineView implements DetailView {
@@ -102,12 +112,32 @@ export class TimelineView implements DetailView {
   readonly finder: Finder;
   /** The mark found or stepped to (a ring, and its text), or null. */
   focus: Match | null = null;
-  /** Annotations and connections, as Python sends them. */
+  /** The notes (annotations, connections, measures), as Python sends them. */
   notes: Notes = {};
   /** The key `a` was pressed: the next drag or click makes a note. */
   annotating = false;
   /** The key `c` was pressed on this mark: `c` on another connects them. */
   connectFrom: MarkRef | null = null;
+  /** A page's measures (made in it; gone when it is closed), with ids below 0. */
+  localMeasures: NoteMeasure[] = [];
+  /** The measure being made (`m` pressed once, or the Measure tool's drag), or null. */
+  measureDraft: MeasureDraft | null = null;
+  /** The measure whose label was clicked (its id), or null. */
+  selectedMeasure: number | null = null;
+  /** An end of the selected measure being dragged, and where it is now. */
+  handleDrag: { id: number; end: "a" | "b"; to: NoteEnd } | null = null;
+  /** The measures drawn last, where (their labels select them). */
+  measureHits: MeasureLaid[] = [];
+  /** The edge an end would take (measuring): a tick on it, or null. */
+  snapEdge: NoteEnd | null = null;
+  /** A page's table rows of each mark, per layer (to copy a measure as Python). */
+  tableRows: Record<string, ArrayLike<number>> = {};
+  private measureMenu: HTMLElement | null = null;
+
+  /** Whether a measure's menu is open. */
+  get menuOpen(): boolean {
+    return !!this.measureMenu;
+  }
   private modeEl: HTMLDivElement | null = null;
   renderer: Renderer | null = null;
   private rendererPref: RendererPreference = "auto";
@@ -405,6 +435,39 @@ export class TimelineView implements DetailView {
 
   setNotes(notes: Notes): void {
     this.notes = notes ?? {};
+    const ids = new Set([...(this.notes.measures ?? []), ...this.localMeasures].map((m) => m.id));
+    if (this.selectedMeasure !== null && !ids.has(this.selectedMeasure)) this.selectMeasure(null);
+    this.requestRender();
+  }
+
+  /** Select a measure (null: none): its ends can then be dragged, Delete removes it, and
+   * `menu` (a point, CSS px) opens its menu there. */
+  selectMeasure(id: number | null, menu: { x: number; y: number } | null = null, items: [string, () => void][] = []): void {
+    this.selectedMeasure = id;
+    this.measureMenu?.remove();
+    this.measureMenu = null;
+    if (id !== null && menu && items.length) {
+      const el = div("atl-menu");
+      el.setAttribute("role", "menu");
+      for (const [text, act] of items) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = text;
+        b.setAttribute("role", "menuitem");
+        b.addEventListener("pointerdown", (e) => e.stopPropagation());
+        b.addEventListener("click", (e) => {
+          e.stopPropagation();
+          act();
+          this.selectMeasure(null);
+          this.root.focus({ preventScroll: true });
+        });
+        el.append(b);
+      }
+      el.style.left = `${Math.max(0, Math.min(menu.x, this.width - 170))}px`;
+      el.style.top = `${Math.max(0, menu.y)}px`;
+      this.stage.append(el);
+      this.measureMenu = el;
+    }
     this.requestRender();
   }
 
@@ -544,6 +607,14 @@ export class TimelineView implements DetailView {
         }
         return v;
       });
+    this.tableRows = {};
+    for (const ls of spec.layers) {
+      if (ls.type !== "values" && ls.table_rows) this.tableRows[ls.name] = bufferView(ls.table_rows, source);
+    }
+    this.localMeasures = [];
+    this.measureDraft = null;
+    this.handleDrag = null;
+    this.selectMeasure(null);
     this.hovered = null;
     folding.initRows(this, spec);
     const sq = spec.sequence;
@@ -1131,7 +1202,7 @@ export class TimelineView implements DetailView {
   }
 
   private offeredTools(): Tool[] {
-    return this.selectionMode === "none" ? ["pan", "zoom"] : TOOLS;
+    return this.selectionMode === "none" ? ["pan", "zoom", "measure"] : TOOLS;
   }
 
   private updateToolbar(): void {

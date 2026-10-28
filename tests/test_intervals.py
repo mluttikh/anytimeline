@@ -2,7 +2,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from anytimeline import Marker, Timeline, gantt
+from anytimeline import Annotation, Timeline, gantt
 from anytimeline.codec import decode
 
 
@@ -36,7 +36,9 @@ def test_gantt_lanes_in_table_order_with_milestones_links_and_progress():
     links = buffer(chart, layer["links"]["pairs"]).tolist()
     assert sorted(links) == [[0, 1], [0, 4], [1, 2], [2, 3], [4, 3]]
     assert buffer(chart, layer["progress"]).tolist() == pytest.approx([1.0, 0.6, 0.0, 0.0, 0.3])
-    assert spec["markers"] == [{"x": 950400.0, "label": "today", "color": None}]
+    assert chart.notes == [Annotation("2026-10-12", text="today")]
+    (today,) = chart._notes["bands"]
+    assert (today["x0"], today["point"], today["lane"]) == (950400.0, True, None)
 
 
 def test_overlapping_bars_are_packed_into_rows():
@@ -134,16 +136,15 @@ def test_palette_dict_order_is_the_legend_order():
     assert [i["label"] for i in items] == ["plan", "build", "ship"]
 
 
-def test_markers():
+def test_lines_across_all_lanes():
     plot = gantt(plan())
-    plot.marker("2026-10-10", "freeze", color="#d62728")
-    assert plot._spec["markers"][-1] == {"x": 9 * 86400.0, "label": "freeze", "color": "#d62728"}
-    assert plot.markers[-1] == Marker("2026-10-10", "freeze", "#d62728")
-    plot.markers = []
-    assert plot._spec["markers"] == []
-    with pytest.raises(TypeError, match="list of Markers"):
-        plot.markers = [("2026-10-10", "freeze")]  # ty: ignore[invalid-assignment]
-    with pytest.raises(AttributeError, match="markers = "):
+    plot.annotate("2026-10-10", text="freeze", color="#d62728")
+    line = plot._notes["bands"][-1]
+    assert (line["x0"], line["text"], line["color"]) == (9 * 86400.0, "freeze", "#d62728")
+    assert plot.notes[-1] == Annotation("2026-10-10", text="freeze", color="#d62728")
+    plot.notes = []
+    assert plot._notes == {}
+    with pytest.raises(AttributeError, match="notes = "):
         plot.clear_markers()
-    with pytest.raises(ValueError, match="markers need"):
-        Timeline().events({"step": [1, 2]}, time=None, order="step").marker(1)
+    with pytest.raises(ValueError, match="times"):
+        Timeline().events({"step": [1, 2]}, time=None, order="step").annotate(1)

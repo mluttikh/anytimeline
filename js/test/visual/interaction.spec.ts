@@ -747,6 +747,67 @@ test("Annotate: a, then a drag, then text and Enter sends the note to Python; c 
   expect(await view(page).evaluate((root: any) => root.__view.notes.bands.length)).toBe(1);
 });
 
+/** Where bar `index` of the first intervals layer starts or ends (page px). */
+async function barEdge(page: Page, index: number, side: "start" | "end"): Promise<{ x: number; y: number }> {
+  const mid = await barAt(page, 0, index);
+  const box = await stageBox(page);
+  const x = await view(page).evaluate((root: any, [i, s]) => {
+    const v = root.__view;
+    const d = v.bars[0].data;
+    return v.plot().x + v.camera.toPx(s === "start" ? d.start[i] : d.end[i]);
+  }, [index, side] as const);
+  return { x: box.x + x, y: mid.y };
+}
+
+test("Measure: a drag between edges, a double-click on a bar, m; a measure's label selects it", async ({ page }) => {
+  await open(page, "gantt_plan");
+  const sent = (type: string) => page.evaluate((t) => (window as any).__log.filter((m: any) => m.type === t), type);
+  await page.getByRole("button", { name: "Measure" }).click();
+  expect(await state(page, "tool")).toBe("measure");
+  // a drag from one bar's end to another's start, each taken from a few pixels off
+  const a = await barEdge(page, 0, "end");
+  const b = await barEdge(page, 4, "start");
+  await page.mouse.move(a.x + 3, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x - 3, b.y, { steps: 6 });
+  await page.mouse.up();
+  const [drag] = await sent("measure");
+  expect(drag.a).toMatchObject({ side: "end", index: expect.any(Number) });
+  expect(drag.b).toMatchObject({ side: "start" });
+  expect(drag.a.index).not.toBe(drag.b.index);
+  // a double-click on a bar: its own length
+  const mid = await barAt(page, 0, 4);
+  await page.mouse.dblclick(mid.x, mid.y);
+  const own = (await sent("measure"))[1];
+  expect(own.a).toMatchObject({ side: "start", index: own.b.index });
+  expect(own.b.side).toBe("end");
+  // m, then Esc: nothing measured
+  await page.mouse.move(a.x, a.y);
+  await page.keyboard.press("m");
+  await expect(page.locator(".atl-mode")).toContainText("Measure");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".atl-mode")).toHaveCount(0);
+  expect(await sent("measure")).toHaveLength(2);
+  // what Python sends back is drawn; its label shows the times and selects it
+  const end = (x: number) => ({ x, r: null, lane: 0, side: "start", layer: "intervals", index: 0 });
+  const span = await view(page).evaluate((root: any) => root.__view.bars[0].data.end[0] - root.__view.bars[0].data.start[0]);
+  await page.evaluate((n) => {
+    (window as any).__model.state._notes = n;
+    (window as any).__model.emit("change:_notes");
+  }, { measures: [{ a: end(0), b: { ...end(span), side: "end" }, span, events: null, lane: null, text: null, color: null, id: 0 }] });
+  await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits.length)).toBe(1);
+  const hit = await view(page).evaluate((root: any) => root.__view.measureHits[0]);
+  const box = await stageBox(page);
+  const label = { x: box.x + hit.lx + hit.tw / 2, y: box.y + hit.y };
+  await page.mouse.move(label.x, label.y);
+  await expect(page.locator(".atl-tooltip.atl-show")).toContainText("plot.notes[0]");
+  await page.mouse.click(label.x, label.y);
+  const menu = page.locator(".atl-menu");
+  await expect(menu).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Remove" }).click();
+  expect(await sent("note_remove")).toEqual([expect.objectContaining({ id: 0 })]);
+});
+
 test("Undo: Ctrl/Cmd+Z asks Python to take back a change of the selection, Shift for redo", async ({ page }) => {
   await open(page, "service_time");
   await view(page).click({ position: { x: 4, y: 4 } });

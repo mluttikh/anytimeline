@@ -37,7 +37,7 @@ __all__ = [
 
 Renderer = Literal["auto", "webgpu", "webgl2", "canvas2d"]
 """How the plot is drawn: the first of WebGPU, WebGL2 and Canvas 2D that works, or one."""
-Tool = Literal["pan", "zoom", "select"]
+Tool = Literal["pan", "zoom", "select", "measure"]
 """What a drag does in the plot."""
 XScale = Literal["time", "order"]
 """The time axis: events at their time, or by the order they happened in (evenly spaced)."""

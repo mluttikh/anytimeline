@@ -339,6 +339,20 @@ export class TimeAxis {
     if (this.kind === "number") return fmtNumber(dx, 3);
     return formatDuration(dx * this.perNs, 0, false, 2);
   }
+
+  /** A measured span of ticks, to three significant digits (a measure's label). */
+  formatMeasure(dx: number): string {
+    if (this.kind === "order") return `${fmtNumber(dx)} events`;
+    if (this.kind === "number") return fmtNumber(dx, 3);
+    return formatDuration(dx * this.perNs, 0, false, 3);
+  }
+
+  /** A measured span of ticks with all the precision of the data's unit (its tooltip). */
+  formatMeasureExact(dx: number): string {
+    if (this.kind === "order") return `${fmtNumber(dx)} events`;
+    if (this.kind === "number") return fmtNumber(dx, 10);
+    return formatDuration(dx * this.perNs, 0, true);
+  }
 }
 
 function spacingFor(stepNs: number): number {

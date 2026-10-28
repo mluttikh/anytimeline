@@ -290,9 +290,9 @@ def test_layout_settings_lay_the_plot_out_again():
     assert plot._spec["time"]["timezone"] == "Europe/Amsterdam"
     # a setting the layers do not fit keeps the plot as it was
     times = Timeline().events({"step": [1, 2]}, time=None, order="step")
-    with pytest.raises(ValueError, match="markers need"):
-        times.marker(1)
-    assert times.markers == []
+    with pytest.raises(ValueError, match="times"):
+        times.annotate(1)
+    assert times.notes == []
 
 
 def test_copies_and_pickles_are_plots_of_their_own(monkeypatch):
@@ -327,7 +327,7 @@ def test_save_html(tmp_path):
     assert 'data-fill="window"' in page
     assert page.count("<script") == 2  # the data, and the drawing code: nothing loaded
     payload = payload_of(page)
-    assert set(payload["buffers"]) == set(plot._buffers)
+    assert set(payload["buffers"]) >= set(plot._buffers)  # and each mark's table row
     tips = payload["tooltips"]["spans"]
     assert tips["columns"] == ["service"]
     # by the order the browser has the spans in (the tree's), not the table's

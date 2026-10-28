@@ -54,7 +54,7 @@ export function treeIndent(view: TimelineView, depth: number): number {
 }
 
 /** The rows when a spec arrives: tree lanes open as the spec says, unless the same lanes
- * were shown before (a layer added, a marker set): then they stay as the user left them. */
+ * were shown before (a layer added, a note made): then they stay as the user left them. */
 export function initRows(view: TimelineView, spec: SceneSpec): void {
   const tree = spec.lanes.tree;
   const names = spec.lanes.names;

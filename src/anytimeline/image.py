@@ -669,7 +669,7 @@ class _Picture:
                 self._draw_bars(b, l0, l1)
         for spec in self._layers("events"):
             self._events(spec, l0, l1)
-        # the front: axis, names, text, markers
+        # the front: axis, names, text, notes
         self._axis(ticks)
         self._lanes(l0, l1)
         for b in bars:
@@ -682,7 +682,6 @@ class _Picture:
         if self.in_view <= LABEL_BUDGET:
             self._labels(l0, l1)
         self._notes()
-        self._markers()
         self._value_scales(l0, l1)
         if gaps:
             self._gap_marks(gaps)
@@ -1991,21 +1990,45 @@ class _Picture:
         self.svg.rect(lx, y, w, f.fs + 4, t.bg, 0.9)
         self.svg.text(text, lx + 4, y + f.fs, size, color)
 
+    def _row_of(self, lane: int | None) -> int | None:
+        """The row a lane shows in: its own, or that of the lane it is folded into."""
+        f = self.f
+        if lane is None or not 0 <= lane < len(f.slot):
+            return None
+        if f.slot[lane] >= 0:
+            return int(f.slot[lane])
+        size = (self.tree or {}).get("size") or []
+        for k in range(min(lane, len(size)) - 1, -1, -1):
+            if f.slot[k] >= 0 and k + size[k] > lane:
+                return int(f.slot[k])
+        return None
+
+    def _end_x(self, e: dict[str, Any]) -> float | None:
+        """Where a note's end is on the scale drawn (None: not on the Order scale)."""
+        if not self.f.order:
+            return e["x"]
+        return e.get("r")
+
     def _notes(self) -> None:
-        """Annotations (bands, or a line at one time) and connections (arrows), as
-        ``notes.ts`` draws them, cut to the plot."""
+        """Annotations (bands, or a line at one time), connections (arrows) and measures
+        (dimension lines), as ``notes.ts`` draws them, cut to the plot; lines across all
+        lanes last, over the rest."""
         notes = self.plot._notes or {}
         f, t = self.f, self.theme
         px, py, pw, ph = f.plot
         plot = f.plot
+        lines = []
         for n in notes.get("bands") or []:
-            a, b = self._place(n["x0"]), self._place(n["x1"])
+            if n["point"] and n["lane"] is None:
+                lines.append(n)
+                continue
+            a, b = self._band_place(n, "x0", "r0"), self._band_place(n, "x1", "r1")
             if a is None or b is None:
                 continue
             y0, y1 = py, py + ph
             if n["lane"] is not None:
-                row = int(f.slot[n["lane"]]) if n["lane"] < len(f.slot) else -1
-                if row < 0:
+                row = self._row_of(n["lane"])
+                if row is None:
                     continue
                 y0 = f.lane_top + row * f.lane_h + 1
                 y1 = y0 + f.lane_h - 2
@@ -2033,79 +2056,178 @@ class _Picture:
             if n.get("text"):
                 self._note_label(n["text"], xa + 3, max(py, y0) + 2, color)
         for n in notes.get("arrows") or []:
-            ends = []
-            for key, at in (("a", "x2"), ("b", "x")):
-                e = n[key]
-                lane = e["lane"]
-                row = int(f.slot[lane]) if lane < len(f.slot) else -1
-                if row < 0:
-                    break
-                x = f.px(e[("r2" if at == "x2" else "r")] if f.order else e[at])
-                ends.append((x, f.lane_top + (row + 0.5) * f.lane_h))
-            if len(ends) < 2:
-                continue
-            (xa, ya), (xb, yb) = ends
-            if max(xa, xb) < px or min(xa, xb) > px + pw:
-                continue
-            color = n.get("color") or t.accent
-            bend = max(24, min(160, abs(xb - xa) / 2))
-            ex = xb - 3
-            # the curve as a polyline, cut to the plot (no clip paths: slides keep shapes)
-            pts = []
-            for k in range(25):
-                u = k / 24
-                v = 1 - u
-                x = (
-                    v**3 * xa
-                    + 3 * v * v * u * (xa + bend)
-                    + 3 * v * u * u * (ex - bend)
-                    + u**3 * ex
-                )
-                y = v**3 * ya + 3 * v * v * u * ya + 3 * v * u * u * yb + u**3 * yb
-                pts.append((x, y))
-            run: list[tuple[float, float]] = []
-            for (x0, y0), (x1, y1) in itertools.pairwise(pts):
-                seg = _clip_segment(x0, y0, x1, y1, plot)
-                if seg and (not run or run[-1] == (seg[0], seg[1])):
-                    run = run or [(seg[0], seg[1])]
-                    run.append((seg[2], seg[3]))
-                    continue
-                if len(run) > 1:
-                    self.svg.path(_path(run), fill="none", stroke=color, stroke_width=1.5)
-                run = [(seg[0], seg[1]), (seg[2], seg[3])] if seg else []
-            if len(run) > 1:
-                self.svg.path(_path(run), fill="none", stroke=color, stroke_width=1.5)
-            if px <= xb <= px + pw and py + 4 <= yb <= py + ph - 4:
-                head = [(xb, yb), (xb - 8, yb - 4), (xb - 8, yb + 4)]
-                self.svg.path(_path(head, close=True), fill=color)
-            if n.get("text"):
-                w = text_width(n["text"], f.font(-1)) + 8
-                self._note_label(
-                    n["text"], (xa + xb) / 2 - w / 2, (ya + yb) / 2 - f.fs / 2 - 2, color
-                )
-
-    # -- markers and gaps
-
-    def _markers(self) -> None:
-        f, t = self.f, self.theme
-        px, py, pw, ph = f.plot
+            self._arrow(n)
+        self._measures(notes.get("measures") or [])
         size = f.font(-1)
-        for m in self.spec.get("markers") or []:
-            at = m["x"]
-            if f.order:
-                if self.seq is None or not self.seq.count:
-                    continue
-                at = self.seq.lower(at) - 0.5
+        for n in lines:  # as markers were drawn: dashed, the label on the background
+            at = self._band_place(n, "x0", "r0")
+            if at is None:
+                continue
             x = round(f.px(at)) + 0.5
             if x < px - 1 or x > px + pw + 1:
                 continue
-            color = m.get("color") or t.select
+            color = n.get("color") or t.select
             self.svg.line(x, py, x, py + ph, color, 1.5, stroke_dasharray="5 3")
-            if m.get("label"):
-                w = text_width(m["label"], size) + 8
+            if n.get("text"):
+                w = text_width(n["text"], size) + 8
                 lx = min(x + 3, px + pw - w)
                 self.svg.rect(lx, py + 3, w, f.fs + 4, t.bg)
-                self.svg.text(m["label"], lx + 4, py + 3 + f.fs, size, color)
+                self.svg.text(n["text"], lx + 4, py + 3 + f.fs, size, color)
+
+    def _band_place(self, n: dict[str, Any], x: str, r: str) -> float | None:
+        if not self.f.order:
+            return n[x]
+        if n.get(r) is not None:
+            return n[r]
+        return self._place(n[x])
+
+    def _arrow(self, n: dict[str, Any]) -> None:
+        """An arrow from one edge to another: it leaves a start leftwards and an end
+        rightwards, and comes into a start from the left and into an end from the right."""
+        f, t = self.f, self.theme
+        px, py, pw, ph = f.plot
+        plot = f.plot
+        ends = []
+        for key in ("a", "b"):
+            e = n[key]
+            row = self._row_of(e["lane"])
+            x = self._end_x(e)
+            if row is None or x is None:
+                return
+            ends.append((f.px(x), f.lane_top + (row + 0.5) * f.lane_h))
+        (xa, ya), (xb, yb) = ends
+        if max(xa, xb) < px or min(xa, xb) > px + pw:
+            return
+        out = 1 if n["a"].get("side", "end") == "end" else -1
+        into = 1 if n["b"].get("side", "start") == "start" else -1
+        color = n.get("color") or t.accent
+        bend = max(24, min(160, abs(xb - xa) / 2))
+        ex = xb - into * 3
+        # the curve as a polyline, cut to the plot (no clip paths: slides keep shapes)
+        pts = []
+        for k in range(25):
+            u = k / 24
+            v = 1 - u
+            x = (
+                v**3 * xa
+                + 3 * v * v * u * (xa + out * bend)
+                + 3 * v * u * u * (ex - into * bend)
+                + u**3 * ex
+            )
+            y = v**3 * ya + 3 * v * v * u * ya + 3 * v * u * u * yb + u**3 * yb
+            pts.append((x, y))
+        run: list[tuple[float, float]] = []
+        for (x0, y0), (x1, y1) in itertools.pairwise(pts):
+            seg = _clip_segment(x0, y0, x1, y1, plot)
+            if seg and (not run or run[-1] == (seg[0], seg[1])):
+                run = run or [(seg[0], seg[1])]
+                run.append((seg[2], seg[3]))
+                continue
+            if len(run) > 1:
+                self.svg.path(_path(run), fill="none", stroke=color, stroke_width=1.5)
+            run = [(seg[0], seg[1]), (seg[2], seg[3])] if seg else []
+        if len(run) > 1:
+            self.svg.path(_path(run), fill="none", stroke=color, stroke_width=1.5)
+        if px <= xb <= px + pw and py + 4 <= yb <= py + ph - 4:
+            head = [(xb, yb), (xb - into * 8, yb - 4), (xb - into * 8, yb + 4)]
+            self.svg.path(_path(head, close=True), fill=color)
+        if n.get("text"):
+            w = text_width(n["text"], f.font(-1)) + 8
+            self._note_label(n["text"], (xa + xb) / 2 - w / 2, (ya + yb) / 2 - f.fs / 2 - 2, color)
+
+    def _measure_text(self, n: dict[str, Any]) -> str:
+        """A measure's label (``measureText``): its text, ``{time}`` and ``{events}`` filled
+        in; without text the time, and on the Order scale the events between."""
+        time = self.time_axis.format_measure(abs(n["span"]))
+        events = n.get("events")
+        count = "" if events is None else f"{ax.fmt_number(events)} event{'s' * (events != 1)}"
+        text = n.get("text")
+        if text is None:
+            return f"{time} · {count}" if self.f.order and count else time
+        return text.replace("{time}", time).replace("{events}", count)
+
+    def _measures(self, measures: list[dict[str, Any]]) -> None:
+        """Measures as dimension lines (``drawMeasures``): from each end's mark an extension
+        line to the line's height, the line with an arrowhead at each end, the label at its
+        middle (beyond its right end when it does not fit). The line is in the measure's
+        lane, else the upper of its ends' lanes, else at the top of the plot; measures that
+        overlap in a lane stack."""
+        f = self.f
+        laid = layout_measures(self._measure_geometry(measures), f.fs, f.plot, f.lane_top, f.lane_h)
+        for d in laid:
+            self._dimension(d)
+
+    def _measure_geometry(self, measures: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        f = self.f
+        out = []
+        size = f.font(-1)
+        for n in measures:
+            xs = [self._end_x(n[k]) for k in ("a", "b")]
+            if xs[0] is None or xs[1] is None:
+                continue
+            rows = [self._row_of(n[k]["lane"]) for k in ("a", "b")]
+            row = self._row_of(n["lane"]) if n.get("lane") is not None else None
+            if row is None:
+                shown = [r for r in rows if r is not None]
+                row = min(shown) if shown else None
+            text = self._measure_text(n)
+            out.append(
+                {
+                    "xa": f.px(xs[0]),
+                    "xb": f.px(xs[1]),
+                    "rows": rows,
+                    "row": row,
+                    "text": text,
+                    "tw": text_width(text, size) + 8,
+                    "color": n.get("color") or self.theme.accent,
+                }
+            )
+        return out
+
+    def _dimension(self, d: dict[str, Any]) -> None:
+        f = self.f
+        px, py, pw, ph = f.plot
+        plot = f.plot
+        y = d["y"]
+        color = d["color"]
+        lo, hi = min(d["xa"], d["xb"]), max(d["xa"], d["xb"])
+        if hi < px - 1 or lo > px + pw + 1 or y < py or y > py + ph:
+            return
+        for x, row in ((d["xa"], d["rows"][0]), (d["xb"], d["rows"][1])):
+            if row is None:  # a time: a short tick through the line
+                y0, y1 = y - 5, y + 5
+            else:
+                yc = f.lane_top + (row + 0.5) * f.lane_h
+                away = 1 if y > yc else -1
+                y0, y1 = yc + away * min(6, f.lane_h / 4), y + away * 4
+            seg = _clip_segment(x, y0, x, y1, plot)
+            if seg:
+                self.svg.line(*seg, color, 1, stroke_dasharray="3 2")
+        inside = hi - lo >= 2 * ARROW_LEN + 2
+        reach = 0 if inside else 2 * ARROW_LEN
+        # a band of the background under the line and its heads: it shows over marks
+        halo = _clip_segment(lo - reach, y, hi + reach, y, plot)
+        if halo:
+            self.svg.line(*halo, self.theme.bg, 7, stroke_opacity=0.85)
+        seg = _clip_segment(lo, y, hi, y, plot)
+        if seg:
+            self.svg.line(*seg, color, 1.5)
+        for x, way in ((lo, -1), (hi, 1)):
+            if not px <= x <= px + pw:
+                continue
+            tip = way if inside else -way  # too short: the heads outside, pointing in
+            base = x - tip * ARROW_LEN
+            if not inside:
+                tail = _clip_segment(x, y, x + way * 2 * ARROW_LEN, y, plot)
+                if tail:
+                    self.svg.line(*tail, color, 1.5)
+                base = x + way * ARROW_LEN
+            head = [(x, y), (base, y - 3.5), (base, y + 3.5)]
+            self.svg.path(_path(head, close=True), fill=color)
+        if d["text"]:
+            self._note_label(d["text"], d["lx"], y - (f.fs + 4) / 2, color)
+
+    # -- gaps
 
     def _visible_gaps(self, pinned: str) -> list[tuple[float, str | None]]:
         """The long gaps to show on the Order scale, the longest first (``visibleGaps``)."""
@@ -2340,6 +2462,46 @@ def _fit_range(a: float, b: float, margin: float, time: Mapping[str, Any]) -> tu
         lo, hi = lo - pad, hi + pad
     pad = (hi - lo) * margin
     return lo - pad, hi + pad
+
+
+ARROW_LEN = 7
+"""The length of a measure's arrowheads, in pixels."""
+
+
+def layout_measures(
+    measures: list[dict[str, Any]],
+    fs: int,
+    plot: tuple[float, float, float, float],
+    lane_top: float,
+    lane_h: float,
+) -> list[dict[str, Any]]:
+    """Where measures' lines go (``layoutMeasures``): each gets ``y``, its line's height,
+    and ``lx``, its label's left. Per row (None: the top of the plot), measures take the
+    first level whose earlier lines (and labels) end before theirs starts."""
+    px, py, pw, _ = plot
+    step = fs + 8
+    levels: dict[int | None, list[float]] = {}
+    out = []
+    for d in sorted(measures, key=lambda d: min(d["xa"], d["xb"])):
+        lo, hi = min(d["xa"], d["xb"]), max(d["xa"], d["xb"])
+        tw = d["tw"]
+        if tw + 2 * ARROW_LEN <= hi - lo:
+            lx = (lo + hi) / 2 - tw / 2
+        elif hi + 6 + tw <= px + pw:
+            lx = hi + 6
+        else:
+            lx = lo - 6 - tw
+        lx = max(px + 1, min(lx, px + pw - tw - 1))
+        left, right = min(lo, lx), max(hi, lx + tw)
+        ends = levels.setdefault(d["row"], [])
+        k = next((i for i, e in enumerate(ends) if e < left - 4), len(ends))
+        if k == len(ends):
+            ends.append(right)
+        else:
+            ends[k] = right
+        top = py if d["row"] is None else lane_top + d["row"] * lane_h
+        out.append({**d, "y": top + 3 + (fs + 4) / 2 + k * step, "lx": lx})
+    return out
 
 
 def _clip_segment(
