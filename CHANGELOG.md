@@ -4,7 +4,11 @@ All notable changes to anytimeline. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.2] - 2026-11-01
+
+An Export menu: copy, download or save the plot as PNG or SVG. And defaults per method,
+`plot.update`, an import without the widget, the drawing code once per page
+(`html_script`), and toolbar tips that show at once.
 
 ### Added
 
@@ -363,7 +367,7 @@ drawn with WebGPU, WebGL2 or Canvas 2D.
   that follow the notebook.
 - Synthetic example data (`anytimeline.synthetic`) and documentation with live examples.
 
-[Unreleased]: https://github.com/mluttikh/anytimeline/compare/v0.5.1...HEAD
+[0.5.2]: https://github.com/mluttikh/anytimeline/releases/tag/v0.5.2
 [0.5.1]: https://github.com/mluttikh/anytimeline/releases/tag/v0.5.1
 [0.5.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.5.0
 [0.4.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.4.0

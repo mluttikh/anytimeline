@@ -12,7 +12,7 @@ from anytimeline.presets import compare_traces, gantt, story
 from anytimeline.styling import SYMBOLS
 from anytimeline.view import View
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 
 __all__ = [
     "SYMBOLS",
