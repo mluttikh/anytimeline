@@ -1291,7 +1291,9 @@ class Timeline:
         """
         return page.save_html(path, self, title=title)
 
-    def to_html(self, *, title: str | None = None, full_html: bool = True) -> str:
+    def to_html(
+        self, *, title: str | None = None, full_html: bool = True, script: bool = True
+    ) -> str:
         """The plot as interactive HTML that works without Python: the page
         [`save_html`][anytimeline.Timeline.save_html] writes, as text.
 
@@ -1299,13 +1301,17 @@ class Timeline:
         HTML, such as Streamlit's ``components.html(plot.to_html(), height=500)``. With
         ``full_html=False`` it is an element for a page of your own (a template's
         ``{{ plot | safe }}``): the plot's styles, data and drawing code. A page can hold any
-        number of them, and runs the drawing code once.
+        number of them, and runs the drawing code once. With ``script=False`` as well it is
+        the plot alone (its data, about 250 KB less): put
+        [`html_script()`][anytimeline.html_script] in the page once, for all its plots.
 
         Args:
             title: The page's title (``full_html`` only); by default the plot's title.
             full_html: ``True``: a whole page, from ``<!doctype html>``. ``False``: an element
                 to put in a page's ``<body>``; the plot takes the width of the element it is
                 in.
+            script: With ``full_html=False``: ``False`` leaves out the styles and the drawing
+                code, which [`html_script()`][anytimeline.html_script] then brings once.
 
         Returns:
             The HTML.
@@ -1313,7 +1319,14 @@ class Timeline:
         if not full_html:
             if title is not None:
                 raise ValueError("title is the page's title: it needs full_html=True")
+            if not script:
+                note = "put anytimeline.html_script() in the page once to draw this plot."
+                return page.fragment(self, note, script=False)
             return page.fragment(self, "this plot is drawn by JavaScript, which did not run here.")
+        if not script:
+            raise ValueError(
+                "a whole page needs its drawing code: script=False needs full_html=False"
+            )
         return page.page([self], title)
 
     def _repr_mimebundle_(self, **kwargs: Any) -> Any:

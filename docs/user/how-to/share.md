@@ -39,6 +39,22 @@ report: `components.html(plot.to_html(), height=500)` in Streamlit, say. With
 `to_html(full_html=False)` it is an element for a page of your own (a template's
 `{{ plot | safe }}`); a page can hold any number of them.
 
+Each such element carries the drawing code and styles (about 250 KB), which a page runs
+once. A page with many plots (a report, a site) can carry them once instead: put
+[`anytimeline.html_script()`][anytimeline.html_script] in the page, in its `<head>` or
+anywhere in its `<body>`, and make the plots with `script=False`:
+
+```python
+import anytimeline
+
+head = anytimeline.html_script()
+body = "".join(p.to_html(full_html=False, script=False) for p in plots)  # data only
+page = f"<!doctype html><html><head>{head}</head><body>{body}</body></html>"
+```
+
+A plot your app puts in the page later, after it was read, draws after
+`window.anytimelineEmbed.add()` in the page's JavaScript.
+
 Several plots go in one page with [`anytimeline.save_html`][anytimeline.save_html]
 (`save_html("page.html", plot_a, plot_b)`); linked plots stay linked there.
 

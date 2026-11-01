@@ -1,6 +1,7 @@
 """Plots as HTML that works without Python: a page of their own (``save_html``,
 ``to_html``), a notebook output (``display="html"``), an element for a page of your own
-(``to_html(full_html=False)``) and the documentation's embeds. None needs a widget.
+(``to_html(full_html=False)``, with ``script=False`` the plot alone for a page that has
+``html_script()`` once) and the documentation's embeds. None needs a widget.
 
 Each holds the plot's spec and buffers (base64), its settings and its tooltip columns as
 JSON in a ``<script type="application/json">``, which ``standalone.js`` draws.
@@ -82,7 +83,27 @@ def page(shown: list[Timeline], title: str | None) -> str:
     return _PAGE.format(title=html.escape(name), style=style, plots=embeds, script=script())
 
 
-def fragment(plot: Timeline, note: str) -> str:
+def html_script() -> str:
+    """The styles and the drawing code of anytimeline's plots, for a page that holds plots
+    made with ``to_html(full_html=False, script=False)``: put it in the page once, in its
+    ``<head>`` or anywhere in its ``<body>``.
+
+    ```python
+    head = anytimeline.html_script()
+    body = "".join(plot.to_html(full_html=False, script=False) for plot in plots)
+    page = f"<html><head>{head}</head><body>{body}</body></html>"
+    ```
+
+    The code waits until the page is read, then draws each plot as it comes near the
+    screen. Plots put in the page later (by an app's own script) are drawn after
+    ``window.anytimelineEmbed.add()``. It is the code that ``to_html(full_html=False)``
+    carries in every plot, under the same version: a page that has both runs it once. It is
+    the code of the installed anytimeline, the same for every plot.
+    """
+    return f"<style>{_style()}</style>{_guarded()}"
+
+
+def fragment(plot: Timeline, note: str, *, script: bool = True) -> str:
     """The plot as HTML to put in a page (a notebook output, ``to_html(full_html=False)``):
     the plot's CSS, its data, and ``standalone.js``, which then starts this plot, with a
     note (``note``, after the plot's repr) for where scripts do not run.
@@ -90,18 +111,34 @@ def fragment(plot: Timeline, note: str) -> str:
     Every fragment has the script: an earlier one may be cleared or not run. A page runs
     each version of it once (``window.anytimelineEmbeds``, by a hash of the script): a
     notebook whose tab drew plots before anytimeline was updated draws new ones with the
-    new script, and its older plots keep theirs."""
-    code = script()
-    version = hashlib.sha256(code.encode()).hexdigest()[:16]
-    style = (_STATIC / "widget.css").read_text(encoding="utf-8")
-    return (
-        f"<style>{style}</style>"
+    new script, and its older plots keep theirs.
+
+    ``script=False``: the plot alone (its data and the note), for a page that has
+    ``html_script()``."""
+    element = (
         '<div class="anytimeline-embed"><p class="anytimeline-note">'
         f"{html.escape(repr(plot))}: {html.escape(note)}</p>"
         f'<script type="application/json">{data(plot)}</script></div>'
+    )
+    if not script:
+        return element
+    return f"<style>{_style()}</style>{element}{_guarded('s&&s.previousElementSibling')}"
+
+
+def _style() -> str:
+    return (_STATIC / "widget.css").read_text(encoding="utf-8")
+
+
+def _guarded(host: str = "") -> str:
+    """``standalone.js`` in a ``<script>`` that runs each version of it once per page
+    (``window.anytimelineEmbeds``, by a hash of the code), then adds a plot: ``host`` (a JS
+    expression; the script element is ``s``), or with ``""`` every plot not started yet."""
+    code = script()
+    version = hashlib.sha256(code.encode()).hexdigest()[:16]
+    return (
         "<script>(function(s){var r=window.anytimelineEmbeds=window.anytimelineEmbeds||{};"
         f'if(!r["{version}"]){{{code};\nr["{version}"]=window.anytimelineEmbed}}'
-        f'r["{version}"].add(s&&s.previousElementSibling)}})(document.currentScript)'
+        f'r["{version}"].add({host})}})(document.currentScript)'
         "</script>"
     )
 
