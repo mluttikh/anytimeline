@@ -18,6 +18,16 @@ What [`Timeline.notes`][anytimeline.Timeline.notes] holds, and their ends.
 
 ::: anytimeline.Measure
 
+::: anytimeline.MeasureRule
+
+::: anytimeline.MeasureEach
+
+::: anytimeline.MeasureGaps
+
+::: anytimeline.MeasureChain
+
+::: anytimeline.MeasureFrom
+
 ::: anytimeline.Edge
 
 ::: anytimeline.start

@@ -351,14 +351,21 @@ function openMeasure(view: TimelineView, m: NoteMeasure, p: { x: number; y: numb
     if (at !== "auto" || (m.level ?? null) !== null) items.push(["Automatic · 0", () => measure.toAuto(view, m), true]);
     items.push(["Edit text… · Enter", () => measure.editText(view, m)]);
   }
-  if (measure.editable(view, m)) items.push(["Remove · Delete", () => measure.remove(view, m.id)]);
+  if (m.rule && measure.removable(view, m)) items.push([`Remove the rule (${ruleCount(view, m.id)}) · Delete`, () => measure.remove(view, m.id)]);
+  else if (measure.editable(view, m)) items.push(["Remove · Delete", () => measure.remove(view, m.id)]);
   if (!view.callbacks.onMeasure) {
     items.push(["Copy as Python", () => void copy(view, measure.asPython(view, m))]);
   }
   items.push(["Copy the time", () => void copy(view, view.axis?.formatMeasureExact(m.span) ?? String(m.span))]);
   view.tooltipKey = "";
   view.tooltip.classList.remove("atl-show");
-  view.selectMeasure(m.id, { x: p.x, y: p.y + 10 }, items);
+  view.selectMeasure(m.id, { x: p.x, y: p.y + 10 }, items, m.part ?? null);
+}
+
+/** How many measures a rule (note `id`) makes, as "12 measures". */
+function ruleCount(view: TimelineView, id: number): string {
+  const n = (view.notes.measures ?? []).filter((m) => m.id === id).length;
+  return `${n} measure${n === 1 ? "" : "s"}`;
 }
 
 async function copy(view: TimelineView, text: string): Promise<void> {

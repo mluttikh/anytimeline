@@ -31,7 +31,21 @@ from anytimeline.layers import events as ev
 from anytimeline.layers import intervals as iv
 from anytimeline.layers import states as st
 from anytimeline.layers import values as vl
-from anytimeline.parts import Annotation, Connection, Edge, Measure, Note, Route, Stem, ValueAt
+from anytimeline.parts import (
+    Annotation,
+    Connection,
+    Edge,
+    Measure,
+    MeasureChain,
+    MeasureEach,
+    MeasureFrom,
+    MeasureGaps,
+    MeasureRule,
+    Note,
+    Route,
+    Stem,
+    ValueAt,
+)
 from anytimeline.renamed import gone, gone_method
 from anytimeline.settings import (
     at_least,
@@ -99,16 +113,17 @@ _NOT_COPIED = ("_widget", "_watchers", "_select_handlers", "_snapshot_paths")
 
 
 def _notes(value: Any, name: str) -> list[Note]:
-    kinds = (Annotation, Connection, Measure)
+    kinds = (Annotation, Connection, Measure, MeasureRule)
     if isinstance(value, kinds) or not isinstance(value, Sequence | tuple):
         raise TypeError(
-            f"{name} must be a list of Annotations, Connections and Measures, got {value!r}"
+            f"{name} must be a list of Annotations, Connections, Measures and rules of "
+            f"measures, got {value!r}"
         )
     for n in value:
         if not isinstance(n, kinds):
             raise TypeError(
-                f"{name} must be a list of Annotations, Connections and Measures, got {n!r} "
-                "among them"
+                f"{name} must be a list of Annotations, Connections, Measures and rules of "
+                f"measures, got {n!r} among them"
             )
     return list(value)
 
@@ -218,11 +233,13 @@ class Timeline:
     notes: list[Note] = setting([], _notes, sync=False)
     """The plot's notes, in drawing order: [`Annotation`][anytimeline.Annotation]s (a time
     range or a time, over a lane or all), [`Connection`][anytimeline.Connection]s (arrows
-    between marks) and [`Measure`][anytimeline.Measure]s (the time between two ends).
-    [`annotate`][anytimeline.Timeline.annotate], [`connect`][anytimeline.Timeline.connect]
-    and [`measure`][anytimeline.Timeline.measure] add one, as do the keys ``a``, ``c`` and
-    ``m`` and the Measure tool in the plot; ``plot.notes = []`` removes them all. They show
-    in the plot, in pages and in images."""
+    between marks), [`Measure`][anytimeline.Measure]s (the time between two ends) and rules
+    that make many measures ([`MeasureRule`][anytimeline.MeasureRule]s).
+    [`annotate`][anytimeline.Timeline.annotate], [`connect`][anytimeline.Timeline.connect],
+    [`measure`][anytimeline.Timeline.measure] and ``measure_each``, ``measure_gaps``,
+    ``measure_chain``, ``measure_from`` add one, as do the keys ``a``, ``c`` and ``m`` and
+    the Measure tool in the plot; ``plot.notes = []`` removes them all. They show in the
+    plot, in pages and in images."""
     timezone: str | None = setting(None, text_or_none, sync=False)
     """The time zone datetimes are shown in; None: the time column's own, else UTC."""
     lane_order: list[Any] | None = setting(None, values_or_none, sync=False)
@@ -1041,6 +1058,7 @@ class Timeline:
         label: MeasureLabel = "auto",
         ends: MeasureEnds = "arrows",
         extend: MeasureExtend = "mark",
+        limit: Any = None,
     ) -> Self:
         """Add a [`Measure`][anytimeline.Measure] to [`notes`][anytimeline.Timeline.notes]:
         the time from ``a`` to ``b``, drawn as a dimension line with the time at its middle.
@@ -1107,14 +1125,192 @@ class Timeline:
             extend: Its extension lines: ``"mark"`` (from each end's mark up or down to the
                 line), ``"lanes"`` (through every lane, like an oscilloscope's cursors) or
                 ``"none"``.
+            limit: A budget: longer than this, the measure is drawn in the "over" colour
+                (red), and ``measured`` has ``over`` true. A duration (``"200ms"``,
+                ``"1.5 h"``, a timedelta); on a plot of numbers, a number.
 
         Defaults for these (all but ``a`` and ``b``) can be set once with
-        [`set_defaults`][anytimeline.set_defaults]``(measure={...})``.
+        [`set_defaults`][anytimeline.set_defaults]``(measure={...})``. Many measures at
+        once: [`measure_each`][anytimeline.Timeline.measure_each],
+        [`measure_gaps`][anytimeline.Timeline.measure_gaps],
+        [`measure_chain`][anytimeline.Timeline.measure_chain] and
+        [`measure_from`][anytimeline.Timeline.measure_from].
         """
         return self._add_note(
             Measure(
                 a, b, text, lane, color, at=at, level=level, nudge=nudge,
-                label=label, ends=ends, extend=extend,
+                label=label, ends=ends, extend=extend, limit=limit,
+            )
+        )  # fmt: skip
+
+    @takes_defaults("measure", also=True)
+    def measure_each(
+        self,
+        layer: str | None = None,
+        *,
+        rows: Any = None,
+        text: str | None = None,
+        color: str | None = None,
+        at: MeasurePlace | ValueAt = "auto",
+        level: int | None = None,
+        nudge: float = 0.0,
+        label: MeasureLabel = "auto",
+        ends: MeasureEnds = "arrows",
+        extend: MeasureExtend = "mark",
+        limit: Any = None,
+    ) -> Self:
+        """Measure each bar of an intervals layer, from its start to its end: one note, a
+        [`MeasureEach`][anytimeline.MeasureEach], worked out again when the data changes
+        ([`update`][anytimeline.Timeline.update]). It is the key ``m`` on many bars at once.
+
+        ```python
+        plot.measure_each("jobs", limit="2h")              # every job; red when over 2 h
+        plot.measure_each("jobs", rows=plot.selection["jobs"], text="{a.job}: {time:min}")
+        ```
+
+        Args:
+            layer: The intervals layer; may be left out when the plot has one layer.
+            rows: Rows of its table to measure (``plot.selection["jobs"]``, a list of
+                ints, or a mask of booleans); ``None``: all. Milestones have no length and
+                are left out.
+
+        The others are those of [`measure`][anytimeline.Timeline.measure], for each of its
+        measures: ``{a.col}`` is a column of the bar's row. Its measures go in their bars'
+        lanes; [`measured`][anytimeline.Timeline.measured] has a row for each (``part``).
+        """
+        return self._add_note(
+            MeasureEach(
+                layer, rows, text=text, color=color, at=at, level=level, nudge=nudge,
+                label=label, ends=ends, extend=extend, limit=limit,
+            )
+        )  # fmt: skip
+
+    @takes_defaults("measure", also=True)
+    def measure_gaps(
+        self,
+        layer: str | None = None,
+        *,
+        by: str | None = None,
+        min: Any = None,
+        max: Any = None,
+        text: str | None = None,
+        color: str | None = None,
+        at: MeasurePlace | ValueAt = "auto",
+        level: int | None = None,
+        nudge: float = 0.0,
+        label: MeasureLabel = "auto",
+        ends: MeasureEnds = "arrows",
+        extend: MeasureExtend = "mark",
+        limit: Any = None,
+    ) -> Self:
+        """Measure each gap between the marks of a layer: from the end of the marks so far
+        to the start of the next one, in each lane or in each group of ``by``. Marks that
+        overlap have no gap between them. One note, a
+        [`MeasureGaps`][anytimeline.MeasureGaps], worked out again when the data changes.
+
+        ```python
+        plot.measure_gaps("jobs")                          # idle time on each machine
+        plot.measure_gaps("events", by="request", min="50ms")  # waits within a request
+        plot.measure_gaps(max="5min", limit="1min")        # short gaps; red over a minute
+        ```
+
+        Args:
+            layer: The events or intervals layer; may be left out when the plot has one.
+            by: A column of its table: the gaps within each of its values; ``None``: within
+                each lane.
+            min: Gaps shorter than this are left out: a duration (``"50ms"``, a
+                timedelta; on a plot of numbers, a number). ``None``: only gaps of no time.
+            max: Gaps longer than this are left out.
+
+        The others are those of [`measure`][anytimeline.Timeline.measure], for each gap:
+        ``{a.col}`` is a column of the row before it, ``{b.col}`` of the one after.
+        """
+        return self._add_note(
+            MeasureGaps(
+                layer, by, min, max, text=text, color=color, at=at, level=level,
+                nudge=nudge, label=label, ends=ends, extend=extend, limit=limit,
+            )
+        )  # fmt: skip
+
+    @takes_defaults("measure", also=True)
+    def measure_chain(
+        self,
+        through: Sequence[Any],
+        *,
+        text: str | None = None,
+        lane: Any = None,
+        color: str | None = None,
+        at: MeasurePlace | ValueAt = "auto",
+        level: int | None = None,
+        nudge: float = 0.0,
+        label: MeasureLabel = "auto",
+        ends: MeasureEnds = "arrows",
+        extend: MeasureExtend = "mark",
+        limit: Any = None,
+    ) -> Self:
+        """Measure from each end to the next, all on one level: continued dimensions, as a
+        drawing gives A to B to C. One note, a [`MeasureChain`][anytimeline.MeasureChain].
+
+        ```python
+        plot.measure_chain([atl.start(1), atl.end(1), atl.end(4), atl.end(9)])
+        plot.measure_chain([t0, t1, t2], text="{time:ms}", at="header")
+        ```
+
+        Args:
+            through: Its ends in turn, two or more: edges ([`atl.start`][anytimeline.start],
+                [`atl.end`][anytimeline.end]) or times.
+            lane: The lane its measures are drawn in; ``None``: the upper of all its ends'
+                lanes, so they share a row.
+
+        The others are those of [`measure`][anytimeline.Timeline.measure], for each of its
+        measures. ``limit`` is for each one, not for the whole chain.
+        """
+        return self._add_note(
+            MeasureChain(
+                tuple(through), text=text, lane=lane, color=color, at=at, level=level,
+                nudge=nudge, label=label, ends=ends, extend=extend, limit=limit,
+            )
+        )  # fmt: skip
+
+    @takes_defaults("measure", also=True)
+    def measure_from(
+        self,
+        origin: Any,
+        to: Sequence[Any],
+        *,
+        text: str | None = None,
+        lane: Any = None,
+        color: str | None = None,
+        at: MeasurePlace | ValueAt = "auto",
+        level: int | None = None,
+        nudge: float = 0.0,
+        label: MeasureLabel = "auto",
+        ends: MeasureEnds = "arrows",
+        extend: MeasureExtend = "mark",
+        limit: Any = None,
+    ) -> Self:
+        """Measure from one origin to each of several ends, stacked a level apart with the
+        shortest nearest the marks: baseline dimensions, as a drawing gives them. One note, a
+        [`MeasureFrom`][anytimeline.MeasureFrom].
+
+        ```python
+        plot.measure_from(atl.start(0), [atl.end(3), atl.end(7), atl.end(12)])
+        plot.measure_from(deploy_time, [atl.start(5), atl.start(9)], limit="10min")
+        ```
+
+        Args:
+            origin: Where each measure starts: an edge or a time.
+            to: Where each ends, one or more: edges or times.
+            lane: The lane its measures are drawn in; ``None``: the upper of all its ends'
+                lanes, so they share a row.
+
+        The others are those of [`measure`][anytimeline.Timeline.measure], for each of its
+        measures; ``level`` is the shortest one's, the others above it.
+        """
+        return self._add_note(
+            MeasureFrom(
+                origin, tuple(to), text=text, lane=lane, color=color, at=at, level=level,
+                nudge=nudge, label=label, ends=ends, extend=extend, limit=limit,
             )
         )  # fmt: skip
 
@@ -1687,12 +1883,53 @@ class Timeline:
             self._mark_at,
             self._layer_named,
             [n for n, r in self._layers.items() if isinstance(r, vl.ValuesRecord)],
-            self._row_text,
+            self._row_texts,
+            self._marks_in,
+            lambda layer, name: tables.column(self._tables[layer], name),
+            self._kind_of,
         )
 
-    def _row_text(self, layer: str, row: int, template: str) -> str:
-        """A template of a layer's columns filled in with a row of its table."""
-        return common.texts(self._tables[layer], template, np.asarray([row]))[0]
+    def _row_texts(self, layer: str, rows: np.ndarray, template: str) -> list[str]:
+        """A template of a layer's columns filled in with rows of its table."""
+        return common.texts(self._tables[layer], template, rows)
+
+    def _kind_of(self, layer: str) -> str:
+        rec = self._layers[layer]
+        if isinstance(rec, ev.EventsRecord):
+            return "events"
+        if isinstance(rec, iv.IntervalsRecord):
+            return "intervals"
+        if isinstance(rec, vl.ValuesRecord):
+            return "values"
+        return "states"
+
+    def _marks_in(self, layer: str, rows: np.ndarray | None) -> dict[str, np.ndarray]:
+        """The marks of an events or intervals layer (``rows``: those of these table rows;
+        None: all), by their index in the browser: ``index``, start and end (``x``, ``x2``,
+        ticks), their places in the order (``r``, ``r2``), ``lane`` and table ``row``."""
+        if self._scene is None:
+            self._update_spec()
+        rec = self._layers[layer]
+        if not isinstance(rec, ev.EventsRecord | iv.IntervalsRecord):
+            raise ValueError(f"layer {layer!r} has no marks with a start and an end")
+        lay = self._laid[layer]
+        row = rec.rows[rec.perm].astype(np.int64)
+        index = np.arange(len(row)) if rows is None else np.flatnonzero(np.isin(row, rows))
+        x, x2 = lay.lo[index].astype(np.float64), lay.hi[index].astype(np.float64)
+        ranks = self._ranks.get(layer)
+        if ranks is not None and len(ranks):
+            r, r2 = ranks[index, 0].astype(np.float64), ranks[index, -1].astype(np.float64)
+        else:
+            r, r2 = x, x2
+        return {
+            "index": index,
+            "x": x,
+            "x2": x2,
+            "r": r,
+            "r2": r2,
+            "lane": lay.lanes[index].astype(np.int64),
+            "row": row[index],
+        }
 
     def _mark_at(self, layer: str, row: int) -> dict[str, Any]:
         """Where the mark of table row ``row`` is: its index in the browser, its start and
@@ -1817,7 +2054,7 @@ class Timeline:
         index or None), ``level`` (a level or None), ``text`` (None or empty: the time),
         ``label``, ``ends``, ``extend``."""
         i = int(content["id"])
-        if not 0 <= i < len(self.notes) or not isinstance(self.notes[i], Measure):
+        if not 0 <= i < len(self.notes) or not isinstance(self.notes[i], Measure | MeasureRule):
             return
         change: dict[str, Any] = {}
         if "at" in content:
@@ -1843,6 +2080,9 @@ class Timeline:
         for key in ("label", "ends", "extend"):
             if key in content:
                 change[key] = str(content[key])
+        # a rule changes as a whole: what it has (each and gaps have no lane of their own)
+        names = {f.name for f in dataclasses.fields(self.notes[i])}
+        change = {k: v for k, v in change.items() if k in names}
         changed = dataclasses.replace(self.notes[i], **change)
         notelist.check(self._note_context(), changed)
         self.notes = [*self.notes[:i], changed, *self.notes[i + 1 :]]

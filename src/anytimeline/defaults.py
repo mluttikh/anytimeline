@@ -115,21 +115,30 @@ def defaults(**methods: Mapping[str, Any]) -> Generator[None]:
         _DEFAULTS.update(before)
 
 
-def takes_defaults(kind: str) -> Callable[[F], F]:
+def takes_defaults(kind: str, *, also: bool = False) -> Callable[[F], F]:
     """Decorate ``Timeline.__init__`` or a layer method: the arguments a call leaves out are
     filled from the defaults set for ``kind``. The signature stays the method's own, with
-    its own defaults, for editors and ``help()``."""
+    its own defaults, for editors and ``help()``. ``also``: a method that takes those of
+    them it has too (``measure_each`` takes ``measure``'s), not the one they are checked
+    against."""
 
     def wrap(fn: F) -> F:
         signature = inspect.signature(fn)
-        _FUNCTIONS[kind] = fn
+        if not also:
+            _FUNCTIONS[kind] = fn
 
         @functools.wraps(fn)
         def call(*args: Any, **kwargs: Any) -> Any:
             set_here = _DEFAULTS.get(kind)
             if set_here:
                 bound = signature.bind_partial(*args, **kwargs).arguments
-                kwargs.update({k: v for k, v in set_here.items() if k not in bound})
+                kwargs.update(
+                    {
+                        k: v
+                        for k, v in set_here.items()
+                        if k not in bound and k in signature.parameters
+                    }
+                )
             return fn(*args, **kwargs)
 
         return typing.cast(F, call)

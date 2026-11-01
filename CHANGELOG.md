@@ -4,6 +4,20 @@ All notable changes to anytimeline. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Measures by rule**: `plot.measure_each` (each bar's length; `rows=` for some),
+  `plot.measure_gaps` (the gaps between marks in each lane or `by=` group; `min=`, `max=`),
+  `plot.measure_chain` (A to B to C on one level) and `plot.measure_from` (from one origin to
+  each end, a level apart). Each is one note (`MeasureEach`, `MeasureGaps`, `MeasureChain`,
+  `MeasureFrom`) worked out again when the data changes; `plot.measured` has a row per
+  measure it makes, with `part`. In the plot, its measures are selected one at a time and
+  change, move and are removed as the rule. They take the `measure` defaults.
+- **`limit=`** on a measure and a rule: a measure longer than it is drawn red (the theme's
+  new `--atl-over` colour), and `plot.measured` has `over`.
+
 ## [0.6.0] - 2026-11-01
 
 More control over measures: put a measure's line where you want it (in its lane, in a band

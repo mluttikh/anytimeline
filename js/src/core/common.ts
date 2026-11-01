@@ -70,6 +70,8 @@ export interface Theme {
   band: string;
   select: string;
   accent: string;
+  /** A measure over its limit. */
+  over: string;
 }
 
 // ---------------------------------------------------------------------- helpers

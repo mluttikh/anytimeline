@@ -19,7 +19,8 @@ anytimeline.set_defaults(
 
 `plot` is for `Timeline(...)`; `events`, `intervals`, `states`, `values`, `spans` and
 `measure` for those methods (a measure's look and text, not its ends; measures made in the
-plot take them too). Every plot and layer made afterwards takes them, also those made by
+plot, and the rules `measure_each`, `measure_gaps`, `measure_chain` and `measure_from`, take
+those of them they have too). Every plot and layer made afterwards takes them, also those made by
 [`gantt`][anytimeline.gantt], [`story`][anytimeline.story] and
 [`compare_traces`][anytimeline.compare_traces].
 

@@ -202,6 +202,50 @@ function measureAnswers() {
       const { laid, head, foot } = placeMeasures(geoms, frame);
       out.push({ geoms, frame, head, foot, laid: laid.map((d) => [d.place.split(" ")[0], d.k, d.y, d.lx, d.ly]) });
     }
+  // rules: chains (one level) and baselines (a level apart) among single measures
+  for (const laneH of [30, 64, 120])
+    for (const at of ["auto", "top", "header"] as const) {
+      const geoms: MeasureGeom[] = [];
+      const add = (ua: number, ub: number, row: number | null, group: number | null, off: number, level: number | null = null) => {
+        const text = "x".repeat(1 + Math.floor(rand() * 8));
+        geoms.push({ xa: 120 + ua * 3, xb: 120 + ub * 3, ua, ub, rows: [row, row], ys: [null, null], row, at, valueY: null, level, nudge: 0, text, tw: text.length * 7 + 8, label: "auto", group, off });
+      };
+      for (let i = 0; i < 10; i++) {
+        const ua = Math.round(rand() * 150);
+        add(ua, ua + 5 + Math.round(rand() * 40), Math.floor(rand() * 3), null, 0, rand() < 0.1 ? 1 : null);
+      }
+      for (let g = 0; g < 3; g++) {
+        const row = Math.floor(rand() * 3);
+        let t = Math.round(rand() * 120);
+        for (let k = 0; k < 3; k++) {
+          const next = t + 5 + Math.round(rand() * 20);
+          add(t, next, row, 100 + g, 0); // a chain: touching ends, one level
+          t = next;
+        }
+        const origin = Math.round(rand() * 120);
+        const spans = [10, 30, 20].map((d) => d + Math.round(rand() * 10));
+        const rank = [...spans.keys()].sort((p, q) => spans[p] - spans[q]);
+        spans.forEach((d, k) => add(origin, origin + d, row, 200 + g, rank.indexOf(k))); // a baseline
+      }
+      const frame = { fs: 12, plot: { x: 120, y: 66, w: 600, h: 3 * laneH }, laneTop: 66, laneH, headTop: 44, footTop: 66 + 3 * laneH };
+      const { laid, head, foot } = placeMeasures(geoms, frame);
+      out.push({ geoms, frame, head, foot, laid: laid.map((d) => [d.place.split(" ")[0], d.k, d.y, d.lx, d.ly]) });
+    }
+  // many short measures (a rule's gaps), whose labels go beside their lines where there is room
+  for (const scale of [0.5, 2, 6]) {
+    const geoms: MeasureGeom[] = [];
+    for (let i = 0; i < 300; i++) {
+      const ua = Math.round(rand() * 300);
+      const ub = ua + 1 + Math.round(rand() * 6);
+      const row = Math.floor(rand() * 3);
+      const text = "x".repeat(1 + Math.floor(rand() * 6));
+      const label = pick(labels);
+      geoms.push({ xa: 120 + ua * scale, xb: 120 + ub * scale, ua, ub, rows: [row, row], ys: [null, null], row, at: rand() < 0.5 ? "top" : "middle", valueY: null, level: rand() < 0.05 ? 0 : null, nudge: 0, text, tw: text.length * 7 + 8, label });
+    }
+    const frame = { fs: 12, plot: { x: 120, y: 66, w: 600, h: 3 * 64 }, laneTop: 66, laneH: 64, headTop: 44, footTop: 66 + 3 * 64 };
+    const { laid, head, foot } = placeMeasures(geoms, frame);
+    out.push({ geoms, frame, head, foot, laid: laid.map((d) => [d.place.split(" ")[0], d.k, d.y, d.lx, d.ly]) });
+  }
   return out;
 }
 

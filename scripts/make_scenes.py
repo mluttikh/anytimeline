@@ -265,6 +265,25 @@ def main() -> None:
     looks.measure(start(0), end(3), "{a.task} to {b.task}: {time}", label="on", at="header")
     write("measure_looks", looks, _notes=looks._notes)
 
+    # measures by rule: the gaps on each machine, each job against a budget (red when over),
+    # a chain on one level and a baseline a level apart
+    t0 = np.datetime64("2026-10-12T08:00", "m")
+    work = {
+        "job": ["j1", "j2", "j3", "j4", "j5", "j6", "j7", "j8", "j9"],
+        "machine": ["press 1", "press 1", "press 1", "press 2", "press 2", "press 2",
+                    "press 3", "press 3", "press 3"],
+        "start": t0 + np.array([0, 70, 150, 10, 70, 150, 20, 90, 170]).astype("timedelta64[m]"),
+        "minutes": [50, 45, 40, 35, 55, 45, 50, 40, 30],
+    }  # fmt: skip
+    rules = Timeline(title="Measures by rule", height=420)
+    rules.intervals(work, end=None, duration="minutes", duration_unit="min", lane="machine",
+                    text="{job}")  # fmt: skip
+    rules.measure_gaps(at="middle", text="{time:min}")
+    rules.measure_each(rows=[3, 4, 5], at="bottom", limit="50min", text="{a.job} {time:min}")
+    rules.measure_chain([start(0), end(0), end(1), end(2)], at="header", ends="ticks")
+    rules.measure_from(start(6), [end(6), end(7), end(8)], at="footer", text="{time:min}")
+    write("measure_rules", rules, _notes=rules._notes)
+
     # a machine schedule: jobs that overlap on a machine are packed into sub-rows
     rng = np.random.default_rng(5)
     n = 160

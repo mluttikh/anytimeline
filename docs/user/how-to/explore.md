@@ -190,6 +190,66 @@ side of each end. In a page without Python (`save_html`), measures
 made in it are gone when the page is closed; each one's menu has **Copy as Python**, the line
 that makes it again.
 
+### Many measures at once
+
+A rule makes many measures with one call. It is one note in `plot.notes`, worked out again
+whenever the data changes (`plot.update(..., data=...)`), and `plot.measured` has a row for
+each measure it makes (`part`: its place among them).
+
+```python
+plot.measure_each("jobs", limit="2h")                  # every bar's length; red when over
+plot.measure_each("jobs", rows=plot.selection["jobs"])  # those selected
+plot.measure_gaps("jobs")                              # the idle time on each machine
+plot.measure_gaps("events", by="request", min="50ms")  # waits within each request
+plot.measure_chain([atl.start(1), atl.end(1), atl.end(4), atl.end(9)])  # A to B to C
+plot.measure_from(atl.start(0), [atl.end(3), atl.end(7), atl.end(12)])  # all from one origin
+```
+
+```python exec="on" source="above" session="explore-rules" html="true"
+import numpy as np
+import anytimeline as atl
+from anytimeline import Timeline
+
+t0 = np.datetime64("2026-10-12T08:00", "m")
+work = {
+    "job": ["j1", "j2", "j3", "j4", "j5", "j6", "j7", "j8", "j9"],
+    "machine": ["press 1"] * 3 + ["press 2"] * 3 + ["press 3"] * 3,
+    "start": t0 + np.array([0, 70, 150, 10, 70, 150, 20, 90, 170]).astype("timedelta64[m]"),
+    "minutes": [50, 45, 40, 35, 55, 45, 50, 40, 30],
+}
+plot = Timeline(title="Measures by rule", height=420)
+plot.intervals(work, end=None, duration="minutes", duration_unit="min", lane="machine",
+               text="{job}")
+plot.measure_gaps(at="middle", text="{time:min}")
+plot.measure_each(rows=[3, 4, 5], at="bottom", limit="50min", text="{a.job} {time:min}")
+plot.measure_chain([atl.start(0), atl.end(0), atl.end(1), atl.end(2)], at="header",
+                   ends="ticks")
+plot.measure_from(atl.start(6), [atl.end(6), atl.end(7), atl.end(8)], at="footer",
+                  text="{time:min}")
+print(plot._embed_html())
+```
+
+| Rule | Measures |
+| --- | --- |
+| [`measure_each`][anytimeline.Timeline.measure_each] | each bar of an intervals layer, start to end (`rows=`: only those rows); milestones are left out |
+| [`measure_gaps`][anytimeline.Timeline.measure_gaps] | each gap between marks, in each lane or each group of `by=`: from the end of the marks so far to the next start, so marks that overlap have none; `min=`, `max=` leave out shorter or longer gaps |
+| [`measure_chain`][anytimeline.Timeline.measure_chain] | from each end to the next, on one level (continued dimensions) |
+| [`measure_from`][anytimeline.Timeline.measure_from] | from one origin to each end, a level apart, the shortest nearest the marks (baseline dimensions) |
+
+Each takes `text=`, `at=`, `level=`, `label=`, `ends=`, `extend=`, `color=` and `limit=` as
+`measure` does, for each of its measures, and the defaults set for `measure`. A chain's and a
+baseline's measures share a row (`lane=`, else the upper of their ends' lanes) and move as
+one; a rule of marks' measures stay in their marks' lanes. A rule makes at most 20,000
+measures: narrow it with `rows=`, `min=` or `by=`.
+
+`limit=`, on any measure, is a budget: a measure longer than it is drawn red (the theme's
+"over" colour, `--atl-over`), and `plot.measured` says so in `over`. Durations are text
+(`"200ms"`, `"1.5 h"`) or a timedelta; on a plot of numbers, numbers.
+
+In the plot, a click selects one of a rule's measures; its menu changes the place, label or
+text of them all, **↑** and **↓** move them all a level, and **Remove the rule** (or
+**Delete**) removes the rule. Their ends follow the marks, so they are not dragged.
+
 ## Annotate
 
 Notes on a time range or a time, over one lane or all, and arrows from one mark's edge to

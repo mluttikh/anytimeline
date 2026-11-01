@@ -139,6 +139,8 @@ export class TimelineView implements DetailView {
   measureDraft: MeasureDraft | null = null;
   /** The measure whose label was clicked (its id), or null. */
   selectedMeasure: number | null = null;
+  /** Of a rule's measures (all with the rule's id), the one selected (its part). */
+  selectedPart: number | null = null;
   /** An end of the selected measure being dragged, and where it is now. */
   handleDrag: { id: number; end: "a" | "b"; to: NoteEnd } | null = null;
   /** The selected measure's line being dragged, and where it would go (null: where it is). */
@@ -473,8 +475,9 @@ export class TimelineView implements DetailView {
 
   /** Select a measure (null: none): its ends can then be dragged, Delete removes it, and
    * `menu` (a point, CSS px) opens its menu there. */
-  selectMeasure(id: number | null, menu: { x: number; y: number } | null = null, items: MenuItem[] = []): void {
+  selectMeasure(id: number | null, menu: { x: number; y: number } | null = null, items: MenuItem[] = [], part: number | null = this.selectedPart): void {
     this.selectedMeasure = id;
+    this.selectedPart = id === null ? null : part;
     this.measureMenu?.remove();
     this.measureMenu = null;
     if (id !== null && menu && items.length) {
@@ -1197,6 +1200,7 @@ export class TimelineView implements DetailView {
       band: v("--atl-band", "#f6f7f9"),
       select: v("--atl-select", "#e8590c"),
       accent: v("--atl-accent", "#1f77b4"),
+      over: v("--atl-over", "#e03131"),
     };
   }
 
