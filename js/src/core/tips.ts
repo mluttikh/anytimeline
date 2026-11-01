@@ -58,6 +58,8 @@ export class Tips {
 
   /** Show the tip of `target` after `delay` (none when a tip is up already), or hide it. */
   show(target: HTMLElement | null, delay = TIP_DELAY_MS): void {
+    // a button whose menu is open (Display, Export): its tip would cover the menu
+    if (target?.getAttribute("aria-expanded") === "true") target = null;
     clearTimeout(this.timer);
     this.current?.removeAttribute("aria-describedby");
     this.current = target;
