@@ -13,10 +13,14 @@ from typing import Any, Literal, get_args
 
 import numpy as np
 
-from anytimeline.types import MeasurePlace, StemShape
+from anytimeline import measuring
+from anytimeline.types import MeasureEnds, MeasureExtend, MeasureLabel, MeasurePlace, StemShape
 
 STEM_SHAPES = get_args(StemShape)
 MEASURE_PLACES = get_args(MeasurePlace)
+MEASURE_LABELS = get_args(MeasureLabel)
+MEASURE_ENDS = get_args(MeasureEnds)
+MEASURE_EXTENDS = get_args(MeasureExtend)
 
 
 @dataclass(frozen=True)
@@ -260,9 +264,12 @@ class Measure:
             duration or a number).
         b: Where it ends: an edge or a time.
         text: Written at its middle; ``None``: the time between (and, between two samples
-            of a values layer, the change in value). ``{time}`` in it is the time between,
-            ``{events}`` the number of events between them in the order, ``{change}`` the
-            change in value.
+            of a values layer, the change in value). Fields in it: ``{time}`` the time
+            between, ``{events}`` the number of events between them in the order,
+            ``{change}`` the change in value, ``{rate}`` that change per unit of time,
+            ``{a}`` and ``{b}`` the ends' times, ``{a.col}`` and ``{b.col}`` a column of an
+            end's row. A format after a colon: ``{time:ms}`` (a unit), ``{time:.2}`` (the
+            digits), ``{change:+.2f}`` (as Python's), ``{a.start:%H:%M}``.
         lane: The lane it is drawn in (a lane's name); ``None``: the upper of its ends'
             lanes, or (two times) the header.
         color: Its colour; ``None``: the accent colour.
@@ -273,6 +280,14 @@ class Measure:
         level: Its level, 0 nearest the edge its place stacks from; ``None``: the first
             free one. The others are laid out around a measure with a level.
         nudge: Pixels to move its line down (up when negative) after it is laid out.
+        label: Where its text goes: ``"auto"`` (on the line where it fits, else beside it
+            where there is room, else when hovered), ``"on"``, ``"above"``, ``"below"``,
+            ``"start"`` (before its earlier end), ``"end"`` (after its later end) or
+            ``"hover"`` (only when hovered or selected).
+        ends: What its line ends in: ``"arrows"``, ``"ticks"`` (oblique strokes, as in a
+            drawing), ``"dots"`` or ``"none"``.
+        extend: Its extension lines: ``"mark"`` (from each end's mark to the line),
+            ``"lanes"`` (through every lane, as cursors) or ``"none"``.
     """
 
     a: Any
@@ -284,6 +299,9 @@ class Measure:
     at: MeasurePlace | ValueAt = "auto"
     level: int | None = None
     nudge: float = 0.0
+    label: MeasureLabel = "auto"
+    ends: MeasureEnds = "arrows"
+    extend: MeasureExtend = "mark"
 
     def __post_init__(self) -> None:
         for end in (self.a, self.b):
@@ -309,6 +327,17 @@ class Measure:
         ):
             raise TypeError(f"Measure's nudge is a number of pixels, got {nudge!r}")
         object.__setattr__(self, "nudge", float(nudge))
+        for key, words in (
+            ("label", MEASURE_LABELS),
+            ("ends", MEASURE_ENDS),
+            ("extend", MEASURE_EXTENDS),
+        ):
+            if getattr(self, key) not in words:
+                raise ValueError(
+                    f"Measure's {key} must be one of {words}, got {getattr(self, key)!r}"
+                )
+        if self.text is not None:
+            measuring.check(self.text)
 
 
 Note = Annotation | Connection | Measure

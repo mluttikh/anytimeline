@@ -27,6 +27,7 @@ from xml.sax.saxutils import escape
 import numpy as np
 
 from anytimeline import axis as ax
+from anytimeline import measuring
 from anytimeline import scene as sc
 from anytimeline import stems as st
 from anytimeline.codec import DTYPES, decode_strings
@@ -152,12 +153,6 @@ def _rgb(hex_color: str) -> tuple[int, int, int]:
         h = "".join(c + c for c in h[:3])
     v = int(h[:6], 16)
     return (v >> 16) & 255, (v >> 8) & 255, v & 255
-
-
-def change_text(change: float) -> str:
-    """A change in value, signed, to three digits (``changeText``)."""
-    sign = "+" if change > 0 else "\u2212" if change < 0 else ""
-    return sign + ax.fmt_number(abs(change), 3)
 
 
 def _hex(r: int, g: int, b: int) -> str:
@@ -636,8 +631,7 @@ class _Picture:
         """Stems layers whose text is in boxes on stems (else beside the marks)."""
         # measures' bands take room when used; what they hold depends on the lanes' height
         for _ in range(8):
-            head, foot = self._measure_bands()
-            sizes = (band_height(head, fs), band_height(foot, fs))
+            sizes = self._measure_bands()
             if sizes == (self.f.head_h, self.f.foot_h):
                 break
             self.f = frame(*sizes)
@@ -2201,18 +2195,17 @@ class _Picture:
             self._note_label(n["text"], (xa + xb) / 2 - w / 2, (ya + yb) / 2 - f.fs / 2 - 2, color)
 
     def _measure_text(self, n: dict[str, Any]) -> str:
-        """A measure's label (``measureText``): its text, ``{time}``, ``{events}`` and
-        ``{change}`` filled in; without text the time, on the Order scale the events between,
-        and between samples the change in value."""
-        time = self.time_axis.format_measure(abs(n["span"]))
-        events = n.get("events")
-        count = "" if events is None else f"{ax.fmt_number(events)} event{'s' * (events != 1)}"
-        change = "" if n.get("change") is None else change_text(n["change"])
-        text = n.get("text")
-        if text is None:
-            parts = [time, count if self.f.order else "", f"Δ {change}" if change else ""]
-            return " · ".join(p for p in parts if p)
-        return text.replace("{time}", time).replace("{events}", count).replace("{change}", change)
+        """A measure's label (``measureText``): its text with its fields filled in; without
+        text the time, on the Order scale the events between, and between samples the
+        change in value."""
+        values = {
+            "span": n["span"],
+            "a": n["a"]["x"],
+            "b": n["b"]["x"],
+            "events": n.get("events"),
+            "change": n.get("change"),
+        }
+        return measuring.fill(self.time_axis, n.get("text"), values, self.f.order)
 
     def _measures(self, measures: list[dict[str, Any]]) -> None:
         """Measures as dimension lines (``drawMeasures``): from each end's mark an extension
@@ -2241,7 +2234,8 @@ class _Picture:
         )  # fmt: skip
 
     def _measure_bands(self) -> tuple[int, int]:
-        """The levels of measures in the header and footer bands, with the frame as it is."""
+        """The heights of the header and footer bands of measures (px), with the frame as it
+        is."""
         measures = (self.plot._notes or {}).get("measures") or []
         if not measures:
             return 0, 0
@@ -2284,6 +2278,9 @@ class _Picture:
                     "nudge": n.get("nudge") or 0.0,
                     "text": text,
                     "tw": text_width(text, size) + 8,
+                    "label": n.get("label") or "auto",
+                    "ends": n.get("ends") or "arrows",
+                    "extend": n.get("extend") or "mark",
                     "color": n.get("color") or self.theme.accent,
                 }
             )
@@ -2321,7 +2318,8 @@ class _Picture:
         if hi < px - 1 or lo > px + pw + 1 or y < plot[1] or y > plot[1] + plot[3]:
             return
         ends = ((d["xa"], d["rows"][0], d["ys"][0]), (d["xb"], d["rows"][1], d["ys"][1]))
-        for x, row, ys in ends:
+        extend = d.get("extend") or "mark"
+        for x, row, ys in ends if extend == "mark" else ():
             if ys is not None:  # a sample: from its dot
                 y0, y1 = ys, y + (1 if y > ys else -1) * 4
             elif row is None:  # a time: a short tick through the line
@@ -2335,8 +2333,16 @@ class _Picture:
             seg = _clip_segment(x, y0, x, y1, plot)
             if seg:
                 self.svg.line(*seg, color, 1, stroke_dasharray="3 2")
+        if extend == "lanes":  # through every lane and band, as cursors
+            for x in (d["xa"], d["xb"]):
+                seg = _clip_segment(x, plot[1], x, plot[1] + plot[3], plot)
+                if seg:
+                    self.svg.line(*seg, color, 1, stroke_dasharray="3 2")
+        style = d.get("ends") or "arrows"
         inside = hi - lo >= 2 * ARROW_LEN + 2
-        reach = 0 if inside else 2 * ARROW_LEN
+        reach = (
+            (0 if inside else 2 * ARROW_LEN) if style == "arrows" else 0 if style == "none" else 4
+        )
         # a band of the background under the line and its heads: it shows over marks
         halo = _clip_segment(lo - reach, y, hi + reach, y, plot)
         if halo:
@@ -2345,7 +2351,13 @@ class _Picture:
         if seg:
             self.svg.line(*seg, color, 1.5)
         for x, way in ((lo, -1), (hi, 1)):
-            if not px <= x <= px + pw:
+            if not px <= x <= px + pw or style == "none":
+                continue
+            if style == "ticks":
+                self.svg.line(x - TICK, y + TICK, x + TICK, y - TICK, color, 1.5)
+                continue
+            if style == "dots":
+                self.svg.path(symbol_path(0, x, y, END_DOT), fill=color)
                 continue
             tip = way if inside else -way  # too short: the heads outside, pointing in
             base = x - tip * ARROW_LEN
@@ -2364,7 +2376,7 @@ class _Picture:
         if dots:
             self.svg.path("".join(dots), fill=color)
         if d["text"] and d["lx"] is not None:  # a label without room shows on hover only
-            self._note_label(d["text"], d["lx"], y - (f.fs + 4) / 2, color, f.area)
+            self._note_label(d["text"], d["lx"], d["ly"], color, f.area)
 
     # -- gaps
 
@@ -2606,6 +2618,8 @@ def _fit_range(a: float, b: float, margin: float, time: Mapping[str, Any]) -> tu
 ARROW_LEN = 7
 """The length of a measure's arrowheads, in pixels."""
 SAMPLE_DOT = 2.5
+TICK = 4  # half the length of a measure's oblique tick
+END_DOT = 3  # the radius of a measure's end dot
 """The radius of the dot on a sample a measure ends at, in pixels."""
 
 
@@ -2660,8 +2674,9 @@ def place_measures(
     ``_stack`` on the scale shown (zooming never changes them); ``"auto"`` ones the lane
     cannot hold continue in the header, and a measure in no lane shown goes there. Then
     labels: on the line where they fit, else beside it where that is free on its level, else
-    none (``lx`` None). Each measure gets ``place``, ``k``, ``y`` and ``lx``; with the levels
-    the header and footer use."""
+    none (``lx`` None). Each measure gets ``place``, ``k``, ``y``, ``lx`` and ``ly``; with the
+    heights of the header and footer bands (px), which make room for a label above a band's
+    first level or below its last."""
     h, step = fs + 4, fs + 8
     cap = lane_levels(lane_h, fs)
     kind = []
@@ -2726,14 +2741,27 @@ def place_measures(
         for i in members:
             level[i], place[i] = got[i], (band,)
             bands[band] = max(bands[band], got[i] + 1)
+    # a band makes room for a label above its first level and below its last
+    room = {"header": [0, 0], "footer": [0, 0]}
+    for i, p in place.items():
+        if p[0] not in room or not geoms[i]["text"]:
+            continue
+        if geoms[i].get("label") == "above" and level[i] == 0:
+            room[p[0]][0] = math.ceil(h / 2)
+        if geoms[i].get("label") == "below" and level[i] == bands[p[0]] - 1:
+            room[p[0]][1] = math.ceil(h / 2)
+
+    def band_px(b: str) -> int:
+        return band_height(bands[b], int(fs)) + sum(room[b]) if bands[b] else 0
+
     laid: list[dict[str, Any]] = []
     for i, g in enumerate(geoms):
         k, at = level[i], place[i][0]
         top = 0 if g["row"] is None else lane_top + g["row"] * lane_h
         if at == "header":
-            y = head_top + 3 + h / 2 + k * step
+            y = head_top + room["header"][0] + 3 + h / 2 + k * step
         elif at == "footer":
-            y = foot_top + 3 + h / 2 + k * step
+            y = foot_top + room["footer"][0] + 3 + h / 2 + k * step
         elif at == "bottom":
             y = top + lane_h - 3 - h / 2 - k * step
         elif at == "middle":
@@ -2744,7 +2772,8 @@ def place_measures(
             y = (g["value_y"] if g["value_y"] is not None else top) + k * step
         else:
             y = top + 3 + h / 2 + k * step
-        laid.append({**g, "place": place[i], "k": k, "y": y + g["nudge"], "lx": None})
+        y += g["nudge"]
+        laid.append({**g, "place": place[i], "k": k, "y": y, "lx": None, "ly": y - h / 2})
     # labels, level by level: the lines first, then each label where it has room
     spans: dict[tuple[Any, ...], list[tuple[float, float, int]]] = {}
     for i, d in enumerate(laid):
@@ -2753,26 +2782,52 @@ def place_measures(
         )
     px, _, pw, _ = plot
     right = px + pw
+    area_top, area_bottom = head_top, foot_top + band_px("footer")
 
     def free_at(s: list[tuple[float, float, int]], a: float, b: float, own: int) -> bool:
         return not any(j != own and lft < b + 4 and a - 4 < rgt for lft, rgt, j in s)
 
-    for i in sorted(range(len(laid)), key=lambda i: (min(laid[i]["xa"], laid[i]["xb"]), i)):
+    def centred(lft: float, rgt: float, tw: float) -> float:
+        return max(px + 1, min((lft + rgt) / 2 - tw / 2, right - tw - 1))
+
+    by_left = sorted(range(len(laid)), key=lambda i: (min(laid[i]["xa"], laid[i]["xb"]), i))
+    # labels put somewhere first (they take their room), then the automatic ones
+    for i in by_left:
         d = laid[i]
-        if not d["text"]:
+        mode = d.get("label") or "auto"
+        if not d["text"] or mode in ("auto", "hover"):
+            continue
+        lft, rgt = min(d["xa"], d["xb"]), max(d["xa"], d["xb"])
+        tw = d["tw"]
+        if mode in ("on", "above", "below"):
+            d["lx"] = centred(lft, rgt, tw)
+            # above or below its line; in a lane at the edge of the plot, where that would
+            # be cut off, on the other side
+            up, down = d["y"] - h - 1, d["y"] + 2
+            if mode == "above":
+                d["ly"] = down if up < area_top and down + h <= area_bottom else up
+            elif mode == "below":
+                d["ly"] = up if down + h > area_bottom and up >= area_top else down
+        else:
+            d["lx"] = lft - 6 - tw if mode == "start" else rgt + 6
+        if mode != "above" and mode != "below" and (mode != "on" or tw > rgt - lft):
+            spans[(*d["place"], d["k"])].append((d["lx"], d["lx"] + tw, -1))
+    for i in by_left:
+        d = laid[i]
+        if not d["text"] or (d.get("label") or "auto") != "auto":
             continue
         lft, rgt = min(d["xa"], d["xb"]), max(d["xa"], d["xb"])
         tw = d["tw"]
         s = spans[(*d["place"], d["k"])]
         if tw + 2 * ARROW_LEN <= rgt - lft:
-            d["lx"] = max(px + 1, min((lft + rgt) / 2 - tw / 2, right - tw - 1))
+            d["lx"] = centred(lft, rgt, tw)
         elif rgt + 6 + tw <= right and free_at(s, rgt + 6, rgt + 6 + tw, i):
             d["lx"] = rgt + 6
         elif lft - 6 - tw >= px and free_at(s, lft - 6 - tw, lft - 6, i):
             d["lx"] = lft - 6 - tw
         if d["lx"] is not None and tw + 2 * ARROW_LEN > rgt - lft:
             s.append((d["lx"], d["lx"] + tw, -1))
-    return laid, bands["header"], bands["footer"]
+    return laid, band_px("header"), band_px("footer")
 
 
 def _clip_segment(

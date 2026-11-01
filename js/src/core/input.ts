@@ -5,7 +5,7 @@ import * as folding from "./folding";
 import * as drawing from "./drawing";
 import * as picking from "./picking";
 import * as measure from "./measure";
-import { askText, markOf, type MeasurePlace, type NoteMeasure } from "./notes";
+import { askText, markOf, type MeasureLabel, type MeasurePlace, type NoteMeasure } from "./notes";
 import type { MenuItem, TimelineView } from "./view";
 
 export function cancelDrag(view: TimelineView): void {
@@ -341,6 +341,12 @@ function openMeasure(view: TimelineView, m: NoteMeasure, p: { x: number; y: numb
     items.push({
       label: "Place",
       choices: places.map(([text, place]) => [text, () => measure.changeMeasure(view, m, { at: place, level: null }), at === place]),
+    });
+    const label = m.label ?? "auto";
+    const labels: [string, MeasureLabel][] = [["Auto", "auto"], ["On", "on"], ["Above", "above"], ["Below", "below"], ["Start", "start"], ["End", "end"], ["Hover", "hover"]];
+    items.push({
+      label: "Label",
+      choices: labels.map(([text, where]) => [text, () => measure.changeMeasure(view, m, { label: where }), label === where]),
     });
     if (at !== "auto" || (m.level ?? null) !== null) items.push(["Automatic · 0", () => measure.toAuto(view, m), true]);
     items.push(["Edit text… · Enter", () => measure.editText(view, m)]);

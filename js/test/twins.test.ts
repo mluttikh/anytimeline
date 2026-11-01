@@ -14,7 +14,8 @@ import { expect, it } from "vitest";
 import { AUTO_LANE, GAP_PX, LABEL_BUDGET, MIN_LANE, PAD_BOTTOM, PAD_RIGHT, ROUTE_BUDGET } from "../src/core/common";
 import { dodge, MAX_ROWS, MIN_STEP, rowsFor, spacing } from "../src/core/dodge";
 import { MAX_ITEMS } from "../src/core/legend";
-import { type MeasureGeom, placeMeasures } from "../src/core/notes";
+import { fillMeasure, formatNumber } from "../src/core/fields";
+import { type MeasureGeom, type MeasureLabel, placeMeasures } from "../src/core/notes";
 import { BIN_FILL, BIN_PX, barsLevel, eventsLevel, MERGE_PX, valuesLevel } from "../src/core/levels";
 import { SYMBOLS } from "../src/core/scene";
 import { clusterHidden, levelOffset, levelsFor, placeStems, type StemItem, wrapText } from "../src/core/stems";
@@ -169,6 +170,7 @@ function measureAnswers() {
   const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
   const pick = <T,>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)];
   const places = ["auto", "auto", "auto", "top", "middle", "bottom", "between", "header", "footer", "value"] as const;
+  const labels: MeasureLabel[] = ["auto", "auto", "auto", "on", "above", "below", "start", "end", "hover"];
   const out = [];
   for (const laneH of [30, 64, 120])
     for (const scale of [0.4, 3, 25]) {
@@ -192,14 +194,44 @@ function measureAnswers() {
           nudge: rand() < 0.1 ? -3 : 0,
           text: rand() < 0.1 ? "" : "x".repeat(1 + Math.floor(rand() * 12)),
           tw: 0,
+          label: pick(labels),
         });
         geoms[i].tw = geoms[i].text.length * 7 + 8;
       }
       const frame = { fs: 12, plot: { x: 120, y: 66, w: 600, h: 4 * laneH }, laneTop: 66, laneH, headTop: 44, footTop: 66 + 4 * laneH };
       const { laid, head, foot } = placeMeasures(geoms, frame);
-      out.push({ geoms, frame, head, foot, laid: laid.map((d) => [d.place.split(" ")[0], d.k, d.y, d.lx]) });
+      out.push({ geoms, frame, head, foot, laid: laid.map((d) => [d.place.split(" ")[0], d.k, d.y, d.lx, d.ly]) });
     }
   return out;
+}
+
+/** A measure's text with its fields and formats, on each kind of time. */
+function fieldAnswers() {
+  const specs: TimeSpec[] = [
+    { kind: "datetime", unit: "ns", origin_ns: "1704067200000000000", origin: 0, timezone: "UTC", extent: [0, 1] },
+    { kind: "duration", unit: "ms", origin_ns: "0", origin: 0, timezone: "UTC", extent: [0, 1] },
+    { kind: "number", unit: "", origin_ns: "0", origin: 10, timezone: "UTC", extent: [0, 1] },
+    { kind: "order", unit: "", origin_ns: "0", origin: 0, timezone: "UTC", extent: [0, 1] },
+  ];
+  const texts = [
+    null, "{time}", "{time:ms}", "{time:s.2}", "{time:.5}", "{time:us.1}", "{time:min}", "{time:d.4}",
+    "{events} between", "{events:,}", "{change}", "{change:+.2f}", "{change:.1%}", "{change:,.3f}", "{change:.2e}", "{change: .3g}",
+    "{rate}", "{rate:+.3f}", "{a} → {b}", "wait {time:ms} ({events:d})", "{nothing} {time:xx}",
+  ];
+  const values = [
+    { span: 1530, a: 20, b: 1550, events: 3, change: -0.125 },
+    { span: 86_400_000_123, a: 0, b: 86_400_000_123, events: 1234567, change: 1234.5678 },
+    { span: -2.5, a: 7.5, b: 5, events: 0, change: null },
+    { span: 0, a: 1, b: 1, events: null, change: 0 },
+  ];
+  const out = [];
+  for (const spec of specs) {
+    const axis = new TimeAxis(spec);
+    for (const v of values) for (const text of texts) for (const order of [false, true]) out.push([spec, text, v, order, fillMeasure(axis, text, v, order)]);
+  }
+  const numbers = [];
+  for (const v of [0, -0.004, 0.125, -1.5, 12345.678, 1e-7, 6.02e23, Number.NaN]) for (const spec of ["", "+", ",", ".2f", "+.0f", ",.2f", ".1%", ".3e", ".4g", " .1f", "-,", "q"]) numbers.push([v, spec, formatNumber(v, spec)]);
+  return { fields: out, number_formats: numbers };
 }
 
 function answers() {
@@ -213,6 +245,7 @@ function answers() {
     dodge: dodgeAnswers(),
     stems: stemAnswers(),
     measures: measureAnswers(),
+    ...fieldAnswers(),
     ...wrapAnswers(),
   };
 }

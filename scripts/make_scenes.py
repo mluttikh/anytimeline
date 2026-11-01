@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-from anytimeline import Route, Timeline, gantt, save_html, story
+from anytimeline import Route, Timeline, end, gantt, save_html, start, story
 from anytimeline.synthetic import (
     incident,
     instants,
@@ -246,6 +246,24 @@ def main() -> None:
         palette={"plan": "#4c78a8", "build": "#f58518", "ship": "#54a24b"},
     )
     write("gantt_plan", chart)
+
+    # measures: each label position, kind of end and extension line, and text fields
+    bars = {
+        "task": ["fetch", "parse", "store", "index"],
+        "start": np.datetime64("2026-10-12T09:00:00", "ms")
+        + np.array([0, 1200, 2600, 3100]).astype("timedelta64[ms]"),
+        "ms": [900, 1100, 1500, 1300],
+    }
+    bars["end"] = bars["start"] + np.array(bars["ms"]).astype("timedelta64[ms]")
+    looks = Timeline(title="Measures", height=420, lane_order=bars["task"])
+    looks.intervals(bars, lane="task", text="{task}")
+    looks.measure(end(0), start(1), "{b.task} waits {time:ms}", label="above", ends="ticks")
+    looks.measure(start(1), end(1), label="below", ends="dots", at="bottom")
+    looks.measure(end(1), start(2), "gap", label="start", ends="none", at="middle")
+    looks.measure(start(2), end(2), "{time:s.2}", label="end", extend="lanes", at="header")
+    looks.measure(start(3), end(3), "hidden until hover", label="hover", at="footer")
+    looks.measure(start(0), end(3), "{a.task} to {b.task}: {time}", label="on", at="header")
+    write("measure_looks", looks, _notes=looks._notes)
 
     # a machine schedule: jobs that overlap on a machine are packed into sub-rows
     rng = np.random.default_rng(5)

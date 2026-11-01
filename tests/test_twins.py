@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from anytimeline import axis, image, stems
+from anytimeline import axis, image, measuring, stems
 from anytimeline.styling import SYMBOLS
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -155,10 +155,22 @@ def test_measures(case: dict) -> None:
         geoms, f["fs"], plot, f["laneTop"], f["laneH"], f["headTop"], f["footTop"]
     )
     assert (head, foot) == (case["head"], case["foot"])
-    got = [[d["place"][0], d["k"], d["y"], d["lx"]] for d in laid]
+    got = [[d["place"][0], d["k"], d["y"], d["lx"], d["ly"]] for d in laid]
     for g, w in zip(got, case["laid"], strict=True):
         assert g[:2] == w[:2]
         assert g[2] == pytest.approx(w[2])
         assert (g[3] is None) == (w[3] is None)
         if g[3] is not None:
             assert g[3] == pytest.approx(w[3])
+        assert g[4] == pytest.approx(w[4])
+
+
+def test_measure_text() -> None:
+    for spec, text, values, order, want in TWINS["fields"]:
+        assert measuring.fill(axis.TimeAxis(spec), text, values, order) == want, (spec, text)
+
+
+def test_number_formats() -> None:
+    for value, spec, want in TWINS["number_formats"]:
+        v = math.nan if value is None else value
+        assert measuring.format_number(v, spec) == want, (v, spec)

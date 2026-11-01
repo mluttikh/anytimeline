@@ -389,6 +389,27 @@ class TimeAxis:
             return fmt_number(dx, 3)
         return format_duration(dx * self.per_ns, 0, sig=3)
 
+    def format_rate(self, change: float, dx: float) -> str | None:
+        """A change over a span as a rate ("+8.2 per h") (``formatRate``; None: none)."""
+        rate = self.rate(change, dx)
+        if rate is None:
+            return None
+        v, per = rate
+        sign = "+" if v > 0 else "\u2212" if v < 0 else ""
+        return f"{sign}{fmt_number(abs(v), 4)} per {per}"
+
+    def rate(self, change: float, dx: float) -> tuple[float, str] | None:
+        """A change over a span of ticks per the largest unit of time the span reaches, and
+        that unit's name; per one on a plot of numbers (``rate``; None: no span, or no
+        times)."""
+        if not dx or self.kind == "order":
+            return None
+        if self.kind == "number":
+            return change / dx, "1"
+        ns = dx * self.per_ns
+        unit, name = next((u for u in DURATION_UNITS if abs(ns) >= u[0]), (1, "ns"))
+        return change / (ns / unit), name
+
 
 def _spacing_for(step_ns: int) -> int:
     return MIN_SPACING["long"] if step_ns < 10**6 else MIN_SPACING["medium"]

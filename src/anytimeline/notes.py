@@ -18,6 +18,7 @@ from typing import Any
 
 import numpy as np
 
+from anytimeline import measuring
 from anytimeline.data import NotFoundError
 from anytimeline.layers.values import places
 from anytimeline.parts import Annotation, Connection, Edge, Measure, Note, ValueAt
@@ -34,6 +35,8 @@ class Context:
     mark_at: Callable[[str, int], dict[str, Any]]  # ``Timeline._mark_at``
     layer_named: Callable[[str | None], str]  # ``Timeline._layer_named``
     values_layers: Sequence[str] = ()  # the names of the values layers
+    # a template of a layer's columns ("{col:%H:%M}") filled in with a row of its table
+    row_text: Callable[[str, int, str], str] | None = None
 
 
 def place(ctx: Context, x: float) -> float | None:
@@ -140,21 +143,43 @@ def measure(ctx: Context, m: Measure) -> dict[str, Any]:
     """A measure: its ends, the time between (``span``, ticks, b − a), the instants between
     (``events``; None without an order) and, between samples, the change in value; and where
     its line goes (``at``: a place, or ``{"value", "layer"}``), its ``level`` (None: the
-    first free) and ``nudge`` (pixels)."""
+    first free) and ``nudge`` (pixels), its ``label``, ``ends`` and ``extend``. The text has
+    ``{a.col}`` and ``{b.col}`` filled in (``raw``: as written, when that differs)."""
     a, b = end_of(ctx, m.a), end_of(ctx, m.b)
-    return {
+    text = None if m.text is None else columns_of(ctx, m.text, a, b)
+    out = {
         "a": _browser_end(a),
         "b": _browser_end(b),
         "span": b["x"] - a["x"],
         "events": between(a["r"], b["r"]),
         "change": change(a, b),
         "lane": lane_index(ctx, m.lane, "measure in"),
-        "text": m.text,
+        "text": text,
         "color": m.color,
         "at": at_of(ctx, m, a, b),
         "level": m.level,
         "nudge": m.nudge,
+        "label": m.label,
+        "ends": m.ends,
+        "extend": m.extend,
     }
+    if text != m.text:
+        out["raw"] = m.text
+    return out
+
+
+def columns_of(ctx: Context, text: str, a: Mapping[str, Any], b: Mapping[str, Any]) -> str:
+    """``{a.col}`` and ``{b.col}`` in a measure's text: a column of the row of an end that
+    is a mark, with Python's format (``{a.start:%H:%M}``); "–" for an end that is a time."""
+    ends = {"a": a, "b": b}
+
+    def row_text(end: str, template: str) -> str:
+        e = ends[end]
+        if "row" not in e or ctx.row_text is None:
+            return "–"
+        return ctx.row_text(e["layer"], e["row"], template)
+
+    return measuring.fill_columns(text, row_text)
 
 
 def at_of(ctx: Context, m: Measure, a: Mapping[str, Any], b: Mapping[str, Any]) -> Any:

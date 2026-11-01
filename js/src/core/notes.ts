@@ -6,7 +6,7 @@
 // Python, which keeps them; a page keeps its own measures until it is closed.
 
 import { globalIndex, type Hit } from "./common";
-import { fmtNumber } from "./time";
+import { changeText, fillMeasure } from "./fields";
 import type { TimelineView } from "./view";
 
 export type Side = "start" | "end";
@@ -49,6 +49,9 @@ export interface NoteArrow {
 
 /** Where a measure's line goes (Python's MeasurePlace). */
 export type MeasurePlace = "auto" | "top" | "middle" | "bottom" | "between" | "header" | "footer";
+export type MeasureLabel = "auto" | "on" | "above" | "below" | "start" | "end" | "hover";
+export type MeasureEnds = "arrows" | "ticks" | "dots" | "none";
+export type MeasureExtend = "mark" | "lanes" | "none";
 
 export interface NoteMeasure {
   a: NoteEnd;
@@ -72,6 +75,13 @@ export interface NoteMeasure {
   level?: number | null;
   /** Pixels its line moves down after the layout. */
   nudge?: number;
+  /** Where its label goes, what its line ends in, its extension lines (absent: "auto",
+   * "arrows", "mark"). */
+  label?: MeasureLabel;
+  ends?: MeasureEnds;
+  extend?: MeasureExtend;
+  /** Its text as written, when Python filled in `{a.col}` or `{b.col}` (to edit it). */
+  raw?: string | null;
 }
 
 /** What a change of a measure in the plot sets (absent: unchanged). */
@@ -82,6 +92,7 @@ export interface MeasureChange {
   level?: number | null;
   /** null: the time between. */
   text?: string | null;
+  label?: MeasureLabel;
 }
 
 export interface Notes {
@@ -110,6 +121,9 @@ type Rect = { x: number; y: number; w: number; h: number };
 
 /** The length of a measure's arrowheads (px). */
 export const ARROW_LEN = 7;
+/** Half the length of a measure's oblique tick, and the radius of its end dot (px). */
+const TICK = 4;
+const END_DOT = 3;
 /** The radius of the dot on a sample a measure ends at (px). */
 const SAMPLE_DOT = 2.5;
 
@@ -169,22 +183,14 @@ export function between(ra: number | null, rb: number | null): number | null {
   return Math.max(0, Math.ceil(Math.max(ra, rb)) - Math.floor(Math.min(ra, rb)) - 1);
 }
 
-/** A measure's label: its text with `{time}`, `{events}` and `{change}` filled in; without
- * text the time, on the Order scale the events between too, and between samples the change
- * in value. */
+/** A measure's label: its text with its fields filled in (fields.ts); without text the
+ * time, on the Order scale the events between too, and between samples the change in value. */
 export function measureText(view: TimelineView, m: NoteMeasure): string {
-  const time = view.axis ? view.axis.formatMeasure(Math.abs(m.span)) : String(Math.abs(m.span));
-  const n = m.events;
-  const count = n === null ? "" : `${n.toLocaleString("en-US").replace(/,/g, " ")} event${n === 1 ? "" : "s"}`;
-  const change = m.change === null || m.change === undefined ? "" : changeText(m.change);
-  if (m.text === null || m.text === undefined) return [time, view.xscale === "order" ? count : "", change ? `Δ ${change}` : ""].filter((p) => p).join(" · ");
-  return m.text.replace(/\{time\}/g, time).replace(/\{events\}/g, count).replace(/\{change\}/g, change);
+  const values = { span: m.span, a: m.a.x, b: m.b.x, events: m.events, change: m.change ?? null };
+  return fillMeasure(view.axis, m.text ?? null, values, view.xscale === "order");
 }
 
-/** A change in value, signed, to three digits. */
-export function changeText(change: number): string {
-  return (change > 0 ? "+" : change < 0 ? "−" : "") + fmtNumber(Math.abs(change), 3);
-}
+export { changeText };
 
 /** The change in value from end a to end b: both samples of one values layer (else null). */
 export function changeOf(a: NoteEnd, b: NoteEnd): number | null {
@@ -210,12 +216,14 @@ export interface MeasureGeom {
   nudge: number;
   text: string;
   tw: number;
+  /** Where its label goes (absent: "auto"). */
+  label?: MeasureLabel;
 }
 
 /** A measure as drawn: its geometry, the band or lane edge it stacks from (`place`), its
  * level, its line's height and its label's left (null: no room; shown when hovered or
  * selected). */
-export type Laid<G extends MeasureGeom> = G & { place: string; k: number; y: number; lx: number | null };
+export type Laid<G extends MeasureGeom> = G & { place: string; k: number; y: number; lx: number | null; ly: number };
 
 export interface MeasureLaid extends MeasureGeom {
   m: NoteMeasure;
@@ -224,6 +232,8 @@ export interface MeasureLaid extends MeasureGeom {
   k: number;
   y: number;
   lx: number | null;
+  /** Its label's top. */
+  ly: number;
 }
 
 /** Where the plot is, for measures: the lanes' top (scrolled), their height, and the tops of
@@ -278,7 +288,8 @@ function stack(items: { lo: number; hi: number; level: number | null; i: number;
  * `stack`; "auto" ones the lane cannot hold continue in the header; a measure with no row
  * shown goes to the header. Then labels: on the line where they fit, else beside it where
  * that is free on its level, else none (shown when hovered or selected). `head` and `foot`:
- * the levels the bands use. */
+ * the heights of the bands (px; 0: none), with room for a label above a band's first level
+ * or below its last. */
 export function placeMeasures<G extends MeasureGeom>(geoms: G[], f: MeasureFrame): { laid: Laid<G>[]; head: number; foot: number } {
   const h = f.fs + 4;
   const step = f.fs + 8;
@@ -333,20 +344,29 @@ export function placeMeasures<G extends MeasureGeom>(geoms: G[], f: MeasureFrame
       bands[band] = Math.max(bands[band], got.get(i)! + 1);
     }
   }
+  // a band makes room for a label above its first level and below its last
+  const room = { header: [0, 0], footer: [0, 0] };
+  for (const [i, p] of place) {
+    if ((p !== "header" && p !== "footer") || !geoms[i].text) continue;
+    if (geoms[i].label === "above" && level.get(i) === 0) room[p][0] = Math.ceil(h / 2);
+    if (geoms[i].label === "below" && level.get(i) === bands[p] - 1) room[p][1] = Math.ceil(h / 2);
+  }
+  const bandPx = (b: "header" | "footer") => (bands[b] ? bandHeight(bands[b], f.fs) + room[b][0] + room[b][1] : 0);
   const laid: Laid<G>[] = geoms.map((g, i) => {
     const k = level.get(i)!;
     const p = place.get(i)!;
     const at = p.split(" ")[0];
     const top = g.row === null ? 0 : f.laneTop + g.row * f.laneH;
     let y: number;
-    if (at === "header") y = f.headTop + 3 + h / 2 + k * step;
-    else if (at === "footer") y = f.footTop + 3 + h / 2 + k * step;
+    if (at === "header") y = f.headTop + room.header[0] + 3 + h / 2 + k * step;
+    else if (at === "footer") y = f.footTop + room.footer[0] + 3 + h / 2 + k * step;
     else if (at === "bottom") y = top + f.laneH - 3 - h / 2 - k * step;
     else if (at === "middle") y = top + f.laneH / 2 + k * step;
     else if (at === "between") y = top + f.laneH - k * step;
     else if (at === "value") y = (g.valueY ?? top) + k * step;
     else y = top + 3 + h / 2 + k * step;
-    return { ...g, place: p, k, y: y + g.nudge, lx: null };
+    y += g.nudge;
+    return { ...g, place: p, k, y, lx: null, ly: y - h / 2 };
   });
   // labels, level by level: the lines first, then each label where it has room
   const spans = new Map<string, [number, number, number][]>();
@@ -356,20 +376,41 @@ export function placeMeasures<G extends MeasureGeom>(geoms: G[], f: MeasureFrame
     spans.get(s)!.push([Math.min(d.xa, d.xb), Math.max(d.xa, d.xb), i]);
   });
   const right = f.plot.x + f.plot.w;
+  const areaTop = f.headTop;
+  const areaBottom = f.footTop + bandPx("footer");
   const freeAt = (s: [number, number, number][], a: number, b: number, own: number) => !s.some(([l, r, j]) => j !== own && l < b + 4 && a - 4 < r);
+  const centred = (l: number, r: number, tw: number) => Math.max(f.plot.x + 1, Math.min((l + r) / 2 - tw / 2, right - tw - 1));
   const byLeft = laid.map((_, i) => i).sort((p, q) => Math.min(laid[p].xa, laid[p].xb) - Math.min(laid[q].xa, laid[q].xb) || p - q);
+  // labels put somewhere first (they take their room), then the automatic ones
   for (const i of byLeft) {
     const d = laid[i];
-    if (!d.text) continue;
+    const mode = d.label ?? "auto";
+    if (!d.text || mode === "auto" || mode === "hover") continue;
+    const l = Math.min(d.xa, d.xb);
+    const r = Math.max(d.xa, d.xb);
+    if (mode === "on" || mode === "above" || mode === "below") {
+      d.lx = centred(l, r, d.tw);
+      // above or below its line; in a lane at the edge of the plot, where that would be
+      // cut off, on the other side
+      const up = d.y - h - 1;
+      const down = d.y + 2;
+      if (mode === "above") d.ly = up < areaTop && down + h <= areaBottom ? down : up;
+      else if (mode === "below") d.ly = down + h > areaBottom && up >= areaTop ? up : down;
+    } else d.lx = mode === "start" ? l - 6 - d.tw : r + 6;
+    if (mode !== "above" && mode !== "below" && (mode !== "on" || d.tw > r - l)) spans.get(`${d.place} ${d.k}`)!.push([d.lx, d.lx + d.tw, -1]);
+  }
+  for (const i of byLeft) {
+    const d = laid[i];
+    if (!d.text || (d.label ?? "auto") !== "auto") continue;
     const l = Math.min(d.xa, d.xb);
     const r = Math.max(d.xa, d.xb);
     const s = spans.get(`${d.place} ${d.k}`)!;
-    if (d.tw + 2 * ARROW_LEN <= r - l) d.lx = Math.max(f.plot.x + 1, Math.min((l + r) / 2 - d.tw / 2, right - d.tw - 1));
+    if (d.tw + 2 * ARROW_LEN <= r - l) d.lx = centred(l, r, d.tw);
     else if (r + 6 + d.tw <= right && freeAt(s, r + 6, r + 6 + d.tw, i)) d.lx = r + 6;
     else if (l - 6 - d.tw >= f.plot.x && freeAt(s, l - 6 - d.tw, l - 6, i)) d.lx = l - 6 - d.tw;
     if (d.lx !== null && d.tw + 2 * ARROW_LEN > r - l) s.push([d.lx, d.lx + d.tw, -1]);
   }
-  return { laid, head: bands.header, foot: bands.footer };
+  return { laid, head: bandPx("header"), foot: bandPx("footer") };
 }
 
 /** Each measure's geometry, as the view shows it now. */
@@ -413,6 +454,7 @@ export function measureGeoms(view: TimelineView, ctx: CanvasRenderingContext2D, 
       nudge: m.nudge ?? 0,
       text,
       tw: ctx.measureText(text).width + 8,
+      label: m.label ?? "auto",
       color: m.color ?? view.theme.accent,
     });
   }
@@ -422,7 +464,7 @@ export function measureGeoms(view: TimelineView, ctx: CanvasRenderingContext2D, 
 /** Where measures' lines and labels go, with the levels the header and footer bands use. */
 export function layoutMeasures(view: TimelineView, ctx: CanvasRenderingContext2D, measures: NoteMeasure[], plot: Rect, laneTop: number): { laid: MeasureLaid[]; head: number; foot: number } {
   const geoms = measureGeoms(view, ctx, measures, plot);
-  const headTop = plot.y - bandHeight(view.measureBands.head, view.fs);
+  const headTop = plot.y - view.measureBands.head;
   return placeMeasures(geoms, { fs: view.fs, plot, laneTop, laneH: view.laneH, headTop, footTop: plot.y + plot.h });
 }
 
@@ -444,8 +486,9 @@ function head(ctx: CanvasRenderingContext2D, x: number, y: number, tip: number):
 }
 
 /** A measure: an extension line from each end's mark to the line's height (from a sample: a
- * dot on it; a short tick through the line at a time), the line with an arrowhead at each end
- * (outside, pointing in, when the line is short), the label on the background. Selected:
+ * dot on it; a short tick through the line at a time), or through every lane, or none; the
+ * line with an arrowhead at each end (outside, pointing in, when the line is short), an
+ * oblique tick, a dot, or nothing; the label on the background where it was put. Selected:
  * thicker, with handles. */
 function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: MeasureLaid, plot: Rect, area: Rect, laneTop: number, selected: boolean): void {
   const y = d.y;
@@ -457,7 +500,8 @@ function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: Measu
   ctx.lineWidth = 1;
   ctx.setLineDash([3, 2]);
   const ends: [number, number | null, number | null][] = [[d.xa, d.rows[0], d.ys[0]], [d.xb, d.rows[1], d.ys[1]]];
-  for (const [x, row, ys] of ends) {
+  const extend = d.m.extend ?? "mark";
+  for (const [x, row, ys] of extend === "mark" ? ends : []) {
     let y0 = y - 5;
     let y1 = y + 5;
     if (ys !== null) {
@@ -476,10 +520,20 @@ function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: Measu
     ctx.lineTo(Math.round(x) + 0.5, y1);
     ctx.stroke();
   }
+  if (extend === "lanes") {
+    // through every lane and band, as cursors
+    for (const x of [d.xa, d.xb]) {
+      ctx.beginPath();
+      ctx.moveTo(Math.round(x) + 0.5, area.y);
+      ctx.lineTo(Math.round(x) + 0.5, area.y + area.h);
+      ctx.stroke();
+    }
+  }
   ctx.setLineDash([]);
+  const style = d.m.ends ?? "arrows";
   const inside = hi - lo >= 2 * ARROW_LEN + 2;
   // a band of the background under the line and its heads: it shows over marks
-  const reach = inside ? 0 : 2 * ARROW_LEN;
+  const reach = style === "arrows" ? (inside ? 0 : 2 * ARROW_LEN) : style === "none" ? 0 : 4;
   ctx.globalAlpha = 0.85;
   ctx.strokeStyle = view.theme.bg;
   ctx.lineWidth = 7;
@@ -495,13 +549,24 @@ function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: Measu
   ctx.lineTo(hi, y);
   ctx.stroke();
   for (const [x, way] of [[lo, -1], [hi, 1]] as const) {
-    if (inside) head(ctx, x, y, way);
-    else {
+    if (style === "ticks") {
       ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + way * 2 * ARROW_LEN, y);
+      ctx.moveTo(x - TICK, y + TICK);
+      ctx.lineTo(x + TICK, y - TICK);
       ctx.stroke();
-      head(ctx, x, y, -way);
+    } else if (style === "dots") {
+      ctx.beginPath();
+      ctx.arc(x, y, END_DOT, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (style === "arrows") {
+      if (inside) head(ctx, x, y, way);
+      else {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + way * 2 * ARROW_LEN, y);
+        ctx.stroke();
+        head(ctx, x, y, -way);
+      }
     }
   }
   for (const [x, , ys] of ends) {
@@ -523,7 +588,8 @@ function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: Measu
   }
   // a label without room shows while its measure is hovered or selected
   const shown = d.lx ?? (selected || view.tooltipKey === `m${d.m.id}` ? (hi + 6 + d.tw <= plot.x + plot.w ? hi + 6 : lo - 6 - d.tw) : null);
-  if (d.text && shown !== null) label(view, ctx, d.text, shown, y - (view.fs + 4) / 2, d.color, plot);
+  const top = d.lx === null ? y - (view.fs + 4) / 2 : d.ly;
+  if (d.text && shown !== null) label(view, ctx, d.text, shown, top, d.color, plot);
 }
 
 /** An arrow from one edge to another: it leaves a start leftwards and an end rightwards, and
@@ -645,8 +711,8 @@ export function drawNotes(view: TimelineView, ctx: CanvasRenderingContext2D, plo
   ctx.restore();
   // measures: in the lanes, and in the header and footer bands around them
   const { laid, head, foot } = layoutMeasures(view, ctx, measures, plot, laneTop);
-  const headH = bandHeight(view.measureBands.head, view.fs);
-  const footH = bandHeight(view.measureBands.foot, view.fs);
+  const headH = view.measureBands.head;
+  const footH = view.measureBands.foot;
   const area = { x: plot.x, y: plot.y - headH, w: plot.w, h: plot.h + headH + footH };
   ctx.save();
   ctx.fillStyle = view.theme.band;

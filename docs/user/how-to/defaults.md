@@ -13,18 +13,21 @@ anytimeline.set_defaults(
     plot={"font_size": 14, "height": 420, "timezone": "Europe/Amsterdam"},
     events={"lane": "service", "tooltip": ["request", "user"]},
     spans={"color": "service"},
+    measure={"ends": "ticks", "label": "above", "text": "{time:ms}"},
 )
 ```
 
-`plot` is for `Timeline(...)`; `events`, `intervals`, `states`, `values` and `spans` for
-those methods. Every plot and layer made afterwards takes them, also those made by
+`plot` is for `Timeline(...)`; `events`, `intervals`, `states`, `values`, `spans` and
+`measure` for those methods (a measure's look and text, not its ends; measures made in the
+plot take them too). Every plot and layer made afterwards takes them, also those made by
 [`gantt`][anytimeline.gantt], [`story`][anytimeline.story] and
 [`compare_traces`][anytimeline.compare_traces].
 
 - **The call wins**: `Timeline(font_size=18)` is 18 whatever the default.
 - **Checked when set**: an argument the method does not take, or a word that is not one of
   its options (`events={"overlap": "spread"}`), raises at `set_defaults`, and nothing of
-  that call is kept. A layer's table and its `name` cannot have defaults.
+  that call is kept. A layer's table and its `name`, and a measure's ends, cannot have
+  defaults.
 - Setting a method's defaults again adds to those set before.
   [`get_defaults`][anytimeline.get_defaults] shows what is set (to copy into your team's
   module), and [`reset_defaults`][anytimeline.reset_defaults] removes them, of one method

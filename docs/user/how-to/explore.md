@@ -83,6 +83,47 @@ Between two samples of one values layer a measure shows the change in value too,
 oscilloscope's cursors do: "1.5 h · Δ −1.19", with a dot on each sample. Its tooltip has both
 values and the rate of change ("−0.79 per h"), and `{change}` in its text is the change.
 
+### A measure's text and look
+
+Its text may have fields, each with a format after a colon:
+
+```python
+plot.measure(atl.end(3), atl.start(4), "{b.service} waited {time:ms}")
+plot.measure(atl.start(8, "cpu"), atl.start(20, "cpu"), "{change:+.1f} % ({rate})")
+plot.measure(atl.start(0), atl.end(9), "{a.start:%H:%M} to {b.end:%H:%M}: {time:min.2}")
+```
+
+| Field | Is | Formats |
+| --- | --- | --- |
+| `{time}` | the time between | a unit (`ns`, `us`, `ms`, `s`, `min`, `h`, `d`) and digits: `{time:ms}`, `{time:.2}`, `{time:s.4}` |
+| `{events}` | the events between in the order | a number's: `{events:,}` |
+| `{change}` | the change in value between two samples | a number's: `{change:+.2f}`, `{change:.1%}` |
+| `{rate}` | that change per unit of time ("+8.2 per h") | a number's, for the number |
+| `{a}`, `{b}` | the ends' times, exactly | none |
+| `{a.col}`, `{b.col}` | a column of an end's row (an end that is a mark) | Python's: `{a.start:%H:%M}`, `{b.bytes:,}` |
+
+A number's format is as Python's: a sign (`+`, or a space), `,` for thousands, the digits
+after the point, and `f` (fixed), `e` (exponent), `%` (percent), or `g` or nothing (that many
+digits, as the plot writes numbers). A field's format that is none of these raises when the
+measure is made.
+
+`label=`, `ends=` and `extend=` set its look:
+
+| | Options |
+| --- | --- |
+| `label=` | `"auto"` (on the line where it fits, else beside it where there is room, else when hovered), `"on"`, `"above"`, `"below"`, `"start"` (before the earlier end), `"end"` (after the later end), `"hover"` |
+| `ends=` | `"arrows"`, `"ticks"` (oblique strokes, as in a drawing), `"dots"`, `"none"` |
+| `extend=` | `"mark"` (from each end's mark to the line), `"lanes"` (through every lane, like cursors), `"none"` |
+
+A label above or below its line stays in sight: the header and footer bands make room for
+it, and in the top or bottom lane, where it would be cut off at the plot's edge, it goes on
+the other side of its line.
+
+```python
+plot.measure(atl.end(3), atl.start(4), label="above", ends="ticks", extend="lanes")
+atl.set_defaults(measure={"ends": "ticks", "label": "above"})  # every measure from now on
+```
+
 In the plot, choose the **Measure** tool (the ruler in the toolbar, or `plot.tool =
 "measure"`) and drag from one mark to another: each end takes the start or end of a mark (or
 a sample) under the pointer (a tick shows which), or with <kbd>Shift</kbd> the time there. A
@@ -130,7 +171,8 @@ Click a measure's label to select it. Then:
 - drag its line up or down: to another level, to the top, middle or bottom of its lane, to the
   border under it, into another lane, or above or below the lanes into the header or footer
   band (a measure at a value moves to the value under the pointer);
-- or pick a place in its menu (**Place**: Top, Middle, Bottom, Between, Header, Footer);
+- or pick a place in its menu (**Place**: Top, Middle, Bottom, Between, Header, Footer), and
+  where its text goes (**Label**: Auto, On, Above, Below, Start, End, Hover);
 - **↑** and **↓** move it a level, **0** (or the menu's **Automatic**) puts it back where the
   layout would, and **Enter** (or **Edit text…**) edits its text (empty: the time);
 - drag one of its ends to another edge, and **Delete** removes it.

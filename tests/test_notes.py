@@ -283,8 +283,11 @@ def test_measures_moved_and_edited_in_the_plot() -> None:
     assert p._notes["measures"][0]["at"] == "bottom"
     w._on_msg(w, {"type": "note_change", "id": 0, "text": "gap {time}"}, [])
     assert p.notes[0].text == "gap {time}"
+    w._on_msg(w, {"type": "note_change", "id": 0, "label": "below"}, [])
+    assert p._notes["measures"][0]["label"] == "below"
     # back to automatic; empty text is the time again
     back = {"type": "note_change", "id": 0, "at": "auto", "level": None, "lane": None, "text": ""}
+    back["label"] = "auto"
     w._on_msg(w, back, [])
     assert p.notes[0] == Measure(atl.end(0), atl.start(2))
     # a value on a values layer
@@ -476,3 +479,75 @@ def test_pictures_have_the_bands_of_measures_only_when_used() -> None:
     pic = picture(r, 160)
     assert pic.f.head_h > 0
     assert pic.f.lane_h < 160 / 3
+
+
+def test_a_measures_text_has_fields_with_formats_and_its_ends_columns() -> None:
+    p = plot().measure(atl.end(0), atl.start(2), "{b.task} after {a.task}: {time:min}")
+    p.measure(atl.start(0), atl.end(0), "from {a.start:%H:%M}")
+    p.measure(T0, T0 + H, "{a.task} {time:s.2}")  # a time has no row
+    texts = [m["text"] for m in p._notes["measures"]]
+    assert texts == ["c after a: {time:min}", "from 00:00", "– {time:s.2}"]
+    assert p._notes["measures"][0]["raw"] == "{b.task} after {a.task}: {time:min}"
+    assert "raw" not in plot().measure(T0, T0 + H, "{time}")._notes["measures"][0]
+    # filled in a picture as in the browser
+    svg = p.to_svg(width=600, height=300)
+    assert "c after a: 180 min" in svg
+    assert "– 3600 s" in svg
+    with pytest.raises(LookupError):
+        plot().measure(atl.end(0), atl.start(2), "{a.nope}")
+    with pytest.raises(ValueError, match="a time's format"):
+        Measure(T0, T0 + H, "{time:hours}")
+    with pytest.raises(ValueError, match="a number's format"):
+        Measure(T0, T0 + H, "{change:x}")
+    with pytest.raises(ValueError, match="takes no format"):
+        Measure(T0, T0 + H, "{a:%H}")
+
+
+def test_a_measures_label_ends_and_extension_lines() -> None:
+    p = plot().measure(atl.end(1), atl.start(2), label="above", ends="ticks", extend="lanes")
+    m = p._notes["measures"][0]
+    assert (m["label"], m["ends"], m["extend"]) == ("above", "ticks", "lanes")
+    for key, bad in (("label", "left"), ("ends", "arrow"), ("extend", "all")):
+        with pytest.raises(ValueError, match=f"Measure's {key} must be one of"):
+            Measure(T0, T0 + H, **{key: bad})  # ty: ignore[invalid-argument-type]
+    # in a picture (lane b, the second): the label above its line
+    pic = picture(p, 300)
+    [d] = pic._layout_measures(p._notes["measures"])[0]
+    assert d["ly"] == pytest.approx(d["y"] - (p.font_size + 4) - 1)
+    svg = p.to_svg(width=600, height=300)
+    assert "<path" in svg  # drawn without error
+    hover = plot().measure(atl.end(0), atl.start(2), label="hover")
+    [d] = picture(hover, 300)._layout_measures(hover._notes["measures"])[0]
+    assert d["lx"] is None
+
+
+def test_measures_take_defaults() -> None:
+    with atl.defaults(measure={"ends": "dots", "at": "middle", "text": "{time:min}"}):
+        p = plot().measure(atl.end(0), atl.start(2)).measure(T0, T0 + H, "own", ends="none")
+    assert p.notes == [
+        Measure(atl.end(0), atl.start(2), "{time:min}", at="middle", ends="dots"),
+        Measure(T0, T0 + H, "own", at="middle", ends="none"),
+    ]
+    with pytest.raises(TypeError, match="cannot have a default"):
+        atl.set_defaults(measure={"a": T0})
+    with pytest.raises(ValueError, match="ends must be one of"):
+        atl.set_defaults(measure={"ends": "arrow"})
+    with pytest.raises(ValueError, match="at must be one of"):
+        atl.set_defaults(measure={"at": "side"})
+    assert atl.get_defaults() == {}
+
+
+def test_a_label_above_or_below_stays_in_the_picture() -> None:
+    """A label above a measure in the top lane, or in the header band, is not cut off."""
+    h = Timeline().font_size + 4
+    for at in ("auto", "header"):
+        p = plot().measure(atl.end(0), atl.start(1), "{time}", at=at, label="above")
+        pic = picture(p, 300)
+        [d] = pic._layout_measures(p._notes["measures"])[0]
+        area_top = pic.f.area[1]
+        assert d["ly"] >= area_top, at
+        assert d["ly"] + h <= pic.f.area[1] + pic.f.area[3], at
+    p = plot().measure(atl.end(0), atl.start(1), at="footer", label="below")
+    pic = picture(p, 300)
+    [d] = pic._layout_measures(p._notes["measures"])[0]
+    assert d["ly"] + h <= pic.f.area[1] + pic.f.area[3]
