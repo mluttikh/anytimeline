@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import logging
 import math
+import sys
 import uuid
 import warnings
 import weakref
@@ -16,13 +18,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Self, get_args
 
 import numpy as np
-from ipywidgets import CallbackDispatcher
 
 from anytimeline import data as tables
 from anytimeline import find, grouping, image, page, scene
 from anytimeline import notes as notelist
 from anytimeline import summary as summaries
 from anytimeline.data import NotFoundError
+from anytimeline.defaults import changed, remembered, takes_defaults
 from anytimeline.lanes import LANE_SORTS
 from anytimeline.layers import common
 from anytimeline.layers import events as ev
@@ -250,6 +252,7 @@ class Timeline:
     connections = gone("Timeline.connections", "plot.notes")
     marker = gone_method("Timeline.marker", "plot.annotate(time, text=label)")
 
+    @takes_defaults("plot")
     def __init__(
         self,
         *,
@@ -298,6 +301,9 @@ class Timeline:
         }
         self._time_unit = time_unit
         self._layers: dict[str, scene.Record] = {}
+        self._calls: dict[str, tuple[str, dict[str, Any]]] = {}
+        """Each layer's call, by its name: the method and its arguments (``update``)."""
+        self._calling = 0
         self._tables: dict[str, Any] = {}
         """Each layer's table as read (a lazy table read once), for ``selected``."""
         self._laid: dict[str, scene.Layout] = {}
@@ -329,7 +335,7 @@ class Timeline:
         self._snapshot_paths: dict[str, Path] = {}
         self._widget: TimelineWidget | None = None
         self._watchers: dict[str, list[Callable[[dict[str, Any]], None]]] = {}
-        self._select_handlers = CallbackDispatcher()
+        self._select_handlers: list[Callable[[dict[str, list[int]]], Any]] = []
         for name, value in given.items():
             self._settings[name] = self._checked(name, value)
         self._update_spec()
@@ -399,7 +405,14 @@ class Timeline:
         ([`to_html`][anytimeline.Timeline.to_html], ``display="html"``) never makes one.
         """
         if self._widget is None:
-            from anytimeline.widget import TimelineWidget
+            try:
+                from anytimeline.widget import TimelineWidget
+            except ImportError as err:
+                raise ImportError(
+                    "showing a plot as a widget needs anywidget: pip install anywidget (then "
+                    'restart the kernel); or show it as a page with plot.display = "html", or '
+                    f"save it with save_image or save_html ({err})"
+                ) from err
 
             synced = hooks(type(self)).synced
             self._widget = TimelineWidget(self, {n: self._settings[n] for n in synced})
@@ -424,8 +437,10 @@ class Timeline:
         self.__dict__.update(state)
         self._widget = None
         self._watchers = {}
-        self._select_handlers = CallbackDispatcher()
+        self._select_handlers = []
         self._snapshot_paths = {}
+        self.__dict__.setdefault("_calls", {})  # pickled by 0.5
+        self._calling = 0
 
     # a copy of its own (as copy.deepcopy): a plot to change without changing this one
     def __copy__(self) -> Self:
@@ -447,6 +462,8 @@ class Timeline:
 
     # ------------------------------------------------------------------ layers
 
+    @takes_defaults("events")
+    @remembered
     def events(
         self,
         data: Any,
@@ -552,6 +569,8 @@ class Timeline:
         )
         return self._add(record, data, group)
 
+    @takes_defaults("intervals")
+    @remembered
     def intervals(
         self,
         data: Any,
@@ -666,6 +685,8 @@ class Timeline:
         )
         return self._add(record, data, group)
 
+    @takes_defaults("states")
+    @remembered
     def states(
         self,
         data: Any,
@@ -737,6 +758,8 @@ class Timeline:
         )
         return self._add(record, data, group)
 
+    @takes_defaults("values")
+    @remembered
     def values(
         self,
         data: Any,
@@ -807,6 +830,8 @@ class Timeline:
         )
         return self._add(record, data, group)
 
+    @takes_defaults("spans")
+    @remembered
     def spans(
         self,
         data: Any,
@@ -1069,6 +1094,41 @@ class Timeline:
         like = next(iter(self._tables.values()), {})
         return notelist.table(self._note_context(), self.notes, like)
 
+    def update(self, name: str, /, **changes: Any) -> Self:
+        """Change a layer: call its method again with its last arguments and ``changes``.
+
+        ```python
+        plot.events(log, lane="service", color="status")
+        plot.update("events", color="latency", colormap="viridis")
+        plot.update("events", data=newer_log)  # the same layer of other rows
+        ```
+
+        Every rule of a call holds: the layer keeps its place and name, and an argument it
+        does not take raises (the layer stays as it was). Without ``data=`` it draws the
+        table it has, as read the first time (a lazy query does not run again).
+
+        Args:
+            name: The layer's name.
+            **changes: Arguments of the layer's method, and ``data`` for another table.
+        """
+        if name not in self._calls:
+            raise NotFoundError(f"no layer {name!r}; layers: {self.layers}")
+        if "name" in changes:
+            raise TypeError("a layer keeps its name: remove it and add it again to rename it")
+        method, given = self._calls[name]
+        data = changes.pop("data", self._tables[name])
+        getattr(self, method)(data, **{**given, **changes, "name": name})
+        return self
+
+    def arguments(self, name: str) -> dict[str, Any]:
+        """The arguments a layer was made with that differ from its method's own defaults
+        (also those taken from [`set_defaults`][anytimeline.set_defaults]), without the
+        table: ``{"lane": "service", "color": "status"}``."""
+        if name not in self._calls:
+            raise NotFoundError(f"no layer {name!r}; layers: {self.layers}")
+        method, given = self._calls[name]
+        return changed(method, given)
+
     @property
     def layers(self) -> list[str]:
         """The layers' names, in drawing order."""
@@ -1080,6 +1140,7 @@ class Timeline:
             raise NotFoundError(f"no layer {name!r}; layers: {self.layers}")
         del self._layers[name]
         del self._tables[name]
+        self._calls.pop(name, None)
         self.selection = {k: v for k, v in self.selection.items() if k != name}
         self._update_spec()
         return self
@@ -1088,6 +1149,7 @@ class Timeline:
         """Remove every layer."""
         self._layers.clear()
         self._tables.clear()
+        self._calls.clear()
         self.selection = {}
         self._update_spec()
         return self
@@ -1840,7 +1902,7 @@ class Timeline:
                 self.selection = was
             finally:
                 self._undoing = False
-            self._select_handlers(self.selection)
+            _call_each(self._select_handlers, self.selection)
             return True
         return False
 
@@ -1849,9 +1911,14 @@ class Timeline:
     ) -> None:
         """Call ``callback(selection)`` after every change of the selection made in the plot.
 
-        Pass ``remove=True`` to unregister it.
+        Pass ``remove=True`` to unregister it. A callback is registered once, however often
+        it is passed. One that raises does not stop the others; its error shows in the
+        notebook (else in the ``anytimeline`` log).
         """
-        self._select_handlers.register_callback(callback, remove=remove)
+        if remove:
+            self._select_handlers = [f for f in self._select_handlers if f != callback]
+        elif callback not in self._select_handlers:
+            self._select_handlers = [*self._select_handlers, callback]
 
     @validates("selection")
     def _valid_selection(self, value: dict[str, Any], name: str) -> dict[str, list[int]]:
@@ -1939,7 +2006,7 @@ class Timeline:
         selection = {k: sorted(v) for k, v in new.items() if v}
         if selection != self.selection:
             self.selection = selection
-            self._select_handlers(self.selection)
+            _call_each(self._select_handlers, self.selection)
 
     def _resolve(self, pick: Mapping[str, Any]) -> dict[str, set[int]] | None:
         """Table rows per layer that a click or a box picks."""
@@ -2024,6 +2091,23 @@ def _write_new(path: Path, data: bytes) -> Path:
         except FileExistsError:
             n += 1
             target = path.with_name(f"{path.stem}-{n}{path.suffix}")
+
+
+def _call_each(callbacks: Sequence[Callable[[Any], Any]], value: Any) -> None:
+    """Call each callback with ``value``. One that raises does not stop the others: they
+    run from a browser message, where a raised error would reach no one, so its traceback
+    shows in the notebook (IPython's), else in the ``anytimeline`` log."""
+    for fn in list(callbacks):
+        try:
+            fn(value)
+        except Exception:
+            shell = None
+            if "IPython" in sys.modules:
+                shell = sys.modules["IPython"].get_ipython()
+            if shell is not None:
+                shell.showtraceback()
+            else:
+                logging.getLogger("anytimeline").exception("an on_select callback failed")
 
 
 def _arguments(arguments: Mapping[str, Any]) -> list[Any]:

@@ -7,6 +7,7 @@ Every argument, setting and gesture.
 - [gantt](gantt.md): a Gantt chart in one call.
 - [story](story.md): a story timeline in one call.
 - [save_html](save-html.md): several plots in one page.
+- [Defaults](defaults.md): `set_defaults`, `defaults`, `get_defaults`, `reset_defaults`.
 - [anytimeline.marimo](marimo.md): the selection as marimo state.
 - [Traces](traces.md): read traces (OTLP, Jaeger, Chrome's format), merge them into a flame
   graph, compare two.

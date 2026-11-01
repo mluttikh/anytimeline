@@ -29,10 +29,8 @@ version = "0.5.1"
 source = { editable = "." }
 dependencies = [
     { name = "anywidget" },
-    { name = "ipywidgets" },
     { name = "narwhals" },
     { name = "numpy" },
-    { name = "traitlets" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
 
@@ -65,11 +63,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anywidget", specifier = ">=0.9.13" },
-    { name = "ipywidgets", specifier = ">=8" },
     { name = "narwhals", specifier = ">=1.30" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "resvg-py", marker = "extra == 'png'", specifier = ">=0.5" },
-    { name = "traitlets", specifier = ">=5.9" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
 provides-extras = ["png"]

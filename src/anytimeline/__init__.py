@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from anytimeline.defaults import defaults, get_defaults, reset_defaults, set_defaults
 from anytimeline.page import save_html
 from anytimeline.parts import Annotation, Connection, Edge, Measure, Route, Stem, end, start
 from anytimeline.plot import Timeline
@@ -25,9 +26,13 @@ __all__ = [
     "View",
     "__version__",
     "compare_traces",
+    "defaults",
     "end",
     "gantt",
+    "get_defaults",
+    "reset_defaults",
     "save_html",
+    "set_defaults",
     "start",
     "story",
 ]
