@@ -22,13 +22,17 @@ it (``Timeline._set(..., shown=True)``).
   Python answers ``{"type": "answer", "request", "spec", "range", ...}``, whose buffers the
   browser then asks for. A tooltip with ``"bin": {"scale", "lane", "range"}`` asks what a
   bin holds.
-* ``{"type": "view", "range", "lanes"}`` reports the visible time range and the lanes in
-  sight (debounced), for ``plot.view``.
+* ``{"type": "view", "range", "lanes", "open"}`` reports the visible time range, the lanes
+  in sight and which lanes of the tree are open (debounced), for ``plot.view`` and pictures.
 * ``{"type": "perf", "update"}`` reports the renderer and timings (``plot.dev.perf``); not a
   synced trait, so in marimo timings re-run no cells. ``{"type": "benchmark"}`` asks for a
   benchmark, whose result comes back as perf.
 * ``{"type": "snapshot", "request"}`` asks a view for a PNG, which comes back as
   ``{"type": "image", "request"}`` with the bytes (``save_png``).
+* The Export menu: ``{"type": "figure", "request", "width", "height", "range", "lanes",
+  "open", "theme"}`` asks for an SVG of that view (answer ``{"type": "answer", "request",
+  "svg"}``); ``{"type": "save-image", "request", "name", ...}`` writes a picture next to the
+  notebook, the PNG sent as a buffer or the SVG of the view (answer: its ``path``).
 * Gestures (clicks, boxes) arrive in the synced ``_pick``; Python resolves them to table rows
   (``selection``) and sends back ``_marks``: per layer, the selected events' indices.
 
@@ -137,6 +141,16 @@ class TimelineWidget(anywidget.AnyWidget):
             try:
                 answer.update(plot._window(content))
             except Exception as err:
+                answer["error"] = str(err)
+            self.send(answer)
+        elif kind in ("figure", "save-image"):
+            answer = {"type": "answer", "request": content.get("request")}
+            try:
+                if kind == "figure":
+                    answer["svg"] = plot._figure(content)
+                else:
+                    answer["path"] = str(plot._save_export(content, buffers))
+            except Exception as err:  # the plot says so; the kernel carries on
                 answer["error"] = str(err)
             self.send(answer)
         elif kind in ("find", "step", "snap"):

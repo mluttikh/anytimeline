@@ -33,3 +33,13 @@ test("a saved page draws from disk, fills the window, has tooltips and folds", a
   expect(after).toBeGreaterThan(before);
   await page.screenshot({ path: "test-results/shots/saved_traces.png" });
 });
+
+test("a saved page exports PNG only: there is no Python to draw an SVG", async ({ page }) => {
+  await page.goto(pathToFileURL(file).href);
+  await expect(page.locator(".anytimeline-embed")).toHaveAttribute("data-state", "ready", { timeout: 15_000 });
+  await page.locator('.atl-toolbar button[aria-label="Export image"]').click();
+  const hows = await page.locator(".atl-export-menu button").evaluateAll((bs) => bs.map((b) => (b as HTMLElement).dataset.how));
+  expect(hows.filter((h) => h !== "copy")).toEqual(["png"]);
+  const [png] = await Promise.all([page.waitForEvent("download"), page.locator('.atl-export-menu button[data-how="png"]').click()]);
+  expect(png.suggestedFilename()).toMatch(/\.png$/);
+});

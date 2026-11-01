@@ -23,6 +23,8 @@ Recipes for a task. They assume you know the basics from the
 - [States and values](states-values.md): what state a lane was in, a number over time
 - [Groups and linked plots](groups.md): hosts, days or runs in one plot; plots that zoom together
 - [Share a plot](share.md): one HTML file, an SVG for slides, or a PNG
+- [Make images for slides](images.md): copy, download or save what you see; images from
+  Python, one per view, straight into PowerPoint
 - [Several layers in one plot](layers.md)
 
 **In the plot**

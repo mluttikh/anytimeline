@@ -6,7 +6,19 @@ All notable changes to anytimeline. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **An Export menu** in the toolbar (key `e`) replaces the Save as PNG button: Copy image,
+  Copy as vector (SVG with a PNG beside it, in Chrome, Edge and VS Code), Download PNG,
+  Download SVG, and Save PNG or SVG next to the notebook (Python writes the file and never
+  overwrites one). The PNG is the plot as on screen; the SVG is drawn by Python for the same
+  view, size, folded lanes and theme. A saved page (`save_html`, `display="html"`) offers the
+  PNG entries. See the new how-to "Make images for slides".
+
 ### Changed
+
+- Pictures from Python (`save_image`, `to_svg`) fold lanes as the plot shows them, once it
+  was shown; before, as the plot starts.
 
 - Ibis tables are tested: they are read once like other lazy tables, and `selected()` gives
   a PyArrow table of the rows drawn. The docs name them with the other tables.

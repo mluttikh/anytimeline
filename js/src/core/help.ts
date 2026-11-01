@@ -87,6 +87,7 @@ export function helpSections(tools: Tool[], fullscreen: boolean, tree = false): 
       ["m", "on one end, then on the other: measure the time between"],
       ["M", "on a bar: measure its length"],
       ["> · <", "move a measure's second end to the next · previous edge"],
+      ["e", "export an image: copy, download or save"],
       ["l · f · ?", "legend · full screen · this help"],
     ],
   ]);

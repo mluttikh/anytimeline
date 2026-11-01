@@ -1,7 +1,8 @@
 // The header: title, counts, the hint for the active tool, and the toolbar (tools, scale,
-// view, selection, legend, full screen, help). One row of icon buttons; a narrow plot wraps
+// view, selection, legend, display, export, full screen, help). One row of icon buttons; a narrow plot wraps
 // to a second row rather than hiding buttons.
 
+import type { ExportEntry, ExportHow } from "./export";
 import { ICONS } from "./icons";
 import type { XScale } from "./types";
 
@@ -16,8 +17,10 @@ export interface ToolbarActions {
   clear(): void;
   legend(): void;
   fullscreen(): void;
-  /** Save the plot as a PNG image. */
-  image(): void;
+  /** The Export menu's entries, for what this page can do now. */
+  exportEntries(): ExportEntry[];
+  /** Copy, download or save a picture (an entry of the Export menu). */
+  exportImage(how: ExportHow): void;
   help(): void;
   /** Text size in px, or null to go back to the default. */
   fontSize(px: number | null): void;
@@ -110,6 +113,9 @@ export class Toolbar {
   private readonly full: HTMLButtonElement;
   private readonly textButton: HTMLButtonElement;
   private readonly popover: HTMLDivElement;
+  private readonly exportButton: HTMLButtonElement;
+  private readonly exportMenu: HTMLDivElement;
+  private readonly actions: ToolbarActions;
   private readonly sizeLabel: HTMLSpanElement;
   private readonly markLabel: HTMLSpanElement;
   private readonly dodgeBox: HTMLInputElement;
@@ -119,11 +125,47 @@ export class Toolbar {
 
   private closePopover = (e: Event): void => {
     if (!this.popover.hidden && !this.popover.parentElement?.contains(e.target as Node)) this.togglePopover(false);
+    if (!this.exportMenu.hidden && !this.exportMenu.parentElement?.contains(e.target as Node)) this.toggleExport(false);
   };
 
   togglePopover(open = this.popover.hidden): void {
     this.popover.hidden = !open;
     this.textButton.setAttribute("aria-expanded", String(open));
+    if (open) this.toggleExport(false);
+  }
+
+  /** Whether the Export menu is open. */
+  get exportOpen(): boolean {
+    return !this.exportMenu.hidden;
+  }
+
+  /** Open or close the Export menu (its button, key e): its entries are what works now. */
+  toggleExport(open = this.exportMenu.hidden): void {
+    this.exportMenu.hidden = !open;
+    this.exportButton.setAttribute("aria-expanded", String(open));
+    if (!open) return;
+    this.togglePopover(false);
+    const items = this.actions.exportEntries().map((entry) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "atl-button atl-export-item";
+      b.setAttribute("role", "menuitem");
+      b.dataset.how = entry.how;
+      const label = document.createElement("span");
+      label.textContent = entry.label;
+      const note = document.createElement("span");
+      note.className = "atl-export-note";
+      note.textContent = entry.note;
+      b.append(label, note);
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.toggleExport(false);
+        this.actions.exportImage(entry.how);
+      });
+      return b;
+    });
+    this.exportMenu.replaceChildren(...items);
+    items[0]?.focus({ preventScroll: true });
   }
 
   destroy(): void {
@@ -131,6 +173,7 @@ export class Toolbar {
   }
 
   constructor(actions: ToolbarActions) {
+    this.actions = actions;
     this.element = document.createElement("div");
     this.element.className = "atl-toolbar";
     this.element.setAttribute("role", "toolbar");
@@ -163,7 +206,28 @@ export class Toolbar {
     this.legend = button(ICONS.legend, "Legend", "Show or hide the legend · key l", actions.legend);
     this.full = button(ICONS.expand, "Full screen", "Full screen · key f, Esc to leave", actions.fullscreen);
     const help = button(ICONS.help, "Mouse and keys", "Mouse and keys · key ?", actions.help);
-    const image = button(ICONS.image, "Save as PNG", "Save the plot as a PNG image", actions.image);
+    // Export: a button that opens copy, download and save (built when opened)
+    const exporter = document.createElement("div");
+    exporter.className = "atl-popover-anchor";
+    this.exportButton = button(ICONS.image, "Export image", "Export an image: copy, download or save, e.g. for slides · key e", () => this.toggleExport());
+    this.exportButton.setAttribute("aria-haspopup", "menu");
+    this.exportButton.setAttribute("aria-expanded", "false");
+    this.exportMenu = document.createElement("div");
+    this.exportMenu.className = "atl-popover atl-export-menu";
+    this.exportMenu.hidden = true;
+    this.exportMenu.setAttribute("role", "menu");
+    this.exportMenu.setAttribute("aria-label", "Export image");
+    this.exportMenu.addEventListener("pointerdown", (e) => e.stopPropagation());
+    this.exportMenu.addEventListener("keydown", (e) => {
+      // arrow keys move between the entries; Esc closes (handled by the view)
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      e.stopPropagation();
+      const items = [...this.exportMenu.querySelectorAll<HTMLButtonElement>("button")];
+      const i = items.indexOf(document.activeElement as HTMLButtonElement);
+      items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+    });
+    exporter.append(this.exportButton, this.exportMenu);
 
     // Display: a button that opens text size, mark size (− value + Reset) and spreading
     const text = document.createElement("div");
@@ -208,7 +272,7 @@ export class Toolbar {
     text.append(this.textButton, this.popover);
     document.addEventListener("pointerdown", this.closePopover, true);
 
-    this.element.append(this.toolGroup, scale, this.back, this.home, this.clear, this.legend, text, image, this.full, help);
+    this.element.append(this.toolGroup, scale, this.back, this.home, this.clear, this.legend, text, exporter, this.full, help);
   }
 
   update(s: ToolbarState): void {

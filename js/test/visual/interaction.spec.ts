@@ -172,7 +172,7 @@ test("Time and Order are icons; the text size changes all text and reaches Pytho
   await page.locator('.atl-popover button[aria-label="Default text size"]').click();
   expect(await state(page, "font_size")).toBe(12);
   await page.mouse.click(5, 300); // outside: the popover closes
-  await expect(page.locator(".atl-popover")).toBeHidden();
+  await expect(page.locator('.atl-popover[aria-label="Display"]')).toBeHidden();
 });
 
 test("larger text: screenshot", async ({ page }) => {

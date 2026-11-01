@@ -28,6 +28,8 @@ interface ModelState {
 
 const states = new WeakMap<AnyModel, ModelState>();
 const ASK_TIMEOUT_MS = 10_000;
+/** How long to wait for Python to draw or write a picture (the Export menu). */
+const FIGURE_TIMEOUT_MS = 60_000;
 
 const NO_DATA_HINT = "Waiting for data from Python. Is the kernel running? Run the cell again.";
 const NO_ANSWER_HINT = "Python no longer answers for this plot, for example after a kernel restart. Run its cell again.";
@@ -101,20 +103,21 @@ function fetchFile(model: AnyModel, store: BufferStore, msg: PutMessage): void {
     });
 }
 
-function ask(model: AnyModel, s: ModelState, content: Record<string, unknown>): Promise<any> {
+/** Ask Python and wait for its answer (a message with the same request number). */
+function ask(model: AnyModel, s: ModelState, content: Record<string, unknown>, buffers: ArrayBuffer[] = [], timeout = ASK_TIMEOUT_MS): Promise<any> {
   const request = ++s.nextRequest;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       s.pending.delete(request);
-      reject(new Error("no answer"));
-    }, ASK_TIMEOUT_MS);
+      reject(new Error(timeout === ASK_TIMEOUT_MS ? "no answer" : "Python did not answer (is the kernel running, or busy with a cell?)"));
+    }, timeout);
     s.pending.set(request, (msg) => {
       clearTimeout(timer);
       if (msg.error) reject(new Error(msg.error));
       else resolve(msg);
     });
     try {
-      model.send({ ...content, request });
+      model.send({ ...content, request }, undefined, buffers);
     } catch (err) {
       clearTimeout(timer);
       s.pending.delete(request);
@@ -164,7 +167,10 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
       model.set("_pick", { ...g, n: ++pickCount });
       model.save_changes();
     },
-    onView: (range, lanes) => send(model, { type: "view", range, lanes }),
+    onView: (range, lanes, open) => send(model, { type: "view", range, lanes, open }),
+    onFigure: (request) => ask(model, s, { type: "figure", ...request }, [], FIGURE_TIMEOUT_MS).then((msg) => msg.svg as string),
+    onSaveImage: async (name, request, png) =>
+      ask(model, s, { type: "save-image", name, ...request }, png ? [await png.arrayBuffer()] : [], FIGURE_TIMEOUT_MS).then((msg) => msg.path as string),
     onXScale: (xscale: XScale) => {
       model.set("xscale", xscale);
       model.save_changes();

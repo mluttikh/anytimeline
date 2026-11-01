@@ -509,6 +509,9 @@ export function key(view: TimelineView, e: KeyboardEvent): void {
     case "f":
       view.toggleFullscreen();
       break;
+    case "e":
+      view.toggleExport();
+      break;
     case "/":
       view.finder.open();
       break;
@@ -575,7 +578,10 @@ export function key(view: TimelineView, e: KeyboardEvent): void {
       view.root.classList.add("atl-space");
       break;
     case "Escape":
-      if (view.helpEl) view.toggleHelp();
+      if (view.exportOpen) {
+        view.toggleExport(false);
+        view.root.focus({ preventScroll: true });
+      } else if (view.helpEl) view.toggleHelp();
       else if (view.drag) cancelDrag(view);
       else if (view.annotating || view.connectFrom || view.measureDraft) {
         view.annotating = false;
