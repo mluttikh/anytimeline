@@ -31,7 +31,7 @@ from anytimeline.layers import events as ev
 from anytimeline.layers import intervals as iv
 from anytimeline.layers import states as st
 from anytimeline.layers import values as vl
-from anytimeline.parts import Annotation, Connection, Edge, Measure, Note, Route, Stem
+from anytimeline.parts import Annotation, Connection, Edge, Measure, Note, Route, Stem, ValueAt
 from anytimeline.renamed import gone, gone_method
 from anytimeline.settings import (
     at_least,
@@ -58,6 +58,7 @@ from anytimeline.types import (
     EventOverlap,
     Expand,
     LaneSort,
+    MeasurePlace,
     Renderer,
     SelectionMode,
     SpanLayout,
@@ -1030,6 +1031,9 @@ class Timeline:
         *,
         lane: Any = None,
         color: str | None = None,
+        at: MeasurePlace | ValueAt = "auto",
+        level: int | None = None,
+        nudge: float = 0.0,
     ) -> Self:
         """Add a [`Measure`][anytimeline.Measure] to [`notes`][anytimeline.Timeline.notes]:
         the time from ``a`` to ``b``, drawn as a dimension line with the time at its middle.
@@ -1048,7 +1052,14 @@ class Timeline:
         plot.measure("2026-10-28T10:00:00.250", atl.start(40))  # a time to a mark
         plot.measure(t0, t1, "budget: {time}")       # two times, with its own text
         plot.measure(atl.start(8, "cpu"), atl.start(20, "cpu"))  # two samples: time and ΔY
+        plot.measure(atl.end(12), atl.start(40), at="middle")  # through the lane's middle
+        plot.measure(t0, t1, "freeze", at="header")  # in a band above the lanes
+        plot.measure(atl.end(3), atl.start(9), level=0)  # always nearest the marks
         ```
+
+        Measures that overlap in time stack in levels. The levels are laid out in time, so
+        zooming and panning never move a measure; a label that has no room is shown when the
+        measure is hovered or selected.
 
         Args:
             a: Where it starts: an edge, or a time of the data's kind (datetime, ISO text,
@@ -1058,11 +1069,21 @@ class Timeline:
                 value between two samples). ``{time}`` in it is the time between,
                 ``{events}`` the number of events between in the order, ``{change}`` the
                 change in value.
-            lane: The lane it is drawn in when neither end is an edge (a lane's name);
-                ``None``: at the top of the plot.
+            lane: The lane it is drawn in (a lane's name); ``None``: the upper of its ends'
+                lanes, or (two times) the header.
             color: Its colour (default: the accent colour).
+            at: Where its line goes: ``"auto"`` (the top of its lane; levels the lane cannot
+                hold continue in the header), ``"top"``, ``"middle"``, ``"bottom"``,
+                ``"between"`` (the border under its lane), ``"header"`` or ``"footer"`` (a
+                band above or below the lanes, which takes room only when used), or
+                [`atl.value(v)`][anytimeline.value]: at value ``v`` on a values layer.
+            level: Its level, 0 nearest the edge its place stacks from (the top of the lane
+                for ``"top"``, the bottom for ``"bottom"``); ``None``: the first free one.
+                Measures without a level are laid out around those with one.
+            nudge: Pixels to move its line down (up when negative) after the layout, to
+                fine-tune a picture.
         """
-        return self._add_note(Measure(a, b, text, lane, color))
+        return self._add_note(Measure(a, b, text, lane, color, at=at, level=level, nudge=nudge))
 
     def _add_note(self, note: Note) -> Self:
         if self._layers:
@@ -1086,7 +1107,10 @@ class Timeline:
           (NaN for others); ``change``: ``b_value - a_value`` when both ends are samples of
           one layer;
         - ``a_layer``, ``a_row``, ``a_side`` and the same for ``b``: the mark of an end that
-          is an edge (``None``, -1 and ``None`` for a time).
+          is an edge (``None``, -1 and ``None`` for a time);
+        - ``at``: where its line goes (``"value"`` for [`atl.value`][anytimeline.value]);
+          ``lane``: the lane it was given (``None``: its ends'); ``level``: the level it was
+          given (-1: the first free one).
 
         Measures whose marks the plot no longer has are left out. Of a plot of several
         layers, the table is of the type of the first layer's table.
@@ -1629,6 +1653,7 @@ class Timeline:
             self._scene.order if self._scene is not None else None,
             self._mark_at,
             self._layer_named,
+            [n for n, r in self._layers.items() if isinstance(r, vl.ValuesRecord)],
         )
 
     def _mark_at(self, layer: str, row: int) -> dict[str, Any]:

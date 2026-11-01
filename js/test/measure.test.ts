@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { asPython, commit, describe as describeMeasure, nearestHeld, stepHeld, timePython } from "../src/core/measure";
-import { between, layoutMeasures, measureText, type NoteEnd, type NoteMeasure } from "../src/core/notes";
+import { bandHeight, between, laneLevels, layoutMeasures, measureText, type NoteEnd, type NoteMeasure } from "../src/core/notes";
 import { TimeAxis } from "../src/core/time";
 import type { TimeSpec } from "../src/core/types";
 import type { TimelineView } from "../src/core/view";
@@ -128,20 +128,62 @@ describe("measures: samples of a values layer", () => {
 
 describe("measures: their lines", () => {
   const ctx = { measureText: (t: string) => ({ width: 6 * t.length }) } as unknown as CanvasRenderingContext2D;
-  const plot = { x: 0, y: 0, w: 1000, h: 300 };
+  const plot = { x: 0, y: 40, w: 1000, h: 300 };
   const at = (lane: number, x: number): NoteEnd => ({ x, r: null, lane, side: "start" });
-  const m = (a: number, b: number, id: number): NoteMeasure => ({ a: at(0, a), b: at(0, b), span: b - a, events: null, lane: null, text: null, color: null, id });
+  const m = (a: number, b: number, id: number, over: Partial<NoteMeasure> = {}): NoteMeasure => ({ a: at(0, a), b: at(0, b), span: b - a, events: null, lane: null, text: null, color: null, id, ...over });
+  const view = (over: Partial<Record<string, unknown>> = {}) => fakeView({ measureBands: { head: 0, foot: 0 }, laneH: 100, ...over });
+  const lay = (ms: NoteMeasure[], over: Partial<Record<string, unknown>> = {}) => layoutMeasures(view(over), ctx, ms, plot, 40);
 
   it("stack in a row when they overlap, and share a level when they do not", () => {
-    const laid = layoutMeasures(fakeView(), ctx, [m(0, 30, 0), m(10, 40, 1), m(60, 90, 2)], plot, 0);
-    const y = Object.fromEntries(laid.map((d) => [d.m.id, d.y]));
-    expect(y[1]).toBeGreaterThan(y[0]);
-    expect(y[2]).toBe(y[0]);
+    const { laid } = lay([m(0, 30, 0), m(10, 40, 1), m(60, 90, 2), m(90, 95, 3)]);
+    const k = Object.fromEntries(laid.map((d) => [d.m.id, d.k]));
+    expect(k).toEqual({ 0: 0, 1: 1, 2: 0, 3: 0 }); // touching ends share a level
+    expect(laid[1].y).toBe(laid[0].y + 20);
+  });
+
+  it("keep their levels at any zoom: labels without room are hidden, never lifted", () => {
+    const ms = [m(0, 3, 0, { text: "a long label" }), m(4, 8, 1, { text: "another long one" })];
+    for (const scale of [0.5, 10, 400]) {
+      const { laid } = lay(ms, { camera: { left: 0, scale } });
+      expect(laid.map((d) => d.k)).toEqual([0, 0]);
+    }
+    const near = lay(ms, { camera: { left: 0, scale: 10 } }).laid;
+    expect(near[0].lx).toBeNull(); // 30 px: no room on the line, and the next line is beside it
+    expect(near[1].lx).toBe(near[1].xb + 6);
   });
 
   it("put the label beyond the right end when the line is too short for it", () => {
-    const [d] = layoutMeasures(fakeView(), ctx, [m(10, 11, 0)], plot, 0);
+    const [d] = lay([m(10, 11, 0)]).laid;
     expect(d.lx).toBe(d.xb + 6);
+  });
+
+  it("keep a level they are given, and the others go around it", () => {
+    const { laid } = lay([m(0, 30, 0), m(10, 40, 1, { level: 0 })]);
+    expect(laid.map((d) => d.k)).toEqual([1, 0]);
+  });
+
+  it("go where they are put: top, middle, bottom, between, with a nudge", () => {
+    const ys = (["top", "middle", "bottom", "between"] as const).map((place) => lay([m(0, 30, 0, { at: place })]).laid[0].y);
+    // lane 0 runs from 40 to 140; text 12 px: a label 16 high
+    expect(ys).toEqual([40 + 3 + 8, 90, 140 - 3 - 8, 140]);
+    expect(lay([m(0, 30, 0, { nudge: -4 })]).laid[0].y).toBe(47);
+  });
+
+  it("go to the header when their lane cannot hold them, or when they are in no lane", () => {
+    // a lane of 30 px holds one level
+    const { laid, head, foot } = lay([m(0, 30, 0), m(10, 40, 1), m(20, 50, 2, { at: "top" }), m(5, 6, 3, { a: end(5), b: end(6) })], { laneH: 30 });
+    expect(laid.map((d) => d.place.split(" ")[0])).toEqual(["top", "header", "top", "header"]);
+    expect(laid[2].k).toBe(1); // put at the top: it stays, over the lane's edge
+    expect([head, foot]).toEqual([1, 0]); // the two in the header do not overlap
+    expect(laid[1].y).toBe(40 + 3 + 8); // the band is above the lanes (here: none yet)
+  });
+
+  it("give the bands' heights: a band takes room only when used", () => {
+    expect(bandHeight(0, 12)).toBe(0);
+    expect(bandHeight(1, 12)).toBe(22);
+    expect(bandHeight(3, 12)).toBe(62);
+    expect(laneLevels(30, 12)).toBe(1);
+    expect(laneLevels(100, 12)).toBe(4);
   });
 });
 
@@ -163,5 +205,12 @@ describe("measures: copy as Python", () => {
     const b: NoteEnd = { x: 9, r: 5, lane: 0, side: "end", layer: "e", index: 2 };
     expect(asPython(v, { a, b, span: 7, events: 0, lane: null, text: null, color: null, id: -1 })).toBe('plot.measure(atl.start(3, "b"), atl.end(2, "e"))');
     expect(asPython(v, { a: end(0), b, span: 9, events: 0, lane: null, text: null, color: null, id: -1 })).toBe('plot.measure("2024-01-01T00:00:00", atl.end(2, "e"))');
+  });
+
+  it("writes where it goes", () => {
+    const v = fakeView({ spec: { time: DAYS, lanes: { names: ["api", "db"] } } });
+    const m: NoteMeasure = { a: end(0), b: end(9), span: 9, events: 0, lane: 1, text: "wait {time}", color: null, id: -1, at: "bottom", level: 2, nudge: -3 };
+    expect(asPython(v, m)).toBe('plot.measure("2024-01-01T00:00:00", "2024-01-01T00:00:09", "wait {time}", lane="db", at="bottom", level=2, nudge=-3)');
+    expect(asPython(v, { ...m, text: null, lane: null, level: null, nudge: 0, at: { value: 80, layer: "cpu" } })).toBe('plot.measure("2024-01-01T00:00:00", "2024-01-01T00:00:09", at=atl.value(80, "cpu"))');
   });
 });

@@ -94,6 +94,35 @@ next or previous edge in its lane.
 Hover a measure's time for both ends' times and the time between, exactly. Click it to select
 it: drag its ends to other edges, press <kbd>Delete</kbd> to remove it, or use its menu.
 
+### Where a measure goes
+
+A measure's line goes in a lane: the one you give (`lane=`), else the upper of its ends'
+lanes. `at=` says where in it, or in a band above or below the lanes:
+
+```python
+plot.measure(atl.end(12), atl.start(40))                     # "auto": the top of the lane
+plot.measure(atl.end(12), atl.start(40), at="middle")        # through the marks, in the gap
+plot.measure(atl.end(3), atl.start(9), lane="db", at="bottom")
+plot.measure(atl.end(3), atl.start(9), at="between")         # on the border under the lane
+plot.measure(t0, t1, "freeze", at="header")                   # a band above the lanes
+plot.measure(atl.start(8, "cpu"), atl.start(20, "cpu"), at=atl.value(80))  # at 80 on cpu's scale
+```
+
+| `at=` | The line |
+| --- | --- |
+| `"auto"` | at the top of the lane; levels the lane has no room for continue in the header |
+| `"top"`, `"bottom"` | at the top or bottom of the lane, stacking down or up from there |
+| `"middle"` | through the middle of the lane, at the height of the marks |
+| `"between"` | on the border under the lane |
+| `"header"`, `"footer"` | in a band above or below the lanes; a band takes room only when used |
+| `atl.value(v)` | at value `v` on a values layer's scale |
+
+Measures that overlap in time stack, each on the first free level. `level=` keeps one on a
+level (0: nearest the edge it stacks from), and the others go around it. The levels are laid
+out in time, so zooming and panning never move a measure: a label that has no room beside
+its line is shown when the measure is hovered or selected. A measure of two times, in no
+lane, goes to the header. `nudge=` moves a line a few pixels after all that, for a picture.
+
 Measures made in the plot come to Python, and `plot.measured` is a table of them all, of the
 type you plotted, a row per measure: its index in `plot.notes`, its text, both ends' times,
 the time between as a duration (`b - a`, so negative when `b` is earlier), the events

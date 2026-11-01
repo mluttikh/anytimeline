@@ -23394,6 +23394,6029 @@
    ]
   }
  ],
+ "measures": [
+  {
+   "geoms": [
+    {
+     "xa": 144,
+     "xb": 145.6,
+     "ua": 60,
+     "ub": 64,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 160,
+     "xb": 160,
+     "ua": 100,
+     "ub": 100,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 146.8,
+     "xb": 158.4,
+     "ua": 67,
+     "ub": 96,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 122.8,
+     "xb": 132.4,
+     "ua": 7,
+     "ub": 31,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 153.6,
+     "xb": 162.4,
+     "ua": 84,
+     "ub": 106,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 132.4,
+     "xb": 143.2,
+     "ua": 31,
+     "ub": 58,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 144,
+     "xb": 146.4,
+     "ua": 60,
+     "ub": 66,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 143.6,
+     "xb": 148.8,
+     "ua": 59,
+     "ub": 72,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "middle",
+     "valueY": null,
+     "level": 2,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 144,
+     "xb": 150.8,
+     "ua": 60,
+     "ub": 77,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "value",
+     "valueY": 249,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 120,
+     "xb": 121.2,
+     "ua": 0,
+     "ub": 3,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 153.6,
+     "xb": 154.8,
+     "ua": 84,
+     "ub": 87,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 153.2,
+     "xb": 154.8,
+     "ua": 83,
+     "ub": 87,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 159.6,
+     "xb": 160.8,
+     "ua": 99,
+     "ub": 102,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 140,
+     "xb": 143.2,
+     "ua": 50,
+     "ub": 58,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 143.2,
+     "xb": 154.4,
+     "ua": 58,
+     "ub": 86,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 133.6,
+     "xb": 131.2,
+     "ua": 34,
+     "ub": 28,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 144,
+     "xb": 151.2,
+     "ua": 60,
+     "ub": 78,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "value",
+     "valueY": 96,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 124.4,
+     "xb": 134.8,
+     "ua": 11,
+     "ub": 37,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxx",
+     "tw": 50
+    },
+    {
+     "xa": 159.2,
+     "xb": 157.2,
+     "ua": 98,
+     "ub": 93,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 156,
+     "xb": 160.4,
+     "ua": 90,
+     "ub": 101,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 128.8,
+     "xb": 126.8,
+     "ua": 22,
+     "ub": 17,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "header",
+     "valueY": null,
+     "level": 1,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 128.8,
+     "xb": 128,
+     "ua": 22,
+     "ub": 20,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 159.6,
+     "xb": 158.8,
+     "ua": 99,
+     "ub": 97,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 122.4,
+     "xb": 119.2,
+     "ua": 6,
+     "ub": -2,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    }
+   ],
+   "frame": {
+    "fs": 12,
+    "plot": {
+     "x": 120,
+     "y": 66,
+     "w": 600,
+     "h": 120
+    },
+    "laneTop": 66,
+    "laneH": 30,
+    "headTop": 44,
+    "footTop": 186
+   },
+   "head": 2,
+   "foot": 1,
+   "laid": [
+    [
+     "bottom",
+     0,
+     145,
+     151.6
+    ],
+    [
+     "header",
+     0,
+     52,
+     null
+    ],
+    [
+     "footer",
+     0,
+     197,
+     164.4
+    ],
+    [
+     "header",
+     0,
+     55,
+     null
+    ],
+    [
+     "top",
+     0,
+     77,
+     168.4
+    ],
+    [
+     "bottom",
+     0,
+     115,
+     149.2
+    ],
+    [
+     "header",
+     0,
+     55,
+     null
+    ],
+    [
+     "middle",
+     2,
+     151,
+     154.8
+    ],
+    [
+     "value",
+     0,
+     249,
+     156.8
+    ],
+    [
+     "header",
+     0,
+     55,
+     null
+    ],
+    [
+     "header",
+     0,
+     55,
+     null
+    ],
+    [
+     "top",
+     0,
+     164,
+     160.8
+    ],
+    [
+     "bottom",
+     0,
+     175,
+     166.8
+    ],
+    [
+     "header",
+     0,
+     55,
+     null
+    ],
+    [
+     "middle",
+     0,
+     141,
+     160.4
+    ],
+    [
+     "top",
+     0,
+     167,
+     null
+    ],
+    [
+     "value",
+     0,
+     96,
+     157.2
+    ],
+    [
+     "top",
+     0,
+     137,
+     140.8
+    ],
+    [
+     "bottom",
+     0,
+     85,
+     165.2
+    ],
+    [
+     "middle",
+     0,
+     171,
+     166.4
+    ],
+    [
+     "header",
+     1,
+     75,
+     134.8
+    ],
+    [
+     "bottom",
+     0,
+     115,
+     null
+    ],
+    [
+     "header",
+     0,
+     55,
+     165.6
+    ],
+    [
+     "top",
+     0,
+     77,
+     null
+    ]
+   ]
+  },
+  {
+   "geoms": [
+    {
+     "xa": 216,
+     "xb": 249,
+     "ua": 32,
+     "ub": 43,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 345,
+     "xb": 381,
+     "ua": 75,
+     "ub": 87,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "auto",
+     "valueY": null,
+     "level": 0,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 312,
+     "xb": 354,
+     "ua": 64,
+     "ub": 78,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxx",
+     "tw": 57
+    },
+    {
+     "xa": 279,
+     "xb": 348,
+     "ua": 53,
+     "ub": 76,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "value",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 408,
+     "xb": 495,
+     "ua": 96,
+     "ub": 125,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 405,
+     "xb": 381,
+     "ua": 95,
+     "ub": 87,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 222,
+     "xb": 222,
+     "ua": 34,
+     "ub": 34,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxx",
+     "tw": 57
+    },
+    {
+     "xa": 273,
+     "xb": 264,
+     "ua": 51,
+     "ub": 48,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 213,
+     "xb": 252,
+     "ua": 31,
+     "ub": 44,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "value",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 147,
+     "xb": 141,
+     "ua": 9,
+     "ub": 7,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "middle",
+     "valueY": null,
+     "level": 0,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 357,
+     "xb": 381,
+     "ua": 79,
+     "ub": 87,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 207,
+     "xb": 186,
+     "ua": 29,
+     "ub": 22,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 153,
+     "xb": 153,
+     "ua": 11,
+     "ub": 11,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 417,
+     "xb": 510,
+     "ua": 99,
+     "ub": 130,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 273,
+     "xb": 261,
+     "ua": 51,
+     "ub": 47,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 201,
+     "xb": 297,
+     "ua": 27,
+     "ub": 59,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 132,
+     "xb": 150,
+     "ua": 4,
+     "ub": 10,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 267,
+     "xb": 288,
+     "ua": 49,
+     "ub": 56,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": 0,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 384,
+     "xb": 474,
+     "ua": 88,
+     "ub": 118,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 147,
+     "xb": 177,
+     "ua": 9,
+     "ub": 19,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxxxx",
+     "tw": 50
+    },
+    {
+     "xa": 177,
+     "xb": 168,
+     "ua": 19,
+     "ub": 16,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxx",
+     "tw": 57
+    },
+    {
+     "xa": 159,
+     "xb": 162,
+     "ua": 13,
+     "ub": 14,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "auto",
+     "valueY": null,
+     "level": 0,
+     "nudge": 0,
+     "text": "xxxxxx",
+     "tw": 50
+    },
+    {
+     "xa": 132,
+     "xb": 216,
+     "ua": 4,
+     "ub": 32,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 252,
+     "xb": 327,
+     "ua": 44,
+     "ub": 69,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    }
+   ],
+   "frame": {
+    "fs": 12,
+    "plot": {
+     "x": 120,
+     "y": 66,
+     "w": 600,
+     "h": 120
+    },
+    "laneTop": 66,
+    "laneH": 30,
+    "headTop": 44,
+    "footTop": 186
+   },
+   "head": 1,
+   "foot": 1,
+   "laid": [
+    [
+     "bottom",
+     0,
+     145,
+     255
+    ],
+    [
+     "top",
+     0,
+     137,
+     387
+    ],
+    [
+     "footer",
+     0,
+     197,
+     null
+    ],
+    [
+     "top",
+     1,
+     157,
+     354
+    ],
+    [
+     "footer",
+     0,
+     194,
+     444
+    ],
+    [
+     "footer",
+     0,
+     197,
+     360
+    ],
+    [
+     "middle",
+     0,
+     171,
+     228
+    ],
+    [
+     "bottom",
+     0,
+     82,
+     279
+    ],
+    [
+     "top",
+     0,
+     137,
+     258
+    ],
+    [
+     "middle",
+     0,
+     141,
+     153
+    ],
+    [
+     "header",
+     0,
+     55,
+     387
+    ],
+    [
+     "footer",
+     0,
+     197,
+     213
+    ],
+    [
+     "top",
+     0,
+     107,
+     159
+    ],
+    [
+     "between",
+     0,
+     156,
+     424.5
+    ],
+    [
+     "header",
+     0,
+     55,
+     279
+    ],
+    [
+     "between",
+     0,
+     186,
+     241.5
+    ],
+    [
+     "between",
+     0,
+     96,
+     156
+    ],
+    [
+     "top",
+     0,
+     107,
+     294
+    ],
+    [
+     "top",
+     0,
+     77,
+     418
+    ],
+    [
+     "top",
+     0,
+     134,
+     null
+    ],
+    [
+     "header",
+     0,
+     55,
+     183
+    ],
+    [
+     "header",
+     0,
+     55,
+     null
+    ],
+    [
+     "top",
+     0,
+     77,
+     null
+    ],
+    [
+     "top",
+     0,
+     167,
+     333
+    ]
+   ]
+  },
+  {
+   "geoms": [
+    {
+     "xa": 2195,
+     "xb": 2670,
+     "ua": 83,
+     "ub": 102,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "between",
+     "valueY": null,
+     "level": 1,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 520,
+     "xb": 645,
+     "ua": 16,
+     "ub": 21,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 1820,
+     "xb": 2095,
+     "ua": 68,
+     "ub": 79,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 2370,
+     "xb": 2770,
+     "ua": 90,
+     "ub": 106,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 745,
+     "xb": 1045,
+     "ua": 25,
+     "ub": 37,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 845,
+     "xb": 695,
+     "ua": 29,
+     "ub": 23,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 2570,
+     "xb": 3295,
+     "ua": 98,
+     "ub": 127,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 195,
+     "xb": 45,
+     "ua": 3,
+     "ub": -3,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 1045,
+     "xb": 1495,
+     "ua": 37,
+     "ub": 55,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxx",
+     "tw": 57
+    },
+    {
+     "xa": 1095,
+     "xb": 1195,
+     "ua": 39,
+     "ub": 43,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 2445,
+     "xb": 2970,
+     "ua": 93,
+     "ub": 114,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxx",
+     "tw": 50
+    },
+    {
+     "xa": 495,
+     "xb": 570,
+     "ua": 15,
+     "ub": 18,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 1895,
+     "xb": 2295,
+     "ua": 71,
+     "ub": 87,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "between",
+     "valueY": null,
+     "level": 1,
+     "nudge": 0,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 1945,
+     "xb": 2145,
+     "ua": 73,
+     "ub": 81,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 1945,
+     "xb": 2620,
+     "ua": 73,
+     "ub": 100,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 1495,
+     "xb": 1970,
+     "ua": 55,
+     "ub": 74,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 745,
+     "xb": 1045,
+     "ua": 25,
+     "ub": 37,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 1195,
+     "xb": 1045,
+     "ua": 43,
+     "ub": 37,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 2445,
+     "xb": 3020,
+     "ua": 93,
+     "ub": 116,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 2020,
+     "xb": 2245,
+     "ua": 76,
+     "ub": 85,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": 0,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 545,
+     "xb": 445,
+     "ua": 17,
+     "ub": 13,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 1845,
+     "xb": 2045,
+     "ua": 69,
+     "ub": 77,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 2245,
+     "xb": 2670,
+     "ua": 85,
+     "ub": 102,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxxxx",
+     "tw": 50
+    },
+    {
+     "xa": 1720,
+     "xb": 2320,
+     "ua": 64,
+     "ub": 88,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    }
+   ],
+   "frame": {
+    "fs": 12,
+    "plot": {
+     "x": 120,
+     "y": 66,
+     "w": 600,
+     "h": 120
+    },
+    "laneTop": 66,
+    "laneH": 30,
+    "headTop": 44,
+    "footTop": 186
+   },
+   "head": 3,
+   "foot": 2,
+   "laid": [
+    [
+     "between",
+     1,
+     166,
+     683
+    ],
+    [
+     "bottom",
+     0,
+     115,
+     540
+    ],
+    [
+     "header",
+     1,
+     75,
+     641
+    ],
+    [
+     "between",
+     1,
+     106,
+     704
+    ],
+    [
+     "top",
+     0,
+     164,
+     704
+    ],
+    [
+     "top",
+     0,
+     77,
+     655
+    ],
+    [
+     "header",
+     1,
+     75,
+     648
+    ],
+    [
+     "top",
+     0,
+     107,
+     121
+    ],
+    [
+     "top",
+     0,
+     167,
+     662
+    ],
+    [
+     "top",
+     0,
+     77,
+     null
+    ],
+    [
+     "header",
+     0,
+     55,
+     669
+    ],
+    [
+     "footer",
+     0,
+     197,
+     null
+    ],
+    [
+     "between",
+     1,
+     136,
+     704
+    ],
+    [
+     "header",
+     2,
+     95,
+     676
+    ],
+    [
+     "between",
+     0,
+     126,
+     641
+    ],
+    [
+     "top",
+     0,
+     137,
+     641
+    ],
+    [
+     "top",
+     1,
+     187,
+     655
+    ],
+    [
+     "header",
+     0,
+     55,
+     683
+    ],
+    [
+     "footer",
+     1,
+     217,
+     null
+    ],
+    [
+     "top",
+     0,
+     107,
+     676
+    ],
+    [
+     "header",
+     0,
+     55,
+     473.5
+    ],
+    [
+     "top",
+     0,
+     167,
+     676
+    ],
+    [
+     "footer",
+     0,
+     194,
+     669
+    ],
+    [
+     "header",
+     0,
+     55,
+     null
+    ]
+   ]
+  },
+  {
+   "geoms": [
+    {
+     "xa": 128,
+     "xb": 125.6,
+     "ua": 20,
+     "ub": 14,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 122,
+     "xb": 131.2,
+     "ua": 5,
+     "ub": 28,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 136.4,
+     "xb": 133.6,
+     "ua": 41,
+     "ub": 34,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 145.6,
+     "xb": 148.8,
+     "ua": 64,
+     "ub": 72,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 141.2,
+     "xb": 144,
+     "ua": 53,
+     "ub": 60,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 121.6,
+     "xb": 132.4,
+     "ua": 4,
+     "ub": 31,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 123.2,
+     "xb": 126.8,
+     "ua": 8,
+     "ub": 17,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxxx",
+     "tw": 92
+    },
+    {
+     "xa": 128.4,
+     "xb": 140.4,
+     "ua": 21,
+     "ub": 51,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 135.2,
+     "xb": 145.2,
+     "ua": 38,
+     "ub": 63,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 138.4,
+     "xb": 138,
+     "ua": 46,
+     "ub": 45,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 132.4,
+     "xb": 143.6,
+     "ua": 31,
+     "ub": 59,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "auto",
+     "valueY": null,
+     "level": 0,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 144.4,
+     "xb": 155.2,
+     "ua": 61,
+     "ub": 88,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "middle",
+     "valueY": null,
+     "level": 0,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 157.2,
+     "xb": 168.4,
+     "ua": 93,
+     "ub": 121,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 136.4,
+     "xb": 145.2,
+     "ua": 41,
+     "ub": 63,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 156.4,
+     "xb": 155.6,
+     "ua": 91,
+     "ub": 89,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": 2,
+     "nudge": 0,
+     "text": "xxxxxxx",
+     "tw": 57
+    },
+    {
+     "xa": 150.4,
+     "xb": 158.4,
+     "ua": 76,
+     "ub": 96,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "footer",
+     "valueY": null,
+     "level": 0,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 125.2,
+     "xb": 136.4,
+     "ua": 13,
+     "ub": 41,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxx",
+     "tw": 50
+    },
+    {
+     "xa": 137.6,
+     "xb": 137.6,
+     "ua": 44,
+     "ub": 44,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "auto",
+     "valueY": null,
+     "level": 0,
+     "nudge": -3,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 121.6,
+     "xb": 130.8,
+     "ua": 4,
+     "ub": 27,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 143.2,
+     "xb": 144.8,
+     "ua": 58,
+     "ub": 62,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "top",
+     "valueY": null,
+     "level": 2,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 148,
+     "xb": 156.4,
+     "ua": 70,
+     "ub": 91,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 143.6,
+     "xb": 152,
+     "ua": 59,
+     "ub": 80,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 151.6,
+     "xb": 160.4,
+     "ua": 79,
+     "ub": 101,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 140.4,
+     "xb": 142.8,
+     "ua": 51,
+     "ub": 57,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxx",
+     "tw": 50
+    }
+   ],
+   "frame": {
+    "fs": 12,
+    "plot": {
+     "x": 120,
+     "y": 66,
+     "w": 600,
+     "h": 256
+    },
+    "laneTop": 66,
+    "laneH": 64,
+    "headTop": 44,
+    "footTop": 322
+   },
+   "head": 1,
+   "foot": 2,
+   "laid": [
+    [
+     "top",
+     0,
+     141,
+     null
+    ],
+    [
+     "top",
+     1,
+     97,
+     null
+    ],
+    [
+     "top",
+     1,
+     97,
+     142.4
+    ],
+    [
+     "footer",
+     0,
+     333,
+     null
+    ],
+    [
+     "between",
+     0,
+     194,
+     150
+    ],
+    [
+     "footer",
+     0,
+     333,
+     null
+    ],
+    [
+     "footer",
+     1,
+     353,
+     132.8
+    ],
+    [
+     "top",
+     0,
+     269,
+     146.4
+    ],
+    [
+     "between",
+     0,
+     322,
+     151.2
+    ],
+    [
+     "header",
+     0,
+     55,
+     null
+    ],
+    [
+     "top",
+     0,
+     77,
+     149.6
+    ],
+    [
+     "middle",
+     0,
+     98,
+     null
+    ],
+    [
+     "top",
+     0,
+     141,
+     174.4
+    ],
+    [
+     "bottom",
+     0,
+     119,
+     151.2
+    ],
+    [
+     "top",
+     2,
+     181,
+     162.4
+    ],
+    [
+     "footer",
+     0,
+     333,
+     164.4
+    ],
+    [
+     "middle",
+     0,
+     226,
+     142.4
+    ],
+    [
+     "top",
+     0,
+     202,
+     143.6
+    ],
+    [
+     "top",
+     0,
+     77,
+     null
+    ],
+    [
+     "top",
+     2,
+     309,
+     150.8
+    ],
+    [
+     "middle",
+     0,
+     290,
+     162.4
+    ],
+    [
+     "middle",
+     1,
+     118,
+     158
+    ],
+    [
+     "bottom",
+     0,
+     311,
+     166.4
+    ],
+    [
+     "header",
+     0,
+     55,
+     148.8
+    ]
+   ]
+  },
+  {
+   "geoms": [
+    {
+     "xa": 261,
+     "xb": 324,
+     "ua": 47,
+     "ub": 68,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "value",
+     "valueY": 253,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 183,
+     "xb": 216,
+     "ua": 21,
+     "ub": 32,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "value",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxx",
+     "tw": 50
+    },
+    {
+     "xa": 303,
+     "xb": 399,
+     "ua": 61,
+     "ub": 93,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 378,
+     "xb": 405,
+     "ua": 86,
+     "ub": 95,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 255,
+     "xb": 249,
+     "ua": 45,
+     "ub": 43,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "middle",
+     "valueY": null,
+     "level": 1,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 384,
+     "xb": 414,
+     "ua": 88,
+     "ub": 98,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "bottom",
+     "valueY": null,
+     "level": 1,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 222,
+     "xb": 282,
+     "ua": 34,
+     "ub": 54,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "between",
+     "valueY": null,
+     "level": 0,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 294,
+     "xb": 279,
+     "ua": 58,
+     "ub": 53,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 123,
+     "xb": 141,
+     "ua": 1,
+     "ub": 7,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxx",
+     "tw": 57
+    },
+    {
+     "xa": 162,
+     "xb": 219,
+     "ua": 14,
+     "ub": 33,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 360,
+     "xb": 354,
+     "ua": 80,
+     "ub": 78,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxxx",
+     "tw": 92
+    },
+    {
+     "xa": 315,
+     "xb": 366,
+     "ua": 65,
+     "ub": 82,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "value",
+     "valueY": 191,
+     "level": 1,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 324,
+     "xb": 336,
+     "ua": 68,
+     "ub": 72,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 363,
+     "xb": 384,
+     "ua": 81,
+     "ub": 88,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 417,
+     "xb": 450,
+     "ua": 99,
+     "ub": 110,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "auto",
+     "valueY": null,
+     "level": 1,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 273,
+     "xb": 276,
+     "ua": 51,
+     "ub": 52,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "auto",
+     "valueY": null,
+     "level": 0,
+     "nudge": 0,
+     "text": "xxxxxxx",
+     "tw": 57
+    },
+    {
+     "xa": 141,
+     "xb": 174,
+     "ua": 7,
+     "ub": 18,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 318,
+     "xb": 405,
+     "ua": 66,
+     "ub": 95,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "value",
+     "valueY": 60,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 135,
+     "xb": 159,
+     "ua": 5,
+     "ub": 13,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "value",
+     "valueY": 243,
+     "level": null,
+     "nudge": 0,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 327,
+     "xb": 309,
+     "ua": 69,
+     "ub": 63,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxxx",
+     "tw": 92
+    },
+    {
+     "xa": 345,
+     "xb": 384,
+     "ua": 75,
+     "ub": 88,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 195,
+     "xb": 225,
+     "ua": 25,
+     "ub": 35,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxxxx",
+     "tw": 50
+    },
+    {
+     "xa": 306,
+     "xb": 318,
+     "ua": 62,
+     "ub": 66,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 354,
+     "xb": 369,
+     "ua": 78,
+     "ub": 83,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    }
+   ],
+   "frame": {
+    "fs": 12,
+    "plot": {
+     "x": 120,
+     "y": 66,
+     "w": 600,
+     "h": 256
+    },
+    "laneTop": 66,
+    "laneH": 64,
+    "headTop": 44,
+    "footTop": 322
+   },
+   "head": 2,
+   "foot": 0,
+   "laid": [
+    [
+     "value",
+     0,
+     253,
+     271
+    ],
+    [
+     "top",
+     0,
+     141,
+     222
+    ],
+    [
+     "top",
+     0,
+     141,
+     333
+    ],
+    [
+     "header",
+     1,
+     75,
+     411
+    ],
+    [
+     "middle",
+     1,
+     310,
+     261
+    ],
+    [
+     "bottom",
+     1,
+     99,
+     420
+    ],
+    [
+     "between",
+     0,
+     194,
+     230.5
+    ],
+    [
+     "header",
+     0,
+     55,
+     null
+    ],
+    [
+     "header",
+     0,
+     55,
+     147
+    ],
+    [
+     "bottom",
+     0,
+     311,
+     225
+    ],
+    [
+     "between",
+     0,
+     322,
+     366
+    ],
+    [
+     "value",
+     1,
+     211,
+     372
+    ],
+    [
+     "bottom",
+     0,
+     311,
+     342
+    ],
+    [
+     "between",
+     0,
+     255,
+     390
+    ],
+    [
+     "top",
+     1,
+     97,
+     456
+    ],
+    [
+     "top",
+     0,
+     77,
+     282
+    ],
+    [
+     "bottom",
+     0,
+     183,
+     null
+    ],
+    [
+     "header",
+     0,
+     55,
+     343.5
+    ],
+    [
+     "value",
+     0,
+     243,
+     165
+    ],
+    [
+     "bottom",
+     0,
+     183,
+     333
+    ],
+    [
+     "middle",
+     0,
+     98,
+     353.5
+    ],
+    [
+     "top",
+     0,
+     266,
+     231
+    ],
+    [
+     "middle",
+     0,
+     290,
+     null
+    ],
+    [
+     "middle",
+     0,
+     290,
+     375
+    ]
+   ]
+  },
+  {
+   "geoms": [
+    {
+     "xa": 2145,
+     "xb": 2420,
+     "ua": 81,
+     "ub": 92,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 895,
+     "xb": 745,
+     "ua": 31,
+     "ub": 25,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 1170,
+     "xb": 1320,
+     "ua": 42,
+     "ub": 48,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 2345,
+     "xb": 2370,
+     "ua": 89,
+     "ub": 90,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "auto",
+     "valueY": null,
+     "level": 1,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 120,
+     "xb": 95,
+     "ua": 0,
+     "ub": -1,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxx",
+     "tw": 57
+    },
+    {
+     "xa": 1345,
+     "xb": 1570,
+     "ua": 49,
+     "ub": 58,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxx",
+     "tw": 50
+    },
+    {
+     "xa": 1895,
+     "xb": 2120,
+     "ua": 71,
+     "ub": 80,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 2420,
+     "xb": 2345,
+     "ua": 92,
+     "ub": 89,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "value",
+     "valueY": 359,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 2270,
+     "xb": 2170,
+     "ua": 86,
+     "ub": 82,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 2170,
+     "xb": 2195,
+     "ua": 82,
+     "ub": 83,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 2545,
+     "xb": 2595,
+     "ua": 97,
+     "ub": 99,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 1795,
+     "xb": 1670,
+     "ua": 67,
+     "ub": 62,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 2145,
+     "xb": 2095,
+     "ua": 81,
+     "ub": 79,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 1695,
+     "xb": 2070,
+     "ua": 63,
+     "ub": 78,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 1195,
+     "xb": 1520,
+     "ua": 43,
+     "ub": 56,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 970,
+     "xb": 1070,
+     "ua": 34,
+     "ub": 38,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 1245,
+     "xb": 1970,
+     "ua": 45,
+     "ub": 74,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 1895,
+     "xb": 2220,
+     "ua": 71,
+     "ub": 84,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 1095,
+     "xb": 1170,
+     "ua": 39,
+     "ub": 42,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 2345,
+     "xb": 2945,
+     "ua": 89,
+     "ub": 113,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 1870,
+     "xb": 2620,
+     "ua": 70,
+     "ub": 100,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 1070,
+     "xb": 1345,
+     "ua": 38,
+     "ub": 49,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 1545,
+     "xb": 2045,
+     "ua": 57,
+     "ub": 77,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxxxxx",
+     "tw": 57
+    },
+    {
+     "xa": 145,
+     "xb": 270,
+     "ua": 1,
+     "ub": 6,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    }
+   ],
+   "frame": {
+    "fs": 12,
+    "plot": {
+     "x": 120,
+     "y": 66,
+     "w": 600,
+     "h": 256
+    },
+    "laneTop": 66,
+    "laneH": 64,
+    "headTop": 44,
+    "footTop": 322
+   },
+   "head": 2,
+   "foot": 1,
+   "laid": [
+    [
+     "top",
+     0,
+     205,
+     641
+    ],
+    [
+     "between",
+     0,
+     258,
+     683
+    ],
+    [
+     "top",
+     0,
+     141,
+     648
+    ],
+    [
+     "header",
+     1,
+     75,
+     2303
+    ],
+    [
+     "header",
+     0,
+     55,
+     126
+    ],
+    [
+     "top",
+     0,
+     205,
+     669
+    ],
+    [
+     "header",
+     0,
+     55,
+     676
+    ],
+    [
+     "value",
+     0,
+     359,
+     2268
+    ],
+    [
+     "header",
+     0,
+     52,
+     648
+    ],
+    [
+     "middle",
+     0,
+     159,
+     2086
+    ],
+    [
+     "header",
+     1,
+     75,
+     null
+    ],
+    [
+     "header",
+     0,
+     55,
+     641
+    ],
+    [
+     "top",
+     0,
+     205,
+     null
+    ],
+    [
+     "top",
+     0,
+     202,
+     641
+    ],
+    [
+     "top",
+     0,
+     269,
+     655
+    ],
+    [
+     "top",
+     0,
+     269,
+     704
+    ],
+    [
+     "middle",
+     0,
+     290,
+     690
+    ],
+    [
+     "middle",
+     0,
+     95,
+     704
+    ],
+    [
+     "bottom",
+     0,
+     311,
+     690
+    ],
+    [
+     "header",
+     0,
+     55,
+     648
+    ],
+    [
+     "between",
+     0,
+     258,
+     683
+    ],
+    [
+     "between",
+     0,
+     255,
+     697
+    ],
+    [
+     "top",
+     1,
+     222,
+     662
+    ],
+    [
+     "footer",
+     0,
+     333,
+     193
+    ]
+   ]
+  },
+  {
+   "geoms": [
+    {
+     "xa": 134.4,
+     "xb": 144.4,
+     "ua": 36,
+     "ub": 61,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 149.2,
+     "xb": 158.4,
+     "ua": 73,
+     "ub": 96,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 146,
+     "xb": 157.2,
+     "ua": 65,
+     "ub": 93,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "value",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 133.6,
+     "xb": 142.4,
+     "ua": 34,
+     "ub": 56,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 157.2,
+     "xb": 160.4,
+     "ua": 93,
+     "ub": 101,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "top",
+     "valueY": null,
+     "level": 0,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 152.4,
+     "xb": 161.2,
+     "ua": 81,
+     "ub": 103,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 152.4,
+     "xb": 158.8,
+     "ua": 81,
+     "ub": 97,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 136.8,
+     "xb": 135.2,
+     "ua": 42,
+     "ub": 38,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 126.4,
+     "xb": 128.4,
+     "ua": 16,
+     "ub": 21,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxx",
+     "tw": 50
+    },
+    {
+     "xa": 155.6,
+     "xb": 162.4,
+     "ua": 89,
+     "ub": 106,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 137.2,
+     "xb": 138.4,
+     "ua": 43,
+     "ub": 46,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 125.6,
+     "xb": 128.4,
+     "ua": 14,
+     "ub": 21,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 139.6,
+     "xb": 144,
+     "ua": 49,
+     "ub": 60,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxxx",
+     "tw": 92
+    },
+    {
+     "xa": 128.8,
+     "xb": 136.8,
+     "ua": 22,
+     "ub": 42,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 123.2,
+     "xb": 128.4,
+     "ua": 8,
+     "ub": 21,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxx",
+     "tw": 50
+    },
+    {
+     "xa": 147.6,
+     "xb": 152.8,
+     "ua": 69,
+     "ub": 82,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 158.4,
+     "xb": 157.6,
+     "ua": 96,
+     "ub": 94,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "value",
+     "valueY": 161,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxxx",
+     "tw": 92
+    },
+    {
+     "xa": 121.2,
+     "xb": 129.2,
+     "ua": 3,
+     "ub": 23,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 140,
+     "xb": 143.2,
+     "ua": 50,
+     "ub": 58,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 147.6,
+     "xb": 155.6,
+     "ua": 69,
+     "ub": 89,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxxx",
+     "tw": 92
+    },
+    {
+     "xa": 144,
+     "xb": 146.4,
+     "ua": 60,
+     "ub": 66,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 136,
+     "xb": 136,
+     "ua": 40,
+     "ub": 40,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "value",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxx",
+     "tw": 57
+    },
+    {
+     "xa": 120,
+     "xb": 117.2,
+     "ua": 0,
+     "ub": -7,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 134.8,
+     "xb": 133.2,
+     "ua": 37,
+     "ub": 33,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxx",
+     "tw": 57
+    }
+   ],
+   "frame": {
+    "fs": 12,
+    "plot": {
+     "x": 120,
+     "y": 66,
+     "w": 600,
+     "h": 480
+    },
+    "laneTop": 66,
+    "laneH": 120,
+    "headTop": 44,
+    "footTop": 546
+   },
+   "head": 2,
+   "foot": 1,
+   "laid": [
+    [
+     "top",
+     0,
+     437,
+     null
+    ],
+    [
+     "header",
+     0,
+     55,
+     164.4
+    ],
+    [
+     "top",
+     0,
+     437,
+     163.2
+    ],
+    [
+     "top",
+     1,
+     337,
+     null
+    ],
+    [
+     "top",
+     0,
+     77,
+     166.4
+    ],
+    [
+     "between",
+     0,
+     306,
+     167.2
+    ],
+    [
+     "header",
+     1,
+     75,
+     164.8
+    ],
+    [
+     "footer",
+     0,
+     554,
+     null
+    ],
+    [
+     "top",
+     0,
+     437,
+     null
+    ],
+    [
+     "top",
+     0,
+     317,
+     null
+    ],
+    [
+     "between",
+     0,
+     426,
+     144.4
+    ],
+    [
+     "bottom",
+     0,
+     175,
+     134.4
+    ],
+    [
+     "header",
+     0,
+     55,
+     null
+    ],
+    [
+     "between",
+     0,
+     306,
+     null
+    ],
+    [
+     "between",
+     1,
+     406,
+     134.4
+    ],
+    [
+     "bottom",
+     0,
+     295,
+     158.8
+    ],
+    [
+     "value",
+     0,
+     161,
+     164.4
+    ],
+    [
+     "between",
+     0,
+     426,
+     null
+    ],
+    [
+     "top",
+     1,
+     457,
+     null
+    ],
+    [
+     "top",
+     1,
+     457,
+     161.6
+    ],
+    [
+     "footer",
+     0,
+     557,
+     null
+    ],
+    [
+     "top",
+     0,
+     317,
+     null
+    ],
+    [
+     "header",
+     0,
+     55,
+     null
+    ],
+    [
+     "top",
+     0,
+     317,
+     null
+    ]
+   ]
+  },
+  {
+   "geoms": [
+    {
+     "xa": 153,
+     "xb": 246,
+     "ua": 11,
+     "ub": 42,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "value",
+     "valueY": 99,
+     "level": 0,
+     "nudge": -3,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 393,
+     "xb": 489,
+     "ua": 91,
+     "ub": 123,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxx",
+     "tw": 57
+    },
+    {
+     "xa": 339,
+     "xb": 432,
+     "ua": 73,
+     "ub": 104,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 219,
+     "xb": 273,
+     "ua": 33,
+     "ub": 51,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 177,
+     "xb": 228,
+     "ua": 19,
+     "ub": 36,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 372,
+     "xb": 435,
+     "ua": 84,
+     "ub": 105,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 327,
+     "xb": 381,
+     "ua": 69,
+     "ub": 87,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxx",
+     "tw": 50
+    },
+    {
+     "xa": 336,
+     "xb": 351,
+     "ua": 72,
+     "ub": 77,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 228,
+     "xb": 216,
+     "ua": 36,
+     "ub": 32,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 396,
+     "xb": 486,
+     "ua": 92,
+     "ub": 122,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 312,
+     "xb": 399,
+     "ua": 64,
+     "ub": 93,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "middle",
+     "valueY": null,
+     "level": 0,
+     "nudge": 0,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 171,
+     "xb": 159,
+     "ua": 17,
+     "ub": 13,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 345,
+     "xb": 402,
+     "ua": 75,
+     "ub": 94,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 294,
+     "xb": 294,
+     "ua": 58,
+     "ub": 58,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 336,
+     "xb": 399,
+     "ua": 72,
+     "ub": 93,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 153,
+     "xb": 159,
+     "ua": 11,
+     "ub": 13,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 300,
+     "xb": 327,
+     "ua": 60,
+     "ub": 69,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxx",
+     "tw": 50
+    },
+    {
+     "xa": 366,
+     "xb": 345,
+     "ua": 82,
+     "ub": 75,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "value",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 216,
+     "xb": 243,
+     "ua": 32,
+     "ub": 41,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 276,
+     "xb": 282,
+     "ua": 52,
+     "ub": 54,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 276,
+     "xb": 276,
+     "ua": 52,
+     "ub": 52,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 321,
+     "xb": 315,
+     "ua": 67,
+     "ub": 65,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 420,
+     "xb": 435,
+     "ua": 100,
+     "ub": 105,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 339,
+     "xb": 327,
+     "ua": 73,
+     "ub": 69,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xx",
+     "tw": 22
+    }
+   ],
+   "frame": {
+    "fs": 12,
+    "plot": {
+     "x": 120,
+     "y": 66,
+     "w": 600,
+     "h": 480
+    },
+    "laneTop": 66,
+    "laneH": 120,
+    "headTop": 44,
+    "footTop": 546
+   },
+   "head": 2,
+   "foot": 2,
+   "laid": [
+    [
+     "value",
+     0,
+     96,
+     185
+    ],
+    [
+     "middle",
+     0,
+     486,
+     412.5
+    ],
+    [
+     "top",
+     0,
+     437,
+     353.5
+    ],
+    [
+     "top",
+     0,
+     437,
+     238.5
+    ],
+    [
+     "bottom",
+     0,
+     295,
+     188
+    ],
+    [
+     "header",
+     1,
+     75,
+     441
+    ],
+    [
+     "middle",
+     0,
+     486,
+     null
+    ],
+    [
+     "middle",
+     1,
+     503,
+     357
+    ],
+    [
+     "top",
+     0,
+     317,
+     null
+    ],
+    [
+     "top",
+     0,
+     77,
+     430
+    ],
+    [
+     "header",
+     0,
+     55,
+     344.5
+    ],
+    [
+     "top",
+     0,
+     77,
+     177
+    ],
+    [
+     "middle",
+     0,
+     366,
+     null
+    ],
+    [
+     "middle",
+     0,
+     486,
+     252
+    ],
+    [
+     "footer",
+     1,
+     574,
+     349.5
+    ],
+    [
+     "footer",
+     0,
+     557,
+     165
+    ],
+    [
+     "top",
+     0,
+     197,
+     333
+    ],
+    [
+     "top",
+     1,
+     457,
+     372
+    ],
+    [
+     "bottom",
+     0,
+     415,
+     249
+    ],
+    [
+     "top",
+     0,
+     317,
+     288
+    ],
+    [
+     "footer",
+     0,
+     557,
+     null
+    ],
+    [
+     "between",
+     0,
+     306,
+     327
+    ],
+    [
+     "header",
+     0,
+     55,
+     441
+    ],
+    [
+     "footer",
+     0,
+     554,
+     345
+    ]
+   ]
+  },
+  {
+   "geoms": [
+    {
+     "xa": 1320,
+     "xb": 1995,
+     "ua": 48,
+     "ub": 75,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 1145,
+     "xb": 1320,
+     "ua": 41,
+     "ub": 48,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "footer",
+     "valueY": null,
+     "level": 1,
+     "nudge": 0,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 1120,
+     "xb": 920,
+     "ua": 40,
+     "ub": 32,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 395,
+     "xb": 570,
+     "ua": 11,
+     "ub": 18,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "header",
+     "valueY": null,
+     "level": 0,
+     "nudge": 0,
+     "text": "xxxxxxxxx",
+     "tw": 71
+    },
+    {
+     "xa": 970,
+     "xb": 1620,
+     "ua": 34,
+     "ub": 60,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "x",
+     "tw": 15
+    },
+    {
+     "xa": 1945,
+     "xb": 2695,
+     "ua": 73,
+     "ub": 103,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "middle",
+     "valueY": null,
+     "level": 2,
+     "nudge": 0,
+     "text": "xxxx",
+     "tw": 36
+    },
+    {
+     "xa": 1545,
+     "xb": 1845,
+     "ua": 57,
+     "ub": 69,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 420,
+     "xb": 1145,
+     "ua": 12,
+     "ub": 41,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "top",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxxx",
+     "tw": 92
+    },
+    {
+     "xa": 2370,
+     "xb": 2620,
+     "ua": 90,
+     "ub": 100,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxxx",
+     "tw": 92
+    },
+    {
+     "xa": 2045,
+     "xb": 2270,
+     "ua": 77,
+     "ub": 86,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 1645,
+     "xb": 1970,
+     "ua": 61,
+     "ub": 74,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 1420,
+     "xb": 1870,
+     "ua": 52,
+     "ub": 70,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xx",
+     "tw": 22
+    },
+    {
+     "xa": 520,
+     "xb": 370,
+     "ua": 16,
+     "ub": 10,
+     "rows": [
+      0,
+      0
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 0,
+     "at": "bottom",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 1995,
+     "xb": 2195,
+     "ua": 75,
+     "ub": 83,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 1870,
+     "xb": 2495,
+     "ua": 70,
+     "ub": 95,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxx",
+     "tw": 43
+    },
+    {
+     "xa": 1845,
+     "xb": 2545,
+     "ua": 69,
+     "ub": 97,
+     "rows": [
+      2,
+      2
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 2,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxxx",
+     "tw": 85
+    },
+    {
+     "xa": 845,
+     "xb": 1470,
+     "ua": 29,
+     "ub": 54,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 2395,
+     "xb": 3045,
+     "ua": 91,
+     "ub": 117,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "between",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 1970,
+     "xb": 1920,
+     "ua": 74,
+     "ub": 72,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 2370,
+     "xb": 2370,
+     "ua": 90,
+     "ub": 90,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "middle",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxx",
+     "tw": 29
+    },
+    {
+     "xa": 1745,
+     "xb": 2470,
+     "ua": 65,
+     "ub": 94,
+     "rows": [
+      null,
+      null
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": null,
+     "at": "footer",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "xxxxxxxx",
+     "tw": 64
+    },
+    {
+     "xa": 545,
+     "xb": 470,
+     "ua": 17,
+     "ub": 14,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": -3,
+     "text": "xxxxxxxxxx",
+     "tw": 78
+    },
+    {
+     "xa": 1845,
+     "xb": 1770,
+     "ua": 69,
+     "ub": 66,
+     "rows": [
+      1,
+      1
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 1,
+     "at": "auto",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    },
+    {
+     "xa": 2295,
+     "xb": 3095,
+     "ua": 87,
+     "ub": 119,
+     "rows": [
+      3,
+      3
+     ],
+     "ys": [
+      null,
+      null
+     ],
+     "row": 3,
+     "at": "header",
+     "valueY": null,
+     "level": null,
+     "nudge": 0,
+     "text": "",
+     "tw": 8
+    }
+   ],
+   "frame": {
+    "fs": 12,
+    "plot": {
+     "x": 120,
+     "y": 66,
+     "w": 600,
+     "h": 480
+    },
+    "laneTop": 66,
+    "laneH": 120,
+    "headTop": 44,
+    "footTop": 546
+   },
+   "head": 3,
+   "foot": 2,
+   "laid": [
+    [
+     "footer",
+     1,
+     577,
+     704
+    ],
+    [
+     "footer",
+     1,
+     577,
+     704
+    ],
+    [
+     "top",
+     0,
+     197,
+     634
+    ],
+    [
+     "header",
+     0,
+     55,
+     447
+    ],
+    [
+     "footer",
+     0,
+     557,
+     704
+    ],
+    [
+     "middle",
+     2,
+     526,
+     683
+    ],
+    [
+     "top",
+     0,
+     317,
+     676
+    ],
+    [
+     "top",
+     0,
+     317,
+     627
+    ],
+    [
+     "header",
+     1,
+     75,
+     627
+    ],
+    [
+     "between",
+     0,
+     306,
+     690
+    ],
+    [
+     "header",
+     0,
+     55,
+     641
+    ],
+    [
+     "top",
+     0,
+     197,
+     697
+    ],
+    [
+     "bottom",
+     0,
+     175,
+     null
+    ],
+    [
+     "between",
+     0,
+     423,
+     641
+    ],
+    [
+     "top",
+     0,
+     197,
+     676
+    ],
+    [
+     "top",
+     0,
+     317,
+     634
+    ],
+    [
+     "header",
+     0,
+     52,
+     655
+    ],
+    [
+     "between",
+     0,
+     546,
+     655
+    ],
+    [
+     "header",
+     1,
+     75,
+     1836
+    ],
+    [
+     "header",
+     2,
+     95,
+     2335
+    ],
+    [
+     "footer",
+     0,
+     557,
+     655
+    ],
+    [
+     "header",
+     1,
+     72,
+     551
+    ],
+    [
+     "top",
+     1,
+     217,
+     null
+    ],
+    [
+     "header",
+     0,
+     55,
+     null
+    ]
+   ]
+  }
+ ],
  "wrap": [
   [
    "Deploy checkout 4.12",

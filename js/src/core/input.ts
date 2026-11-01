@@ -159,12 +159,15 @@ export function bindInput(view: TimelineView): void {
     const label = view.menuOpen ? null : measure.labelAt(view, p);
     if (label) {
       picking.setHovered(view, null);
-      picking.showRows(view, `m${label.id}`, measure.describe(view, label));
+      const key = `m${label.id}`;
+      if (view.tooltipKey !== key) view.requestRender(); // a label without room shows
+      picking.showRows(view, key, measure.describe(view, label));
       return;
     }
     if (view.tooltipKey.startsWith("m")) {
       view.tooltipKey = "";
       view.tooltip.classList.remove("atl-show");
+      view.requestRender();
     }
     if (view.hoverEnabled) picking.setHovered(view, picking.pick(view, p.x, p.y));
     const plotNow = view.plot();

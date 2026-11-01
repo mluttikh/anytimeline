@@ -453,15 +453,24 @@ class _Frame:
     dodge: bool
     fade: bool
     marks: dict[str, np.ndarray] = field(default_factory=dict)
+    head_h: int = 0  # the band of measures above the lanes
+    foot_h: int = 0  # and below them
     plot: tuple[float, float, float, float] = (0, 0, 0, 0)
     scale: float = 1.0
     lane_top: float = 0.0
 
     def __post_init__(self) -> None:
         w = max(10, self.width - self.gutter - self.pad_right)
-        self.plot = (self.gutter, self.axis_h, w, max(10, self.height - self.axis_h - PAD_BOTTOM))
+        h = self.height - self.axis_h - self.head_h - self.foot_h - PAD_BOTTOM
+        self.plot = (self.gutter, self.axis_h + self.head_h, w, max(10, h))
         self.scale = w / (self.right - self.left)
-        self.lane_top = self.axis_h - self.scroll
+        self.lane_top = self.axis_h + self.head_h - self.scroll
+
+    @property
+    def area(self) -> tuple[float, float, float, float]:
+        """The lanes and the bands of measures above and below them."""
+        px, py, pw, ph = self.plot
+        return px, py - self.head_h, pw, ph + self.head_h + self.foot_h
 
     def px(self, x: Any) -> Any:
         return self.plot[0] + (x - self.left) * self.scale
@@ -587,27 +596,33 @@ class _Picture:
         self.legend_column = bool(self.legend) and width - gutter - legend_w - 24 >= 360
         pad_right = legend_w + 20 if self.legend_column else PAD_RIGHT
         rows = max(1, len(lane_at))
-        if height:
-            stage_h = max(120, height - self.title_h)
-        else:
-            plot_h = max(min(560, max(80, rows * AUTO_LANE)), rows * min_lane)
-            stage_h = axis_h + PAD_BOTTOM + plot_h
-        plot_h = max(10, stage_h - axis_h - PAD_BOTTOM)
-        lane_h = max(min_lane, plot_h / rows)
-        if tree and tree.get("compact"):
-            lane_h = max(min_lane, min(lane_h, ax.js_round(fs * 2.4)))
-        scroll = 0.0
-        if top_lane is not None and top_lane in names:
-            scroll = max(0, int(slot[names.index(top_lane)])) * lane_h
-        scroll = max(0.0, min(max(0.0, rows * lane_h - plot_h), scroll))
         marks = {k: np.frombuffer(v, dtype="<i4") for k, v in plot._marks.items()}
         left, right = self._range(view)
-        self.f = _Frame(
-            width=width, height=stage_h, fs=fs, axis_h=axis_h, gutter=gutter, pad_right=pad_right,
-            lane_h=lane_h, scroll=scroll, left=left, right=right, lane_at=lane_at, slot=slot,
-            order=self.order, theme=theme, mark_scale=plot.mark_scale, dodge=plot.dodge,
-            fade=any(len(m) for m in marks.values()), marks=marks,
-        )  # fmt: skip
+
+        def frame(head_h: int, foot_h: int) -> _Frame:
+            if height:
+                stage_h = max(120, height - self.title_h)
+            else:
+                plot_h = max(min(560, max(80, rows * AUTO_LANE)), rows * min_lane)
+                stage_h = axis_h + head_h + foot_h + PAD_BOTTOM + plot_h
+            plot_h = max(10, stage_h - axis_h - head_h - foot_h - PAD_BOTTOM)
+            lane_h = max(min_lane, plot_h / rows)
+            if tree and tree.get("compact"):
+                lane_h = max(min_lane, min(lane_h, ax.js_round(fs * 2.4)))
+            scroll = 0.0
+            if top_lane is not None and top_lane in names:
+                scroll = max(0, int(slot[names.index(top_lane)])) * lane_h
+            scroll = max(0.0, min(max(0.0, rows * lane_h - plot_h), scroll))
+            return _Frame(
+                width=width, height=stage_h, fs=fs, axis_h=axis_h, gutter=gutter,
+                pad_right=pad_right, lane_h=lane_h, scroll=scroll, left=left, right=right,
+                lane_at=lane_at, slot=slot, order=self.order, theme=theme,
+                mark_scale=plot.mark_scale, dodge=plot.dodge,
+                fade=any(len(m) for m in marks.values()), marks=marks, head_h=head_h,
+                foot_h=foot_h,
+            )  # fmt: skip
+
+        self.f = frame(0, 0)
         self.in_view = 0
         """Marks in view, as the browser counts them: labels only below LABEL_BUDGET."""
         self.raw_layers: list[tuple[dict[str, Any], dict[str, Any]]] = []
@@ -619,6 +634,13 @@ class _Picture:
         """Per values layer drawn: its runs' lanes and its lanes' bands (the scales)."""
         self.stems_fit: set[str] = set()
         """Stems layers whose text is in boxes on stems (else beside the marks)."""
+        # measures' bands take room when used; what they hold depends on the lanes' height
+        for _ in range(8):
+            head, foot = self._measure_bands()
+            sizes = (band_height(head, fs), band_height(foot, fs))
+            if sizes == (self.f.head_h, self.f.foot_h):
+                break
+            self.f = frame(*sizes)
 
     # -- rows, sizes and range
 
@@ -2015,9 +2037,16 @@ class _Picture:
             return None
         return self.seq.lower(t) - 0.5
 
-    def _note_label(self, text: str, x: float, y: float, color: str) -> None:
+    def _note_label(
+        self,
+        text: str,
+        x: float,
+        y: float,
+        color: str,
+        within: tuple[float, float, float, float] | None = None,
+    ) -> None:
         f, t = self.f, self.theme
-        px, py, pw, ph = f.plot
+        px, py, pw, ph = within or f.plot
         size = f.font(-1)
         w = text_width(text, size) + 8
         lx = max(px + 1, min(x, px + pw - w - 1))
@@ -2191,12 +2220,36 @@ class _Picture:
         middle (beyond its right end when it does not fit). The line is in the measure's
         lane, else the upper of its ends' lanes, else at the top of the plot; measures that
         overlap in a lane stack."""
-        f = self.f
-        laid = layout_measures(self._measure_geometry(measures), f.fs, f.plot, f.lane_top, f.lane_h)
+        f, t = self.f, self.theme
+        px, py, pw, ph = f.plot
+        laid, _, _ = self._layout_measures(measures)
+        if f.head_h:
+            self.svg.rect(px, py - f.head_h, pw, f.head_h, t.band)
+        if f.foot_h:
+            self.svg.rect(px, py + ph, pw, f.foot_h, t.band)
         for d in laid:
             self._dimension(d)
 
+    def _layout_measures(
+        self, measures: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], int, int]:
+        f = self.f
+        _, py, _, ph = f.plot
+        return place_measures(
+            self._measure_geometry(measures), f.fs, f.plot, f.lane_top, f.lane_h,
+            py - f.head_h, py + ph,
+        )  # fmt: skip
+
+    def _measure_bands(self) -> tuple[int, int]:
+        """The levels of measures in the header and footer bands, with the frame as it is."""
+        measures = (self.plot._notes or {}).get("measures") or []
+        if not measures:
+            return 0, 0
+        _, head, foot = self._layout_measures(measures)
+        return head, foot
+
     def _measure_geometry(self, measures: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Each measure's geometry (``measureGeoms``)."""
         f = self.f
         out = []
         size = f.font(-1)
@@ -2206,23 +2259,46 @@ class _Picture:
                 continue
             rows = [self._row_of(n[k]["lane"]) for k in ("a", "b")]
             row = self._row_of(n["lane"]) if n.get("lane") is not None else None
+            lane = n.get("lane")
             if row is None:
                 shown = [r for r in rows if r is not None]
                 row = min(shown) if shown else None
+                lane = None if row is None else n["a"]["lane"] if row == rows[0] else n["b"]["lane"]
             text = self._measure_text(n)
+            at = n.get("at") or "auto"
+            value_y = None
+            if isinstance(at, dict) and lane is not None:
+                value_y = self._value_y(at["layer"], lane, at["value"])
             out.append(
                 {
                     "xa": f.px(xs[0]),
                     "xb": f.px(xs[1]),
+                    "ua": xs[0],
+                    "ub": xs[1],
                     "rows": rows,
                     "ys": [self._sample_y(n[k]) for k in ("a", "b")],
                     "row": row,
+                    "at": "value" if isinstance(at, dict) else at,
+                    "value_y": value_y,
+                    "level": n.get("level"),
+                    "nudge": n.get("nudge") or 0.0,
                     "text": text,
                     "tw": text_width(text, size) + 8,
                     "color": n.get("color") or self.theme.accent,
                 }
             )
         return out
+
+    def _value_y(self, layer: str, lane: int, value: float) -> float | None:
+        """Where a value of a values layer is drawn in a lane (None: not drawn there)."""
+        ylim = self.values_ylim.get(layer)
+        if ylim is None or 2 * lane + 1 >= len(ylim):
+            return None
+        row = int(self.f.slot[lane])
+        lo, hi = float(ylim[2 * lane]), float(ylim[2 * lane + 1])
+        if row < 0 or not (math.isfinite(lo) and math.isfinite(hi)):
+            return None
+        return self._y_of(lo, hi, row)(value)
 
     def _sample_y(self, end: dict[str, Any]) -> float | None:
         """Where an end that is a sample is drawn (``sampleY``; None: no sample, not shown)."""
@@ -2238,11 +2314,11 @@ class _Picture:
     def _dimension(self, d: dict[str, Any]) -> None:
         f = self.f
         px, py, pw, ph = f.plot
-        plot = f.plot
+        plot = f.area  # the lanes and the bands of measures
         y = d["y"]
         color = d["color"]
         lo, hi = min(d["xa"], d["xb"]), max(d["xa"], d["xb"])
-        if hi < px - 1 or lo > px + pw + 1 or y < py or y > py + ph:
+        if hi < px - 1 or lo > px + pw + 1 or y < plot[1] or y > plot[1] + plot[3]:
             return
         ends = ((d["xa"], d["rows"][0], d["ys"][0]), (d["xb"], d["rows"][1], d["ys"][1]))
         for x, row, ys in ends:
@@ -2252,6 +2328,8 @@ class _Picture:
                 y0, y1 = y - 5, y + 5
             else:
                 yc = f.lane_top + (row + 0.5) * f.lane_h
+                if abs(y - yc) < 8:  # through the mark's middle: no extension line
+                    continue
                 away = 1 if y > yc else -1
                 y0, y1 = yc + away * min(6, f.lane_h / 4), y + away * 4
             seg = _clip_segment(x, y0, x, y1, plot)
@@ -2285,8 +2363,8 @@ class _Picture:
         ]
         if dots:
             self.svg.path("".join(dots), fill=color)
-        if d["text"]:
-            self._note_label(d["text"], d["lx"], y - (f.fs + 4) / 2, color)
+        if d["text"] and d["lx"] is not None:  # a label without room shows on hover only
+            self._note_label(d["text"], d["lx"], y - (f.fs + 4) / 2, color, f.area)
 
     # -- gaps
 
@@ -2531,40 +2609,170 @@ SAMPLE_DOT = 2.5
 """The radius of the dot on a sample a measure ends at, in pixels."""
 
 
-def layout_measures(
-    measures: list[dict[str, Any]],
-    fs: int,
+def lane_levels(lane_h: float, fs: float) -> int:
+    """How many levels of measures a lane holds at the top before ``"auto"`` ones go to the
+    header (``laneLevels``)."""
+    return max(1, math.floor((lane_h - 6 - (fs + 4)) / (fs + 8)) + 1)
+
+
+def band_height(levels: int, fs: int) -> int:
+    """The height of a band of ``levels`` levels of measures (0: no band; ``bandHeight``)."""
+    return 6 + fs + 4 + (levels - 1) * (fs + 8) if levels > 0 else 0
+
+
+def _stack(items: list[dict[str, Any]]) -> dict[int, int]:
+    """Levels for measures of one place (``stack``): those with a level keep it; the others,
+    by their earlier end, take the first level where they overlap none (touching ends may
+    share one); one whose first free level is ``cap`` or more takes none (-1)."""
+    out: dict[int, int] = {}
+    ends: dict[int, float] = {}
+    pinned: dict[int, list[tuple[float, float]]] = {}
+    for it in items:
+        if it["level"] is None:
+            continue
+        pinned.setdefault(it["level"], []).append((it["lo"], it["hi"]))
+        out[it["i"]] = it["level"]
+    free = sorted((it for it in items if it["level"] is None), key=lambda it: (it["lo"], it["i"]))
+    for it in free:
+        k = 0
+        while ends.get(k, -math.inf) > it["lo"] or any(
+            lo < it["hi"] and it["lo"] < hi for lo, hi in pinned.get(k, [])
+        ):
+            k += 1
+        if it.get("cap") is not None and k >= it["cap"]:
+            out[it["i"]] = -1
+            continue
+        ends[k] = max(ends.get(k, -math.inf), it["hi"])
+        out[it["i"]] = k
+    return out
+
+
+def place_measures(
+    geoms: list[dict[str, Any]],
+    fs: float,
     plot: tuple[float, float, float, float],
     lane_top: float,
     lane_h: float,
-) -> list[dict[str, Any]]:
-    """Where measures' lines go (``layoutMeasures``): each gets ``y``, its line's height,
-    and ``lx``, its label's left. Per row (None: the top of the plot), measures take the
-    first level whose earlier lines (and labels) end before theirs starts."""
-    px, py, pw, _ = plot
-    step = fs + 8
-    levels: dict[int | None, list[float]] = {}
-    out = []
-    for d in sorted(measures, key=lambda d: min(d["xa"], d["xb"])):
-        lo, hi = min(d["xa"], d["xb"]), max(d["xa"], d["xb"])
+    head_top: float,
+    foot_top: float,
+) -> tuple[list[dict[str, Any]], int, int]:
+    """Where measures' lines go (``placeMeasures``): per place and row, levels from
+    ``_stack`` on the scale shown (zooming never changes them); ``"auto"`` ones the lane
+    cannot hold continue in the header, and a measure in no lane shown goes there. Then
+    labels: on the line where they fit, else beside it where that is free on its level, else
+    none (``lx`` None). Each measure gets ``place``, ``k``, ``y`` and ``lx``; with the levels
+    the header and footer use."""
+    h, step = fs + 4, fs + 8
+    cap = lane_levels(lane_h, fs)
+    kind = []
+    for g in geoms:
+        at = g["at"]
+        if at == "value" and g["value_y"] is None:
+            at = "top"
+        if at not in ("header", "footer") and g["row"] is None:
+            at = "header"
+        kind.append(at)
+    lo = [min(g["ua"], g["ub"]) for g in geoms]
+    hi = [max(g["ua"], g["ub"]) for g in geoms]
+
+    def key(i: int) -> tuple[Any, ...]:
+        at = "top" if kind[i] == "auto" else kind[i]
+        if at in ("header", "footer"):
+            return (at,)
+        if at == "value":
+            return (at, geoms[i]["row"], geoms[i]["value_y"])
+        return (at, geoms[i]["row"])
+
+    groups: dict[tuple[Any, ...], list[int]] = {}
+    for i in range(len(geoms)):
+        k = key(i)
+        if k[0] not in ("header", "footer"):
+            groups.setdefault(k, []).append(i)
+    level: dict[int, int] = {}
+    place: dict[int, tuple[Any, ...]] = {}
+    over: list[int] = []
+    for k, members in groups.items():
+        got = _stack(
+            [
+                {
+                    "lo": lo[i],
+                    "hi": hi[i],
+                    "level": geoms[i]["level"],
+                    "i": i,
+                    "cap": cap if kind[i] == "auto" else None,
+                }
+                for i in members
+            ]
+        )
+        for i in members:
+            if got[i] < 0:
+                over.append(i)
+            else:
+                level[i], place[i] = got[i], k
+    bands = {"header": 0, "footer": 0}
+    for band in ("header", "footer"):
+        own = [i for i in range(len(geoms)) if key(i) == (band,)]
+        got = _stack([{"lo": lo[i], "hi": hi[i], "level": geoms[i]["level"], "i": i} for i in own])
+        members = list(own)
+        if band == "header" and over:
+            # the lanes' overflow comes after the header's own measures, around them
+            members += over
+            got = _stack(
+                [
+                    {"lo": lo[i], "hi": hi[i], "level": None if i in over else got[i], "i": i}
+                    for i in members
+                ]
+            )
+        for i in members:
+            level[i], place[i] = got[i], (band,)
+            bands[band] = max(bands[band], got[i] + 1)
+    laid: list[dict[str, Any]] = []
+    for i, g in enumerate(geoms):
+        k, at = level[i], place[i][0]
+        top = 0 if g["row"] is None else lane_top + g["row"] * lane_h
+        if at == "header":
+            y = head_top + 3 + h / 2 + k * step
+        elif at == "footer":
+            y = foot_top + 3 + h / 2 + k * step
+        elif at == "bottom":
+            y = top + lane_h - 3 - h / 2 - k * step
+        elif at == "middle":
+            y = top + lane_h / 2 + k * step
+        elif at == "between":
+            y = top + lane_h - k * step
+        elif at == "value":
+            y = (g["value_y"] if g["value_y"] is not None else top) + k * step
+        else:
+            y = top + 3 + h / 2 + k * step
+        laid.append({**g, "place": place[i], "k": k, "y": y + g["nudge"], "lx": None})
+    # labels, level by level: the lines first, then each label where it has room
+    spans: dict[tuple[Any, ...], list[tuple[float, float, int]]] = {}
+    for i, d in enumerate(laid):
+        spans.setdefault((*d["place"], d["k"]), []).append(
+            (min(d["xa"], d["xb"]), max(d["xa"], d["xb"]), i)
+        )
+    px, _, pw, _ = plot
+    right = px + pw
+
+    def free_at(s: list[tuple[float, float, int]], a: float, b: float, own: int) -> bool:
+        return not any(j != own and lft < b + 4 and a - 4 < rgt for lft, rgt, j in s)
+
+    for i in sorted(range(len(laid)), key=lambda i: (min(laid[i]["xa"], laid[i]["xb"]), i)):
+        d = laid[i]
+        if not d["text"]:
+            continue
+        lft, rgt = min(d["xa"], d["xb"]), max(d["xa"], d["xb"])
         tw = d["tw"]
-        if tw + 2 * ARROW_LEN <= hi - lo:
-            lx = (lo + hi) / 2 - tw / 2
-        elif hi + 6 + tw <= px + pw:
-            lx = hi + 6
-        else:
-            lx = lo - 6 - tw
-        lx = max(px + 1, min(lx, px + pw - tw - 1))
-        left, right = min(lo, lx), max(hi, lx + tw)
-        ends = levels.setdefault(d["row"], [])
-        k = next((i for i, e in enumerate(ends) if e < left - 4), len(ends))
-        if k == len(ends):
-            ends.append(right)
-        else:
-            ends[k] = right
-        top = py if d["row"] is None else lane_top + d["row"] * lane_h
-        out.append({**d, "y": top + 3 + (fs + 4) / 2 + k * step, "lx": lx})
-    return out
+        s = spans[(*d["place"], d["k"])]
+        if tw + 2 * ARROW_LEN <= rgt - lft:
+            d["lx"] = max(px + 1, min((lft + rgt) / 2 - tw / 2, right - tw - 1))
+        elif rgt + 6 + tw <= right and free_at(s, rgt + 6, rgt + 6 + tw, i):
+            d["lx"] = rgt + 6
+        elif lft - 6 - tw >= px and free_at(s, lft - 6 - tw, lft - 6, i):
+            d["lx"] = lft - 6 - tw
+        if d["lx"] is not None and tw + 2 * ARROW_LEN > rgt - lft:
+            s.append((d["lx"], d["lx"] + tw, -1))
+    return laid, bands["header"], bands["footer"]
 
 
 def _clip_segment(

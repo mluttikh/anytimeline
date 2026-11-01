@@ -24,6 +24,7 @@ __all__ = [
     "EventOverlap",
     "Expand",
     "LaneSort",
+    "MeasurePlace",
     "Renderer",
     "SelectionMode",
     "SpanLayout",
@@ -45,6 +46,10 @@ SelectionMode = Literal["multiple", "single"]
 """What a selection can hold; ``None``: nothing can be selected."""
 Display = Literal["widget", "html"]
 """How a notebook shows a plot: as a widget, connected to Python, or as a page."""
+MeasurePlace = Literal["auto", "top", "middle", "bottom", "between", "header", "footer"]
+"""Where a measure's line goes: ``"auto"`` (the top of its lane; levels the lane cannot hold
+continue in the header), the top, middle or bottom of its lane, on the border under it
+(``"between"``), or a band above the lanes (``"header"``) or below them (``"footer"``)."""
 Align = Literal["time", "start"]
 """What lines up: the same times, or each group's (plot's) first time."""
 LaneSort = Literal["name", "first", "last", "count", "table"]

@@ -13,6 +13,6 @@ Every argument, setting and gesture.
 - [Traces](traces.md): read traces (OTLP, Jaeger, Chrome's format), merge them into a flame
   graph, compare two.
 - [Parts and views](parts.md): `View`, `Route`, `Stem`, the notes (`Annotation`, `Connection`,
-  `Measure`) and their ends (`Edge`, `start`, `end`), and the names of symbols.
+  `Measure`) their ends (`Edge`, `start`, `end`) and heights (`value`), and the names of symbols.
 - [anytimeline.types](types.md): the options of arguments as types, for your own functions.
 - [Example data](synthetic.md): the example logs these pages use.

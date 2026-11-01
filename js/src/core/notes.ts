@@ -47,6 +47,9 @@ export interface NoteArrow {
   id?: number;
 }
 
+/** Where a measure's line goes (Python's MeasurePlace). */
+export type MeasurePlace = "auto" | "top" | "middle" | "bottom" | "between" | "header" | "footer";
+
 export interface NoteMeasure {
   a: NoteEnd;
   b: NoteEnd;
@@ -63,6 +66,12 @@ export interface NoteMeasure {
   color: string | null;
   /** Its index in Python's list of notes; a page's own measures: −1, −2, ... */
   id: number;
+  /** Where its line goes: a place, or a value on a values layer (absent: "auto"). */
+  at?: MeasurePlace | { value: number; layer: string };
+  /** Its level (null or absent: the first free one). */
+  level?: number | null;
+  /** Pixels its line moves down after the layout. */
+  nudge?: number;
 }
 
 export interface Notes {
@@ -173,70 +182,238 @@ export function changeOf(a: NoteEnd, b: NoteEnd): number | null {
   return b.value - a.value;
 }
 
-/** A measure as drawn: where its ends are (px), the rows of their marks, the row of its line
- * (null: the top of the plot), its text and colour; after layout, its line's height and its
- * label's left. */
-export interface MeasureLaid {
-  m: NoteMeasure;
+/** What laying out a measure needs: where its ends are (px, and on the scale shown), the
+ * rows of their marks and of its line (null: none shown), where it goes (`valueY`: the
+ * height of its value, for `at` "value"), its level and nudge, its text and its width. */
+export interface MeasureGeom {
   xa: number;
   xb: number;
+  ua: number;
+  ub: number;
   rows: [number | null, number | null];
   /** Where an end that is a sample is (px; null: the middle of its mark's row). */
   ys: [number | null, number | null];
   row: number | null;
+  at: MeasurePlace | "value";
+  valueY: number | null;
+  level: number | null;
+  nudge: number;
   text: string;
   tw: number;
-  color: string;
-  y: number;
-  lx: number;
 }
 
-/** Where measures' lines go (Python's layout_measures): per row (null: the top of the
- * plot), each measure takes the first level whose earlier lines and labels end before it
- * starts; its label goes at its middle, or beyond its right end when it does not fit. */
-export function layoutMeasures(view: TimelineView, ctx: CanvasRenderingContext2D, measures: NoteMeasure[], plot: Rect, laneTop: number): MeasureLaid[] {
+/** A measure as drawn: its geometry, the band or lane edge it stacks from (`place`), its
+ * level, its line's height and its label's left (null: no room; shown when hovered or
+ * selected). */
+export type Laid<G extends MeasureGeom> = G & { place: string; k: number; y: number; lx: number | null };
+
+export interface MeasureLaid extends MeasureGeom {
+  m: NoteMeasure;
+  color: string;
+  place: string;
+  k: number;
+  y: number;
+  lx: number | null;
+}
+
+/** Where the plot is, for measures: the lanes' top (scrolled), their height, and the tops of
+ * the header band (above the lanes) and the footer band (below them). */
+export interface MeasureFrame {
+  fs: number;
+  plot: Rect;
+  laneTop: number;
+  laneH: number;
+  headTop: number;
+  footTop: number;
+}
+
+/** How many levels of measures a lane holds at the top before "auto" ones go to the header. */
+export function laneLevels(laneH: number, fs: number): number {
+  return Math.max(1, Math.floor((laneH - 6 - (fs + 4)) / (fs + 8)) + 1);
+}
+
+/** The height of a band of `levels` levels of measures (0: none, no band). */
+export function bandHeight(levels: number, fs: number): number {
+  return levels > 0 ? 6 + fs + 4 + (levels - 1) * (fs + 8) : 0;
+}
+
+/** Levels for measures of one place: those with a level keep it; the others, by their
+ * earlier end (on the scale shown, so zooming never changes them), take the first level
+ * where they overlap none (touching ends may share one). One whose first free level is
+ * `cap` or more takes none (-1): it goes elsewhere. */
+function stack(items: { lo: number; hi: number; level: number | null; i: number; cap?: number }[]): Map<number, number> {
+  const out = new Map<number, number>();
+  const ends: number[] = [];
+  const pinned: [number, number][][] = [];
+  for (const it of items) {
+    if (it.level === null) continue;
+    (pinned[it.level] ??= []).push([it.lo, it.hi]);
+    out.set(it.i, it.level);
+  }
+  const free = items.filter((it) => it.level === null).sort((p, q) => p.lo - q.lo || p.i - q.i);
+  for (const it of free) {
+    let k = 0;
+    while ((ends[k] ?? -Infinity) > it.lo || (pinned[k] ?? []).some(([lo, hi]) => lo < it.hi && it.lo < hi)) k++;
+    if (it.cap !== undefined && k >= it.cap) {
+      out.set(it.i, -1);
+      continue;
+    }
+    ends[k] = Math.max(ends[k] ?? -Infinity, it.hi);
+    out.set(it.i, k);
+  }
+  return out;
+}
+
+/** Where measures' lines go (Python's place_measures): per place and row, levels from
+ * `stack`; "auto" ones the lane cannot hold continue in the header; a measure with no row
+ * shown goes to the header. Then labels: on the line where they fit, else beside it where
+ * that is free on its level, else none (shown when hovered or selected). `head` and `foot`:
+ * the levels the bands use. */
+export function placeMeasures<G extends MeasureGeom>(geoms: G[], f: MeasureFrame): { laid: Laid<G>[]; head: number; foot: number } {
+  const h = f.fs + 4;
+  const step = f.fs + 8;
+  const cap = laneLevels(f.laneH, f.fs);
+  const kind = geoms.map((g) => {
+    let at: string = g.at;
+    if (at === "value" && g.valueY === null) at = "top";
+    if (at !== "header" && at !== "footer" && g.row === null) at = "header";
+    return at;
+  });
+  const lo = geoms.map((g) => Math.min(g.ua, g.ub));
+  const hi = geoms.map((g) => Math.max(g.ua, g.ub));
+  const key = (i: number) => {
+    const at = kind[i] === "auto" ? "top" : kind[i];
+    if (at === "header" || at === "footer") return at;
+    return at === "value" ? `value ${geoms[i].row} ${geoms[i].valueY}` : `${at} ${geoms[i].row}`;
+  };
+  const groups = new Map<string, number[]>();
+  geoms.forEach((_, i) => {
+    const k = key(i);
+    if (k === "header" || k === "footer") return;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(i);
+  });
+  const level = new Map<number, number>();
+  const place = new Map<number, string>();
+  const over: number[] = [];
+  for (const [k, members] of groups) {
+    const got = stack(members.map((i) => ({ lo: lo[i], hi: hi[i], level: geoms[i].level, i, cap: kind[i] === "auto" ? cap : undefined })));
+    for (const i of members) {
+      const l = got.get(i)!;
+      if (l < 0) over.push(i);
+      else {
+        level.set(i, l);
+        place.set(i, k);
+      }
+    }
+  }
+  const bands = { header: 0, footer: 0 };
+  for (const band of ["header", "footer"] as const) {
+    const own = geoms.map((_, i) => i).filter((i) => key(i) === band);
+    let got = stack(own.map((i) => ({ lo: lo[i], hi: hi[i], level: geoms[i].level, i })));
+    const members = [...own];
+    if (band === "header" && over.length) {
+      // the lanes' overflow comes after the header's own measures, around them
+      members.push(...over);
+      got = stack(members.map((i) => ({ lo: lo[i], hi: hi[i], level: over.includes(i) ? null : got.get(i)!, i })));
+    }
+    for (const i of members) {
+      level.set(i, got.get(i)!);
+      place.set(i, band);
+      bands[band] = Math.max(bands[band], got.get(i)! + 1);
+    }
+  }
+  const laid: Laid<G>[] = geoms.map((g, i) => {
+    const k = level.get(i)!;
+    const p = place.get(i)!;
+    const at = p.split(" ")[0];
+    const top = g.row === null ? 0 : f.laneTop + g.row * f.laneH;
+    let y: number;
+    if (at === "header") y = f.headTop + 3 + h / 2 + k * step;
+    else if (at === "footer") y = f.footTop + 3 + h / 2 + k * step;
+    else if (at === "bottom") y = top + f.laneH - 3 - h / 2 - k * step;
+    else if (at === "middle") y = top + f.laneH / 2 + k * step;
+    else if (at === "between") y = top + f.laneH - k * step;
+    else if (at === "value") y = (g.valueY ?? top) + k * step;
+    else y = top + 3 + h / 2 + k * step;
+    return { ...g, place: p, k, y: y + g.nudge, lx: null };
+  });
+  // labels, level by level: the lines first, then each label where it has room
+  const spans = new Map<string, [number, number, number][]>();
+  laid.forEach((d, i) => {
+    const s = `${d.place} ${d.k}`;
+    if (!spans.has(s)) spans.set(s, []);
+    spans.get(s)!.push([Math.min(d.xa, d.xb), Math.max(d.xa, d.xb), i]);
+  });
+  const right = f.plot.x + f.plot.w;
+  const freeAt = (s: [number, number, number][], a: number, b: number, own: number) => !s.some(([l, r, j]) => j !== own && l < b + 4 && a - 4 < r);
+  const byLeft = laid.map((_, i) => i).sort((p, q) => Math.min(laid[p].xa, laid[p].xb) - Math.min(laid[q].xa, laid[q].xb) || p - q);
+  for (const i of byLeft) {
+    const d = laid[i];
+    if (!d.text) continue;
+    const l = Math.min(d.xa, d.xb);
+    const r = Math.max(d.xa, d.xb);
+    const s = spans.get(`${d.place} ${d.k}`)!;
+    if (d.tw + 2 * ARROW_LEN <= r - l) d.lx = Math.max(f.plot.x + 1, Math.min((l + r) / 2 - d.tw / 2, right - d.tw - 1));
+    else if (r + 6 + d.tw <= right && freeAt(s, r + 6, r + 6 + d.tw, i)) d.lx = r + 6;
+    else if (l - 6 - d.tw >= f.plot.x && freeAt(s, l - 6 - d.tw, l - 6, i)) d.lx = l - 6 - d.tw;
+    if (d.lx !== null && d.tw + 2 * ARROW_LEN > r - l) s.push([d.lx, d.lx + d.tw, -1]);
+  }
+  return { laid, head: bands.header, foot: bands.footer };
+}
+
+/** Each measure's geometry, as the view shows it now. */
+export function measureGeoms(view: TimelineView, ctx: CanvasRenderingContext2D, measures: NoteMeasure[], plot: Rect): (MeasureGeom & { m: NoteMeasure; color: string })[] {
   const c = view.camera;
   const px = (v: number) => plot.x + (v - c.left) * c.scale;
-  const geoms: Omit<MeasureLaid, "y" | "lx">[] = [];
+  const out: (MeasureGeom & { m: NoteMeasure; color: string })[] = [];
   for (const m of measures) {
     const a = endX(view, m.a);
     const b = endX(view, m.b);
     if (a === null || b === null) continue;
     const rows: [number | null, number | null] = [rowOf(view, m.a.lane), rowOf(view, m.b.lane)];
     let row = m.lane !== null ? rowOf(view, m.lane) : null;
+    let lane = m.lane;
     if (row === null) {
       const shown = rows.filter((r): r is number => r !== null);
       row = shown.length ? Math.min(...shown) : null;
+      lane = row === null ? null : row === rows[0] ? m.a.lane : m.b.lane;
     }
     const text = measureText(view, m);
     const ys: [number | null, number | null] = [sampleY(view, m.a), sampleY(view, m.b)];
-    geoms.push({ m, xa: px(a), xb: px(b), rows, ys, row, text, tw: ctx.measureText(text).width + 8, color: m.color ?? view.theme.accent });
-  }
-  geoms.sort((p, q) => Math.min(p.xa, p.xb) - Math.min(q.xa, q.xb));
-  const step = view.fs + 8;
-  const levels = new Map<number | null, number[]>();
-  const out: MeasureLaid[] = [];
-  for (const g of geoms) {
-    const lo = Math.min(g.xa, g.xb);
-    const hi = Math.max(g.xa, g.xb);
-    let lx: number;
-    if (g.tw + 2 * ARROW_LEN <= hi - lo) lx = (lo + hi) / 2 - g.tw / 2;
-    else if (hi + 6 + g.tw <= plot.x + plot.w) lx = hi + 6;
-    else lx = lo - 6 - g.tw;
-    lx = Math.max(plot.x + 1, Math.min(lx, plot.x + plot.w - g.tw - 1));
-    const left = Math.min(lo, lx);
-    const right = Math.max(hi, lx + g.tw);
-    let ends = levels.get(g.row);
-    if (!ends) levels.set(g.row, (ends = []));
-    let k = ends.findIndex((e) => e < left - 4);
-    if (k < 0) {
-      k = ends.length;
-      ends.push(right);
-    } else ends[k] = right;
-    const top = g.row === null ? plot.y : laneTop + g.row * view.laneH;
-    out.push({ ...g, y: top + 3 + (view.fs + 4) / 2 + k * step, lx });
+    const at = m.at ?? "auto";
+    let valueY: number | null = null;
+    if (typeof at === "object" && lane !== null) {
+      const v = view.values.find((l) => l.data.spec.name === at.layer);
+      const y = v ? v.yAt(lane, at.value, view.valueView()) : null;
+      valueY = y !== null && Number.isFinite(y) ? y : null;
+    }
+    out.push({
+      m,
+      xa: px(a),
+      xb: px(b),
+      ua: a,
+      ub: b,
+      rows,
+      ys,
+      row,
+      at: typeof at === "object" ? "value" : at,
+      valueY,
+      level: m.level ?? null,
+      nudge: m.nudge ?? 0,
+      text,
+      tw: ctx.measureText(text).width + 8,
+      color: m.color ?? view.theme.accent,
+    });
   }
   return out;
+}
+
+/** Where measures' lines and labels go, with the levels the header and footer bands use. */
+export function layoutMeasures(view: TimelineView, ctx: CanvasRenderingContext2D, measures: NoteMeasure[], plot: Rect, laneTop: number): { laid: MeasureLaid[]; head: number; foot: number } {
+  const geoms = measureGeoms(view, ctx, measures, plot);
+  const headTop = plot.y - bandHeight(view.measureBands.head, view.fs);
+  return placeMeasures(geoms, { fs: view.fs, plot, laneTop, laneH: view.laneH, headTop, footTop: plot.y + plot.h });
 }
 
 /** Where an end that is a sample is drawn (null: it is not a sample, or not shown). */
@@ -260,11 +437,11 @@ function head(ctx: CanvasRenderingContext2D, x: number, y: number, tip: number):
  * dot on it; a short tick through the line at a time), the line with an arrowhead at each end
  * (outside, pointing in, when the line is short), the label on the background. Selected:
  * thicker, with handles. */
-function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: MeasureLaid, plot: Rect, laneTop: number, selected: boolean): void {
+function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: MeasureLaid, plot: Rect, area: Rect, laneTop: number, selected: boolean): void {
   const y = d.y;
   const lo = Math.min(d.xa, d.xb);
   const hi = Math.max(d.xa, d.xb);
-  if (hi < plot.x - 1 || lo > plot.x + plot.w + 1 || y < plot.y || y > plot.y + plot.h) return;
+  if (hi < plot.x - 1 || lo > plot.x + plot.w + 1 || y < area.y || y > area.y + area.h) return;
   ctx.strokeStyle = d.color;
   ctx.fillStyle = d.color;
   ctx.lineWidth = 1;
@@ -279,6 +456,7 @@ function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: Measu
       y1 = y + away * 4;
     } else if (row !== null) {
       const yc = laneTop + (row + 0.5) * view.laneH;
+      if (Math.abs(y - yc) < 8) continue; // through the mark's middle: no extension line
       const away = y > yc ? 1 : -1;
       y0 = yc + away * Math.min(6, view.laneH / 4);
       y1 = y + away * 4;
@@ -333,7 +511,9 @@ function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: Measu
     }
     ctx.fillStyle = d.color;
   }
-  if (d.text) label(view, ctx, d.text, d.lx, y - (view.fs + 4) / 2, d.color, plot);
+  // a label without room shows while its measure is hovered or selected
+  const shown = d.lx ?? (selected || view.tooltipKey === `m${d.m.id}` ? (hi + 6 + d.tw <= plot.x + plot.w ? hi + 6 : lo - 6 - d.tw) : null);
+  if (d.text && shown !== null) label(view, ctx, d.text, shown, y - (view.fs + 4) / 2, d.color, plot);
 }
 
 /** An arrow from one edge to another: it leaves a start leftwards and an end rightwards, and
@@ -396,6 +576,7 @@ export function drawNotes(view: TimelineView, ctx: CanvasRenderingContext2D, plo
   const notes = view.notes;
   const measures = measuresShown(view);
   view.measureHits = [];
+  if (!measures.length) view.setMeasureBands(0, 0);
   if (!notes.bands?.length && !notes.arrows?.length && !measures.length && !view.snapEdge) return;
   const c = view.camera;
   const px = (v: number) => plot.x + (v - c.left) * c.scale;
@@ -447,9 +628,29 @@ export function drawNotes(view: TimelineView, ctx: CanvasRenderingContext2D, plo
     if (n.text) label(view, ctx, n.text, xa + 3, Math.max(plot.y, y0) + 2, color, plot);
   }
   for (const n of notes.arrows ?? []) drawArrow(view, ctx, n, plot, laneTop);
-  const laid = layoutMeasures(view, ctx, measures, plot, laneTop);
-  for (const d of laid) drawMeasure(view, ctx, d, plot, laneTop, d.m.id === view.selectedMeasure);
+  ctx.restore();
+  // measures: in the lanes, and in the header and footer bands around them
+  const { laid, head, foot } = layoutMeasures(view, ctx, measures, plot, laneTop);
+  const headH = bandHeight(view.measureBands.head, view.fs);
+  const footH = bandHeight(view.measureBands.foot, view.fs);
+  const area = { x: plot.x, y: plot.y - headH, w: plot.w, h: plot.h + headH + footH };
+  ctx.save();
+  ctx.fillStyle = view.theme.band;
+  if (headH) ctx.fillRect(plot.x, plot.y - headH, plot.w, headH);
+  if (footH) ctx.fillRect(plot.x, plot.y + plot.h, plot.w, footH);
+  ctx.beginPath();
+  ctx.rect(area.x, area.y, area.w, area.h);
+  ctx.clip();
+  ctx.font = view.font(-1);
+  ctx.textBaseline = "alphabetic";
+  for (const d of laid) drawMeasure(view, ctx, d, plot, area, laneTop, d.m.id === view.selectedMeasure);
+  ctx.restore();
   view.measureHits = laid.filter((d) => !Number.isNaN(d.m.id));
+  view.setMeasureBands(head, foot);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.x, plot.y, plot.w, plot.h);
+  ctx.clip();
   // the edge a measure's end would take: a short tick on it
   const snap = view.snapEdge;
   if (snap) {

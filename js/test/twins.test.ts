@@ -14,6 +14,7 @@ import { expect, it } from "vitest";
 import { AUTO_LANE, GAP_PX, LABEL_BUDGET, MIN_LANE, PAD_BOTTOM, PAD_RIGHT, ROUTE_BUDGET } from "../src/core/common";
 import { dodge, MAX_ROWS, MIN_STEP, rowsFor, spacing } from "../src/core/dodge";
 import { MAX_ITEMS } from "../src/core/legend";
+import { type MeasureGeom, placeMeasures } from "../src/core/notes";
 import { BIN_FILL, BIN_PX, barsLevel, eventsLevel, MERGE_PX, valuesLevel } from "../src/core/levels";
 import { SYMBOLS } from "../src/core/scene";
 import { clusterHidden, levelOffset, levelsFor, placeStems, type StemItem, wrapText } from "../src/core/stems";
@@ -161,6 +162,46 @@ function wrapAnswers() {
   return { wrap: out, stem_levels: levels };
 }
 
+/** Measures: places, given levels, rows in sight or not, labels with and without room, in
+ * lanes of several heights, at several zooms. */
+function measureAnswers() {
+  let seed = 7;
+  const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const pick = <T,>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)];
+  const places = ["auto", "auto", "auto", "top", "middle", "bottom", "between", "header", "footer", "value"] as const;
+  const out = [];
+  for (const laneH of [30, 64, 120])
+    for (const scale of [0.4, 3, 25]) {
+      const geoms: MeasureGeom[] = [];
+      for (let i = 0; i < 24; i++) {
+        const ua = Math.round(rand() * 100);
+        const ub = ua + Math.round((rand() - 0.2) * 40);
+        const at = pick(places);
+        const row = rand() < 0.15 ? null : Math.floor(rand() * 4);
+        geoms.push({
+          xa: 120 + ua * scale,
+          xb: 120 + ub * scale,
+          ua,
+          ub,
+          rows: [row, row],
+          ys: [null, null],
+          row,
+          at,
+          valueY: at === "value" && rand() < 0.8 ? Math.round(60 + rand() * 300) : null,
+          level: rand() < 0.15 ? Math.floor(rand() * 3) : null,
+          nudge: rand() < 0.1 ? -3 : 0,
+          text: rand() < 0.1 ? "" : "x".repeat(1 + Math.floor(rand() * 12)),
+          tw: 0,
+        });
+        geoms[i].tw = geoms[i].text.length * 7 + 8;
+      }
+      const frame = { fs: 12, plot: { x: 120, y: 66, w: 600, h: 4 * laneH }, laneTop: 66, laneH, headTop: 44, footTop: 66 + 4 * laneH };
+      const { laid, head, foot } = placeMeasures(geoms, frame);
+      out.push({ geoms, frame, head, foot, laid: laid.map((d) => [d.place.split(" ")[0], d.k, d.y, d.lx]) });
+    }
+  return out;
+}
+
 function answers() {
   return {
     constants: { PAD_RIGHT, PAD_BOTTOM, MIN_LANE, AUTO_LANE, LABEL_BUDGET, ROUTE_BUDGET, GAP_PX, BIN_PX, BIN_FILL, MERGE_PX, MAX_ROWS, MIN_STEP, LEGEND_ITEMS: MAX_ITEMS, SYMBOLS },
@@ -171,6 +212,7 @@ function answers() {
     levels: levelAnswers(),
     dodge: dodgeAnswers(),
     stems: stemAnswers(),
+    measures: measureAnswers(),
     ...wrapAnswers(),
   };
 }

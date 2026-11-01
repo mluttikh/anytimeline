@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 import anytimeline as atl
-from anytimeline import Annotation, Connection, Edge, Measure, Timeline
+from anytimeline import Annotation, Connection, Edge, Measure, Timeline, image
 from anytimeline.data import NotFoundError
 
 T0 = np.datetime64("2026-10-01T00:00:00", "ns")
@@ -378,3 +378,74 @@ def test_pages_images_and_copies_keep_them() -> None:
     q = copy.deepcopy(p)
     assert q.notes == p.notes
     assert q._notes == p._notes
+
+
+# ---------------------------------------------------------------------- where measures go
+
+
+def test_a_measure_goes_where_it_is_put() -> None:
+    p = plot().measure(atl.end(0), atl.start(2), at="middle", level=1, nudge=-2.5, lane="c")
+    (m,) = p._notes["measures"]
+    assert (m["at"], m["level"], m["nudge"], m["lane"]) == ("middle", 1, -2.5, 2)
+    (m,) = plot().measure(atl.end(0), atl.start(2))._notes["measures"]
+    assert (m["at"], m["level"], m["nudge"]) == ("auto", None, 0.0)
+
+
+def test_where_a_measure_goes_is_checked() -> None:
+    with pytest.raises(ValueError, match="at must be one of"):
+        Measure(T0, T0 + H, at="above")  # ty: ignore[invalid-argument-type]
+    for level in (-1, 1.5, True):
+        with pytest.raises(TypeError, match="level is a whole number"):
+            Measure(T0, T0 + H, level=level)  # ty: ignore[invalid-argument-type]
+    with pytest.raises(TypeError, match="nudge is a number"):
+        Measure(T0, T0 + H, nudge=float("nan"))
+    with pytest.raises(TypeError):
+        Measure(T0, T0 + H, None, None, None, "header")  # ty: ignore[too-many-positional-arguments]
+    with pytest.raises(TypeError, match="a number on the layer's scale"):
+        atl.value("80")  # ty: ignore[invalid-argument-type]
+
+
+def test_a_measure_at_a_value_is_on_a_values_layer() -> None:
+    p = with_samples().measure(atl.start(0, "cpu"), atl.end(3, "cpu"), at=atl.value(30))
+    assert p._notes["measures"][0]["at"] == {"value": 30.0, "layer": "cpu"}
+    # two times: the plot's one values layer
+    p.measure(T0, T0 + H, at=atl.value(12))
+    assert p._notes["measures"][1]["at"] == {"value": 12.0, "layer": "cpu"}
+    with pytest.raises(ValueError, match="'intervals' is not one"):
+        p.measure(T0, T0 + H, at=atl.value(12, "intervals"))
+    with pytest.raises(ValueError, match="needs a values layer"):
+        plot().measure(T0, T0 + H, at=atl.value(12))
+
+
+def test_measured_has_where_they_go() -> None:
+    p = plot().measure(atl.end(0), atl.start(2), at="header", level=0)
+    p.measure(atl.start(1), atl.end(1), lane="b")
+    t = p.measured
+    assert t["at"].tolist() == ["header", "auto"]
+    assert t["lane"].tolist() == [None, "b"]
+    assert t["level"].tolist() == [0, -1]
+
+
+def picture(p: Timeline, height: int) -> image._Picture:
+    assert p._scene is not None
+    return image._Picture(p, p._scene, 600, height, None, image.THEMES["light"], None)
+
+
+def test_pictures_have_the_bands_of_measures_only_when_used() -> None:
+    p = plot()
+    plain = p.to_svg(width=600, height=300)
+    p.measure(atl.end(0), atl.start(2), at="header").measure(atl.end(1), atl.start(2), at="footer")
+    pic = picture(p, 300)
+    head = image.band_height(1, p.font_size)
+    assert (pic.f.head_h, pic.f.foot_h) == (head, head)
+    assert pic.f.plot[1] == pic.f.axis_h + head  # the lanes start under the header
+    assert p.to_svg(width=600, height=300) != plain
+    # two times and no lane: the header; a lane too small for its measures: the rest there
+    q = plot().measure(T0, T0 + H)
+    assert picture(q, 300).f.head_h == head
+    r = plot()
+    for k in range(4):
+        r.measure(atl.start(1), atl.end(1), f"m{k}")
+    pic = picture(r, 160)
+    assert pic.f.head_h > 0
+    assert pic.f.lane_h < 160 / 3
