@@ -74,6 +74,7 @@ from anytimeline.types import (
     LaneSort,
     MeasureEnds,
     MeasureExtend,
+    MeasureKind,
     MeasureLabel,
     MeasurePlace,
     Renderer,
@@ -1059,6 +1060,7 @@ class Timeline:
         ends: MeasureEnds = "arrows",
         extend: MeasureExtend = "mark",
         limit: Any = None,
+        kind: MeasureKind = "time",
     ) -> Self:
         """Add a [`Measure`][anytimeline.Measure] to [`notes`][anytimeline.Timeline.notes]:
         the time from ``a`` to ``b``, drawn as a dimension line with the time at its middle.
@@ -1128,8 +1130,13 @@ class Timeline:
             limit: A budget: longer than this, the measure is drawn in the "over" colour
                 (red), and ``measured`` has ``over`` true. A duration (``"200ms"``,
                 ``"1.5 h"``, a timedelta); on a plot of numbers, a number.
+            kind: Between two samples of one values layer: ``"time"`` (the time, with the
+                change in its text), ``"value"`` (the change: a vertical dimension line
+                beside the later sample; ``level=`` moves it a step further right) or
+                ``"both"`` (an L: the time along, the change up), as a stock chart's x, y
+                and xy measures. ``at=`` and ``nudge=`` are for ``"time"``.
 
-        Defaults for these (all but ``a`` and ``b``) can be set once with
+        Defaults for these (all but ``a``, ``b`` and ``kind``) can be set once with
         [`set_defaults`][anytimeline.set_defaults]``(measure={...})``. Many measures at
         once: [`measure_each`][anytimeline.Timeline.measure_each],
         [`measure_gaps`][anytimeline.Timeline.measure_gaps],
@@ -1139,7 +1146,7 @@ class Timeline:
         return self._add_note(
             Measure(
                 a, b, text, lane, color, at=at, level=level, nudge=nudge,
-                label=label, ends=ends, extend=extend, limit=limit,
+                label=label, ends=ends, extend=extend, limit=limit, kind=kind,
             )
         )  # fmt: skip
 
@@ -1247,6 +1254,7 @@ class Timeline:
         ends: MeasureEnds = "arrows",
         extend: MeasureExtend = "mark",
         limit: Any = None,
+        kind: MeasureKind = "time",
     ) -> Self:
         """Measure from each end to the next, all on one level: continued dimensions, as a
         drawing gives A to B to C. One note, a [`MeasureChain`][anytimeline.MeasureChain].
@@ -1263,12 +1271,14 @@ class Timeline:
                 lanes, so they share a row.
 
         The others are those of [`measure`][anytimeline.Timeline.measure], for each of its
-        measures. ``limit`` is for each one, not for the whole chain.
+        measures. ``limit`` is for each one, not for the whole chain; with samples as its
+        ends, ``kind="value"`` measures each step's change.
         """
         return self._add_note(
             MeasureChain(
                 tuple(through), text=text, lane=lane, color=color, at=at, level=level,
                 nudge=nudge, label=label, ends=ends, extend=extend, limit=limit,
+                kind=kind,
             )
         )  # fmt: skip
 
@@ -1288,6 +1298,7 @@ class Timeline:
         ends: MeasureEnds = "arrows",
         extend: MeasureExtend = "mark",
         limit: Any = None,
+        kind: MeasureKind = "time",
     ) -> Self:
         """Measure from one origin to each of several ends, stacked a level apart with the
         shortest nearest the marks: baseline dimensions, as a drawing gives them. One note, a
@@ -1311,6 +1322,7 @@ class Timeline:
             MeasureFrom(
                 origin, tuple(to), text=text, lane=lane, color=color, at=at, level=level,
                 nudge=nudge, label=label, ends=ends, extend=extend, limit=limit,
+                kind=kind,
             )
         )  # fmt: skip
 
@@ -1337,6 +1349,7 @@ class Timeline:
           one layer;
         - ``a_layer``, ``a_row``, ``a_side`` and the same for ``b``: the mark of an end that
           is an edge (``None``, -1 and ``None`` for a time);
+        - ``kind``: what it measures (``"time"``, ``"value"`` or ``"both"``);
         - ``at``: where its line goes (``"value"`` for [`atl.value`][anytimeline.value]);
           ``lane``: the lane it was given (``None``: its ends'); ``level``: the level it was
           given (-1: the first free one).

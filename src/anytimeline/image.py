@@ -2227,13 +2227,143 @@ class _Picture:
         overlap in a lane stack."""
         f, t = self.f, self.theme
         px, py, pw, ph = f.plot
-        laid, _, _ = self._layout_measures(measures)
+        timed = [n for n in measures if (n.get("kind") or "time") == "time"]
+        laid, _, _ = self._layout_measures(timed)
         if f.head_h:
             self.svg.rect(px, py - f.head_h, pw, f.head_h, t.band)
         if f.foot_h:
             self.svg.rect(px, py + ph, pw, f.foot_h, t.band)
         for d in laid:
             self._dimension(d)
+        for n in measures:  # a change between samples, at their values
+            if (n.get("kind") or "time") != "time":
+                shape = self._value_shape(n)
+                if shape is not None:
+                    self._value_measure(shape)
+
+    def _value_shape(self, n: dict[str, Any]) -> dict[str, Any] | None:
+        """A measure of the change between two samples (``valueShape``): its ends' points on
+        the later sample's lane's scale, its vertical line's x, its horizontal line's height
+        ("both"), and its labels. None: not drawn (an end or its value not shown)."""
+        f = self.f
+        kind = n.get("kind")
+        a, b = n["a"], n["b"]
+        ua, ub = self._end_x(a), self._end_x(b)
+        if ua is None or ub is None or a.get("value") is None or b.get("value") is None:
+            return None
+        late = b if ub >= ua else a
+        if late.get("lane") is None:
+            return None
+        ya = self._value_y(a["layer"], late["lane"], a["value"])
+        yb = self._value_y(b["layer"], late["lane"], b["value"])
+        if ya is None or yb is None or not (math.isfinite(ya) and math.isfinite(yb)):
+            return None
+        xa, xb = f.px(ua), f.px(ub)
+        xl, xe = max(xa, xb), min(xa, xb)
+        size = f.font(-1)
+        h = f.fs + 4
+        px, _, pw, _ = f.plot
+        right = px + pw
+        change = f"Δ {measuring.change_text(n.get('change') or 0.0)}"
+        cw = text_width(change, size) + 8
+        if n.get("text") is None:
+            text = change if kind == "value" else self._measure_text({**n, "text": "{time}"})
+        else:
+            text = self._measure_text(n)
+        tw = text_width(text, size) + 8
+        yh = ya if ub >= ua else yb
+
+        def beside(x: float, w: float) -> float:
+            return x + 6 if x + 6 + w <= right else x - 6 - w
+
+        mode = n.get("label") or "auto"
+        xv, cx, cy = xl, 0.0, 0.0
+        if kind == "value":
+            xv = xl + 10 + (n.get("level") or 0) * VALUE_STEP
+            lx: float | None = beside(xv, tw)
+            ly = (ya + yb) / 2 - h / 2
+        else:
+            lx = max(px + 1, min((xe + xl) / 2 - tw / 2, right - tw - 1))
+            ly = yh + 2 if mode == "below" else yh - h - 1
+            cx, cy = beside(xl, cw), (ya + yb) / 2 - h / 2
+        if mode == "hover":
+            lx = None
+        color = self.theme.over if n.get("over") else n.get("color") or self.theme.accent
+        return {
+            "kind": kind, "xa": xa, "ya": ya, "xb": xb, "yb": yb, "xv": xv, "yh": yh,
+            "text": text, "lx": lx, "ly": ly, "change": change, "cx": cx, "cy": cy,
+            "color": color, "ends": n.get("ends") or "arrows",
+            "extend": n.get("extend") or "mark",
+        }  # fmt: skip
+
+    def _value_measure(self, s: dict[str, Any]) -> None:
+        """A measure of a change (``drawValueMeasure``): "value", a vertical dimension line
+        beside the later sample with an extension line from each sample (across the plot for
+        "lanes"); "both", an L from the earlier sample: the time along, the change up. A dot
+        on each sample; the labels on the background."""
+        f = self.f
+        px, py, pw, ph = f.plot
+        color = s["color"]
+        if s["kind"] == "value" and s["extend"] != "none":
+            for x, y in ((s["xa"], s["ya"]), (s["xb"], s["yb"])):
+                x0, x1 = (px, px + pw) if s["extend"] == "lanes" else (x, s["xv"] + 4)
+                seg = _clip_segment(x0, y, x1, y, f.plot)
+                if seg:
+                    self.svg.line(*seg, color, 1, stroke_dasharray="3 2")
+        if s["kind"] == "both" and s["extend"] == "lanes":
+            for y in (s["ya"], s["yb"]):
+                seg = _clip_segment(px, y, px + pw, y, f.plot)
+                if seg:
+                    self.svg.line(*seg, color, 1, stroke_dasharray="3 2")
+        late, early = max(s["xa"], s["xb"]), min(s["xa"], s["xb"])
+        y_late = s["yb"] if s["xb"] >= s["xa"] else s["ya"]
+        if s["kind"] == "value":
+            self._dimension_line(s["xv"], s["ya"], s["xv"], s["yb"], s["ends"], color)
+        else:
+            self._dimension_line(early, s["yh"], late, s["yh"], s["ends"], color)
+            self._dimension_line(late, s["yh"], late, y_late, s["ends"], color)
+        dots = [
+            symbol_path(0, x, y, SAMPLE_DOT)
+            for x, y in ((s["xa"], s["ya"]), (s["xb"], s["yb"]))
+            if px <= x <= px + pw and py <= y <= py + ph
+        ]
+        if dots:
+            self.svg.path("".join(dots), fill=color)
+        if s["lx"] is not None:
+            self._note_label(s["text"], s["lx"], s["ly"], color)
+            if s["kind"] == "both":
+                self._note_label(s["change"], s["cx"], s["cy"], color)
+
+    def _dimension_line(
+        self, x0: float, y0: float, x1: float, y1: float, style: str, color: str
+    ) -> None:
+        """A dimension line across or up (``dimension``): on the background, with its ends."""
+        plot = self.f.plot
+        length = math.hypot(x1 - x0, y1 - y0)
+        ux, uy = ((x1 - x0) / length, (y1 - y0) / length) if length else (1.0, 0.0)
+        inside = length >= 2 * ARROW_LEN + 2
+        halo = _clip_segment(x0, y0, x1, y1, plot)
+        if halo:
+            self.svg.line(*halo, self.theme.bg, 7, stroke_opacity=0.85)
+            self.svg.line(*halo, color, 1.5)
+        for x, y, way in ((x0, y0, -1), (x1, y1, 1)):
+            if style == "none" or not (plot[0] <= x <= plot[0] + plot[2]):
+                continue
+            if style == "ticks":
+                self.svg.line(x - TICK, y + TICK, x + TICK, y - TICK, color, 1.5)
+            elif style == "dots":
+                self.svg.path(symbol_path(0, x, y, END_DOT), fill=color)
+            else:
+                dx, dy = (way * ux, way * uy) if inside else (-way * ux, -way * uy)
+                if not inside:
+                    tail = _clip_segment(
+                        x, y, x + way * ux * 2 * ARROW_LEN, y + way * uy * 2 * ARROW_LEN, plot
+                    )
+                    if tail:
+                        self.svg.line(*tail, color, 1.5)
+                bx, by = x - dx * ARROW_LEN, y - dy * ARROW_LEN
+                head = [(x, y), (bx - dy * 3.5, by + dx * 3.5), (bx + dy * 3.5, by - dx * 3.5)]
+                self.svg.path(_path(head, close=True), fill=color)
 
     def _layout_measures(
         self, measures: list[dict[str, Any]]
@@ -2248,7 +2378,11 @@ class _Picture:
     def _measure_bands(self) -> tuple[int, int]:
         """The heights of the header and footer bands of measures (px), with the frame as it
         is."""
-        measures = (self.plot._notes or {}).get("measures") or []
+        measures = [
+            n
+            for n in (self.plot._notes or {}).get("measures") or []
+            if (n.get("kind") or "time") == "time"
+        ]
         if not measures:
             return 0, 0
         _, head, foot = self._layout_measures(measures)
@@ -2669,6 +2803,7 @@ ARROW_LEN = 7
 """The length of a measure's arrowheads, in pixels."""
 SAMPLE_DOT = 2.5
 TICK = 4  # half the length of a measure's oblique tick
+VALUE_STEP = 12  # the step right of each level of a measure of a change ("value"), px
 END_DOT = 3  # the radius of a measure's end dot
 """The radius of the dot on a sample a measure ends at, in pixels."""
 

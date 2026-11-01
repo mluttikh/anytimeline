@@ -318,6 +318,7 @@ describe("measures: copy as Python", () => {
     const v = fakeView();
     const m: NoteMeasure = { a: end(0), b: end(9), span: 9, events: 0, lane: null, text: "c waits", raw: "{b.task} waits", color: null, id: -1, label: "above", ends: "ticks", extend: "lanes" };
     expect(asPython(v, m)).toBe('plot.measure("2024-01-01T00:00:00", "2024-01-01T00:00:09", "{b.task} waits", label="above", ends="ticks", extend="lanes")');
+    expect(asPython(v, { ...m, text: null, raw: undefined, label: "auto", ends: "arrows", extend: "mark", kind: "both" })).toBe('plot.measure("2024-01-01T00:00:00", "2024-01-01T00:00:09", kind="both")');
   });
 
   it("writes where it goes", () => {

@@ -338,10 +338,11 @@ function openMeasure(view: TimelineView, m: NoteMeasure, p: { x: number; y: numb
   if (measure.changeable(view, m)) {
     const at = m.at ?? "auto";
     const places: [string, MeasurePlace][] = [["Top", "top"], ["Middle", "middle"], ["Bottom", "bottom"], ["Between", "between"], ["Header", "header"], ["Footer", "footer"]];
-    items.push({
-      label: "Place",
-      choices: places.map(([text, place]) => [text, () => measure.changeMeasure(view, m, { at: place, level: null }), at === place]),
-    });
+    if (!measure.ofChange(m))
+      items.push({
+        label: "Place",
+        choices: places.map(([text, place]) => [text, () => measure.changeMeasure(view, m, { at: place, level: null }), at === place]),
+      });
     const label = m.label ?? "auto";
     const labels: [string, MeasureLabel][] = [["Auto", "auto"], ["On", "on"], ["Above", "above"], ["Below", "below"], ["Start", "start"], ["End", "end"], ["Hover", "hover"]];
     items.push({
