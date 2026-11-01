@@ -16,6 +16,7 @@ fits where the viewer's font is about as wide.
 
 from __future__ import annotations
 
+import bisect
 import itertools
 import math
 import unicodedata
@@ -75,16 +76,18 @@ class Theme:
     accent: str
     panel: tuple[str, float]
     border: str
+    over: str
+    """A measure over its limit."""
 
 
 THEMES = {
     "light": Theme(
         "#ffffff", "#1b2430", "#5e6875", "#e6e9ed", "#f7f8fa", "#e8590c", "#1f77b4",
-        ("#ffffff", 0.9), "#dde1e6",
+        ("#ffffff", 0.9), "#dde1e6", "#e03131",
     ),
     "dark": Theme(
         "#12171d", "#e5e9ed", "#98a3af", "#252d37", "#161c23", "#ff922b", "#4dabf7",
-        ("#12171d", 0.9), "#2b3440",
+        ("#12171d", 0.9), "#2b3440", "#ff6b6b",
     ),
 }  # fmt: skip
 
@@ -2291,7 +2294,11 @@ class _Picture:
                     "label": n.get("label") or "auto",
                     "ends": n.get("ends") or "arrows",
                     "extend": n.get("extend") or "mark",
-                    "color": n.get("color") or self.theme.accent,
+                    "group": n["id"] if n.get("group") is not None else None,
+                    "off": n.get("group") or 0,
+                    "color": self.theme.over
+                    if n.get("over")
+                    else n.get("color") or self.theme.accent,
                 }
             )
         return out
@@ -2680,7 +2687,9 @@ def band_height(levels: int, fs: int) -> int:
 def _stack(items: list[dict[str, Any]]) -> dict[int, int]:
     """Levels for measures of one place (``stack``): those with a level keep it; the others,
     by their earlier end, take the first level where they overlap none (touching ends may
-    share one); one whose first free level is ``cap`` or more takes none (-1)."""
+    share one). A group (a chain, a baseline) goes as one: each member at the first level
+    free for all, plus its offset. One whose level would be ``cap`` or more takes none (-1),
+    with its group."""
     out: dict[int, int] = {}
     ends: dict[int, float] = {}
     pinned: dict[int, list[tuple[float, float]]] = {}
@@ -2689,19 +2698,81 @@ def _stack(items: list[dict[str, Any]]) -> dict[int, int]:
             continue
         pinned.setdefault(it["level"], []).append((it["lo"], it["hi"]))
         out[it["i"]] = it["level"]
-    free = sorted((it for it in items if it["level"] is None), key=lambda it: (it["lo"], it["i"]))
-    for it in free:
-        k = 0
-        while ends.get(k, -math.inf) > it["lo"] or any(
-            lo < it["hi"] and it["lo"] < hi for lo, hi in pinned.get(k, [])
-        ):
-            k += 1
-        if it.get("cap") is not None and k >= it["cap"]:
-            out[it["i"]] = -1
+    units: list[dict[str, Any]] = []
+    grouped: dict[int, dict[str, Any]] = {}
+    for it in items:
+        if it["level"] is not None:
             continue
-        ends[k] = max(ends.get(k, -math.inf), it["hi"])
-        out[it["i"]] = k
+        g = it.get("group")
+        u = None if g is None else grouped.get(g)
+        if u is None:
+            u = {"lo": it["lo"], "i": it["i"], "members": []}
+            units.append(u)
+            if g is not None:
+                grouped[g] = u
+        u["members"].append(it)
+        u["lo"] = min(u["lo"], it["lo"])
+        u["i"] = min(u["i"], it["i"])
+    units.sort(key=lambda u: (u["lo"], u["i"]))
+    for u in units:
+        members = u["members"]
+
+        def free(k: int, u: dict[str, Any] = u, members: list[dict[str, Any]] = members) -> bool:
+            for m in members:
+                lvl = k + m.get("off", 0)
+                if ends.get(lvl, -math.inf) > u["lo"] or any(
+                    lo < m["hi"] and m["lo"] < hi for lo, hi in pinned.get(lvl, [])
+                ):
+                    return False
+            return True
+
+        k = 0
+        while not free(k):
+            k += 1
+        top = k + max(m.get("off", 0) for m in members)
+        cap = members[0].get("cap")
+        if cap is not None and top >= cap:
+            for m in members:
+                out[m["i"]] = -1
+            continue
+        for m in members:
+            lvl = k + m.get("off", 0)
+            ends[lvl] = max(ends.get(lvl, -math.inf), m["hi"])
+            out[m["i"]] = lvl
     return out
+
+
+class _LevelSpans:
+    """What takes room on a level of measures (``LevelSpans``): their lines, and the labels
+    put beside them. ``free(a, b)``: whether [a, b], with 4 px either side, overlaps none (a
+    label beside a line never overlaps its own line). Lines sorted with the furthest right
+    end so far, labels kept sorted: a level of thousands of measures is quick."""
+
+    def __init__(self, lines: list[tuple[float, float]]) -> None:
+        lines = sorted(lines, key=lambda s: s[0])
+        self.line_l = [s[0] for s in lines]
+        self.line_r = list(itertools.accumulate((s[1] for s in lines), max))
+        self.lab_l: list[float] = []
+        self.lab_r: list[float] = []
+        self.widest = 0.0
+
+    def free(self, a: float, b: float) -> bool:
+        lo, hi = a - 4, b + 4
+        n = bisect.bisect_left(self.line_l, hi)  # lines with l < hi
+        if n and self.line_r[n - 1] > lo:
+            return False
+        j = bisect.bisect_left(self.lab_l, hi) - 1
+        while j >= 0 and self.lab_l[j] >= lo - self.widest - 1:
+            if self.lab_r[j] > lo:
+                return False
+            j -= 1
+        return True
+
+    def add(self, lft: float, rgt: float) -> None:
+        j = bisect.bisect_right(self.lab_l, lft)
+        self.lab_l.insert(j, lft)
+        self.lab_r.insert(j, rgt)
+        self.widest = max(self.widest, rgt - lft)
 
 
 def place_measures(
@@ -2749,19 +2820,20 @@ def place_measures(
     level: dict[int, int] = {}
     place: dict[int, tuple[Any, ...]] = {}
     over: list[int] = []
+
+    def item(i: int, lvl: int | None, with_cap: bool) -> dict[str, Any]:
+        return {
+            "lo": lo[i],
+            "hi": hi[i],
+            "level": lvl,
+            "i": i,
+            "cap": cap if with_cap and kind[i] == "auto" else None,
+            "group": geoms[i].get("group"),
+            "off": geoms[i].get("off") or 0,
+        }
+
     for k, members in groups.items():
-        got = _stack(
-            [
-                {
-                    "lo": lo[i],
-                    "hi": hi[i],
-                    "level": geoms[i]["level"],
-                    "i": i,
-                    "cap": cap if kind[i] == "auto" else None,
-                }
-                for i in members
-            ]
-        )
+        got = _stack([item(i, geoms[i]["level"], True) for i in members])
         for i in members:
             if got[i] < 0:
                 over.append(i)
@@ -2770,17 +2842,13 @@ def place_measures(
     bands = {"header": 0, "footer": 0}
     for band in ("header", "footer"):
         own = [i for i in range(len(geoms)) if key(i) == (band,)]
-        got = _stack([{"lo": lo[i], "hi": hi[i], "level": geoms[i]["level"], "i": i} for i in own])
+        got = _stack([item(i, geoms[i]["level"], False) for i in own])
         members = list(own)
         if band == "header" and over:
             # the lanes' overflow comes after the header's own measures, around them
             members += over
-            got = _stack(
-                [
-                    {"lo": lo[i], "hi": hi[i], "level": None if i in over else got[i], "i": i}
-                    for i in members
-                ]
-            )
+            lanes = set(over)
+            got = _stack([item(i, None if i in lanes else got[i], False) for i in members])
         for i in members:
             level[i], place[i] = got[i], (band,)
             bands[band] = max(bands[band], got[i] + 1)
@@ -2818,17 +2886,15 @@ def place_measures(
         y += g["nudge"]
         laid.append({**g, "place": place[i], "k": k, "y": y, "lx": None, "ly": y - h / 2})
     # labels, level by level: the lines first, then each label where it has room
-    spans: dict[tuple[Any, ...], list[tuple[float, float, int]]] = {}
-    for i, d in enumerate(laid):
-        spans.setdefault((*d["place"], d["k"]), []).append(
-            (min(d["xa"], d["xb"]), max(d["xa"], d["xb"]), i)
+    lines: dict[tuple[Any, ...], list[tuple[float, float]]] = {}
+    for d in laid:
+        lines.setdefault((*d["place"], d["k"]), []).append(
+            (min(d["xa"], d["xb"]), max(d["xa"], d["xb"]))
         )
+    spans = {k: _LevelSpans(v) for k, v in lines.items()}
     px, _, pw, _ = plot
     right = px + pw
     area_top, area_bottom = head_top, foot_top + band_px("footer")
-
-    def free_at(s: list[tuple[float, float, int]], a: float, b: float, own: int) -> bool:
-        return not any(j != own and lft < b + 4 and a - 4 < rgt for lft, rgt, j in s)
 
     def centred(lft: float, rgt: float, tw: float) -> float:
         return max(px + 1, min((lft + rgt) / 2 - tw / 2, right - tw - 1))
@@ -2854,7 +2920,7 @@ def place_measures(
         else:
             d["lx"] = lft - 6 - tw if mode == "start" else rgt + 6
         if mode != "above" and mode != "below" and (mode != "on" or tw > rgt - lft):
-            spans[(*d["place"], d["k"])].append((d["lx"], d["lx"] + tw, -1))
+            spans[(*d["place"], d["k"])].add(d["lx"], d["lx"] + tw)
     for i in by_left:
         d = laid[i]
         if not d["text"] or (d.get("label") or "auto") != "auto":
@@ -2864,12 +2930,12 @@ def place_measures(
         s = spans[(*d["place"], d["k"])]
         if tw + 2 * ARROW_LEN <= rgt - lft:
             d["lx"] = centred(lft, rgt, tw)
-        elif rgt + 6 + tw <= right and free_at(s, rgt + 6, rgt + 6 + tw, i):
+        elif rgt + 6 + tw <= right and s.free(rgt + 6, rgt + 6 + tw):
             d["lx"] = rgt + 6
-        elif lft - 6 - tw >= px and free_at(s, lft - 6 - tw, lft - 6, i):
+        elif lft - 6 - tw >= px and s.free(lft - 6 - tw, lft - 6):
             d["lx"] = lft - 6 - tw
         if d["lx"] is not None and tw + 2 * ARROW_LEN > rgt - lft:
-            s.append((d["lx"], d["lx"] + tw, -1))
+            s.add(d["lx"], d["lx"] + tw)
     return laid, band_px("header"), band_px("footer")
 
 

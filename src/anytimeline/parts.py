@@ -8,7 +8,8 @@ Stem have ``of()``, which also takes the short forms its argument accepts
 from __future__ import annotations
 
 import math
-from dataclasses import KW_ONLY, dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import KW_ONLY, dataclass, field, fields
 from typing import Any, Literal, get_args
 
 import numpy as np
@@ -288,6 +289,9 @@ class Measure:
             drawing), ``"dots"`` or ``"none"``.
         extend: Its extension lines: ``"mark"`` (from each end's mark to the line),
             ``"lanes"`` (through every lane, as cursors) or ``"none"``.
+        limit: A budget: a measure longer than it is drawn in the plot's "over" colour,
+            and [`measured`][anytimeline.Timeline.measured] says so (``over``). A duration
+            (``"200ms"``, ``"1.5 h"``, a timedelta); on a plot of numbers, a number.
     """
 
     a: Any
@@ -302,45 +306,208 @@ class Measure:
     label: MeasureLabel = "auto"
     ends: MeasureEnds = "arrows"
     extend: MeasureExtend = "mark"
+    limit: Any = None
 
     def __post_init__(self) -> None:
         for end in (self.a, self.b):
-            if end is None or isinstance(end, bool | tuple):
-                raise TypeError(f"Measure's ends are Edges or times, got {end!r}")
-        if self.text is not None and not isinstance(self.text, str):
-            raise TypeError(f"Measure's text is text or None, got {self.text!r}")
-        _check_color("Measure", self.color)
-        if not isinstance(self.at, ValueAt) and self.at not in MEASURE_PLACES:
-            raise ValueError(
-                f"Measure's at must be one of {MEASURE_PLACES} or atl.value(...), got {self.at!r}"
-            )
-        level = self.level
-        if level is not None:
-            if isinstance(level, bool) or not isinstance(level, int | np.integer) or level < 0:
-                raise TypeError(f"Measure's level is a whole number from 0, or None; got {level!r}")
-            object.__setattr__(self, "level", int(level))
-        nudge = self.nudge
-        if (
-            isinstance(nudge, bool)
-            or not isinstance(nudge, int | float)
-            or not math.isfinite(nudge)
-        ):
-            raise TypeError(f"Measure's nudge is a number of pixels, got {nudge!r}")
-        object.__setattr__(self, "nudge", float(nudge))
-        for key, words in (
-            ("label", MEASURE_LABELS),
-            ("ends", MEASURE_ENDS),
-            ("extend", MEASURE_EXTENDS),
-        ):
-            if getattr(self, key) not in words:
-                raise ValueError(
-                    f"Measure's {key} must be one of {words}, got {getattr(self, key)!r}"
-                )
-        if self.text is not None:
-            measuring.check(self.text)
+            _check_end("Measure", end)
+        _check_look("Measure", self)
 
 
-Note = Annotation | Connection | Measure
+def _check_end(part: str, end: Any) -> None:
+    if end is None or isinstance(end, bool | tuple | list):
+        raise TypeError(f"{part}'s ends are Edges or times, got {end!r}")
+
+
+def _check_look(part: str, m: Any) -> None:
+    """Check what a measure and a rule of measures have alike: text, colour, place, level,
+    nudge, label, ends, extension lines and limit (level and nudge made int and float)."""
+    if m.text is not None and not isinstance(m.text, str):
+        raise TypeError(f"{part}'s text is text or None, got {m.text!r}")
+    _check_color(part, m.color)
+    if not isinstance(m.at, ValueAt) and m.at not in MEASURE_PLACES:
+        raise ValueError(
+            f"{part}'s at must be one of {MEASURE_PLACES} or atl.value(...), got {m.at!r}"
+        )
+    level = m.level
+    if level is not None:
+        if isinstance(level, bool) or not isinstance(level, int | np.integer) or level < 0:
+            raise TypeError(f"{part}'s level is a whole number from 0, or None; got {level!r}")
+        object.__setattr__(m, "level", int(level))
+    nudge = m.nudge
+    if isinstance(nudge, bool) or not isinstance(nudge, int | float) or not math.isfinite(nudge):
+        raise TypeError(f"{part}'s nudge is a number of pixels, got {nudge!r}")
+    object.__setattr__(m, "nudge", float(nudge))
+    for key, words in (
+        ("label", MEASURE_LABELS),
+        ("ends", MEASURE_ENDS),
+        ("extend", MEASURE_EXTENDS),
+    ):
+        if getattr(m, key) not in words:
+            raise ValueError(f"{part}'s {key} must be one of {words}, got {getattr(m, key)!r}")
+    if m.text is not None:
+        measuring.check(m.text)
+    measuring.check_duration(f"{part}'s limit", m.limit)
+
+
+@dataclass(frozen=True)
+class MeasureRule:
+    """Measures made by a rule, worked out again whenever the plot's data changes: one note
+    in [`notes`][anytimeline.Timeline.notes], a row per measure it makes in
+    [`measured`][anytimeline.Timeline.measured]. Made by
+    [`measure_each`][anytimeline.Timeline.measure_each] ([`MeasureEach`][anytimeline.MeasureEach]),
+    [`measure_gaps`][anytimeline.Timeline.measure_gaps] ([`MeasureGaps`][anytimeline.MeasureGaps]),
+    [`measure_chain`][anytimeline.Timeline.measure_chain]
+    ([`MeasureChain`][anytimeline.MeasureChain]) and
+    [`measure_from`][anytimeline.Timeline.measure_from] ([`MeasureFrom`][anytimeline.MeasureFrom]).
+    Its measures look as it says; the arguments are those of a
+    [`Measure`][anytimeline.Measure]."""
+
+    _: KW_ONLY
+    text: str | None = None
+    color: str | None = None
+    at: MeasurePlace | ValueAt = "auto"
+    level: int | None = None
+    nudge: float = 0.0
+    label: MeasureLabel = "auto"
+    ends: MeasureEnds = "arrows"
+    extend: MeasureExtend = "mark"
+    limit: Any = None
+
+    def __post_init__(self) -> None:
+        _check_look(type(self).__name__, self)
+
+    def __repr__(self) -> str:
+        """What was set, the rule's own first: ``MeasureGaps(layer='jobs', min='50ms')``."""
+        look = [f.name for f in fields(MeasureRule)]
+        own = [f for f in fields(self) if f.name not in look]
+        order = own + [f for f in fields(self) if f.name in look]
+        shown = [
+            f"{f.name}={getattr(self, f.name)!r}"
+            for f in order
+            if getattr(self, f.name) != f.default
+        ]
+        return f"{type(self).__name__}({', '.join(shown)})"
+
+
+def _rows(part: str, rows: Any) -> tuple[int, ...] | None:
+    """Rows of a table: ints, or a mask of booleans (the rows where it is true)."""
+    if rows is None:
+        return None
+    if isinstance(rows, str | bytes | int | Mapping):
+        raise TypeError(f"{part}'s rows are rows of a table (a list of ints), got {rows!r}")
+    a = np.asarray(list(rows) if not hasattr(rows, "__array__") else rows)
+    if a.dtype == bool:
+        a = np.flatnonzero(a)
+    if a.size and (a.dtype.kind not in "iu" or a.min() < 0):
+        raise TypeError(f"{part}'s rows are rows of a table (ints from 0), got {rows!r}")
+    return tuple(int(r) for r in a)
+
+
+@dataclass(frozen=True, repr=False)
+class MeasureEach(MeasureRule):
+    """A measure of each bar of an intervals layer: its length, from its start to its end
+    ([`Timeline.measure_each`][anytimeline.Timeline.measure_each]).
+
+    Args:
+        layer: The intervals layer; ``None``: the plot's one.
+        rows: Rows of its table to measure (``plot.selection["jobs"]``); ``None``: all.
+    """
+
+    layer: str | None = None
+    rows: tuple[int, ...] | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.layer is not None and not isinstance(self.layer, str):
+            raise TypeError(f"MeasureEach's layer is a layer's name, got {self.layer!r}")
+        object.__setattr__(self, "rows", _rows("MeasureEach", self.rows))
+
+
+@dataclass(frozen=True, repr=False)
+class MeasureGaps(MeasureRule):
+    """A measure of each gap between the marks of a layer: from the end of the marks so far
+    to the start of the next one, in each lane, or in each group of ``by``
+    ([`Timeline.measure_gaps`][anytimeline.Timeline.measure_gaps]). Marks that overlap have
+    no gap between them.
+
+    Args:
+        layer: The events or intervals layer; ``None``: the plot's one.
+        by: A column of its table: the gaps within each of its values (a request, a
+            job); ``None``: within each lane.
+        min: Gaps shorter than this are left out (a duration such as ``"50ms"``; on a plot
+            of numbers, a number); ``None``: none, but gaps of no time.
+        max: Gaps longer than this are left out.
+    """
+
+    layer: str | None = None
+    by: str | None = None
+    min: Any = None
+    max: Any = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        for key in ("layer", "by"):
+            v = getattr(self, key)
+            if v is not None and not isinstance(v, str):
+                raise TypeError(f"MeasureGaps's {key} is a name, got {v!r}")
+        measuring.check_duration("MeasureGaps's min", self.min)
+        measuring.check_duration("MeasureGaps's max", self.max)
+
+
+@dataclass(frozen=True, repr=False)
+class MeasureChain(MeasureRule):
+    """Measures from each end to the next, on one level: continued dimensions, A to B to C
+    ([`Timeline.measure_chain`][anytimeline.Timeline.measure_chain]).
+
+    Args:
+        through: Its ends in turn, two or more: [`Edge`][anytimeline.Edge]s or times.
+        lane: The lane its measures are drawn in; ``None``: the upper of its ends' lanes.
+    """
+
+    through: tuple[Any, ...] = ()
+    lane: Any = field(default=None, kw_only=True)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if isinstance(self.through, str) or not isinstance(self.through, Sequence):
+            raise TypeError(f"MeasureChain's through is a list of ends, got {self.through!r}")
+        if len(self.through) < 2:
+            raise ValueError("MeasureChain needs two ends or more")
+        for e in self.through:
+            _check_end("MeasureChain", e)
+        object.__setattr__(self, "through", tuple(self.through))
+
+
+@dataclass(frozen=True, repr=False)
+class MeasureFrom(MeasureRule):
+    """Measures from one origin to each of several ends, stacked a level apart, the shortest
+    nearest the marks: baseline dimensions
+    ([`Timeline.measure_from`][anytimeline.Timeline.measure_from]).
+
+    Args:
+        origin: Where each starts: an [`Edge`][anytimeline.Edge] or a time.
+        to: Where each ends, one or more.
+        lane: The lane its measures are drawn in; ``None``: the upper of its ends' lanes.
+    """
+
+    origin: Any = None
+    to: tuple[Any, ...] = ()
+    lane: Any = field(default=None, kw_only=True)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _check_end("MeasureFrom", self.origin)
+        if isinstance(self.to, str) or not isinstance(self.to, Sequence):
+            raise TypeError(f"MeasureFrom's to is a list of ends, got {self.to!r}")
+        if not self.to:
+            raise ValueError("MeasureFrom needs an end to measure to")
+        for e in self.to:
+            _check_end("MeasureFrom", e)
+        object.__setattr__(self, "to", tuple(self.to))
+
+
+Note = Annotation | Connection | Measure | MeasureRule
 """What [`Timeline.notes`][anytimeline.Timeline.notes] holds."""
 
 

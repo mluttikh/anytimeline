@@ -14,6 +14,7 @@ import pytest
 
 import anytimeline as atl
 from anytimeline import Annotation, Connection, Edge, Measure, Timeline, image
+from anytimeline import notes as notelist
 from anytimeline.data import NotFoundError
 
 T0 = np.datetime64("2026-10-01T00:00:00", "ns")
@@ -576,3 +577,181 @@ def test_extension_lines_start_at_a_bars_own_row() -> None:
     dashed = re.findall(r'<line x1="[^"]+" y1="([^"]+)" x2="[^"]+" y2="([^"]+)"[^>]*3 2', svg)
     starts = sorted(max(float(a), float(b)) for a, b in dashed)
     assert starts == pytest.approx(sorted(tops), abs=0.6)
+
+
+# ---------------------------------------------------------------------- measures by rule
+
+
+def jobs() -> Timeline:
+    """Two machines: x has a, b (overlapping c), d; y has e, and a milestone f."""
+    bars = {
+        "job": np.array(["a", "b", "c", "d", "e", "f"], dtype=object),
+        "m": np.array(["x", "x", "x", "x", "y", "y"], dtype=object),
+        "start": T0 + np.array([0, 3, 4, 9, 1, 6]) * H,
+        "end": T0 + np.array([2, 6, 5, 10, 4, 6]) * H,
+        "batch": np.array([1, 1, 2, 2, 1, 2]),
+    }
+    return Timeline().intervals(bars, lane="m", text="{job}")
+
+
+def parts(p: Timeline) -> list[dict]:
+    return p._notes.get("measures", [])
+
+
+def hours(p: Timeline, ms: list[dict]) -> list[tuple[float, float]]:
+    """Each measure's ends, in hours from T0."""
+    return [(round(ticks_h(p, m["a"]["x"]), 6), round(ticks_h(p, m["b"]["x"]), 6)) for m in ms]
+
+
+def ticks_h(p: Timeline, x: float) -> float:
+    assert p._base is not None
+    return float((p._base.to_value(x) - T0) / H)
+
+
+def test_measure_each_measures_every_bar_or_some_rows() -> None:
+    p = jobs().measure_each(limit="2.5h", text="{a.job} {time}")
+    assert p.notes == [atl.MeasureEach(text="{a.job} {time}", limit="2.5h")]
+    ms = parts(p)
+    assert [m["part"] for m in ms] == [0, 1, 2, 3, 4]  # f is a milestone: no length
+    assert hours(p, ms) == [(0, 2), (3, 6), (4, 5), (9, 10), (1, 4)]
+    assert [m["text"] for m in ms] == [f"{j} {{time}}" for j in "abcde"]
+    assert [m.get("over", False) for m in ms] == [False, True, False, False, True]
+    assert {m["id"] for m in ms} == {0}
+    assert {m["rule"] for m in ms} == {"each"}
+    q = jobs().measure_each(rows=[3, 1, 5])
+    assert hours(q, parts(q)) == [(3, 6), (9, 10)]
+    r = jobs().measure_each(rows=np.array([True, False, False, False, True, False]))
+    assert hours(r, parts(r)) == [(0, 2), (1, 4)]
+
+
+def test_measure_gaps_in_each_lane_or_group_without_overlaps() -> None:
+    p = jobs().measure_gaps()
+    # x: a ends 2, b 3–6 holds c 4–5, d at 9; y: e ends 4, f at 6
+    assert hours(p, parts(p)) == [(2, 3), (6, 9), (4, 6)]
+    ms = parts(p)
+    assert [(m["a"]["side"], m["b"]["side"]) for m in ms] == [("end", "start")] * 3
+    q = jobs().measure_gaps(min="2.5h")
+    assert hours(q, parts(q)) == [(6, 9)]
+    q = jobs().measure_gaps(max=dt.timedelta(hours=2))
+    assert hours(q, parts(q)) == [(2, 3), (4, 6)]
+    # by a column: batch 1 is a 0–2, e 1–4, b 3–6 (no gap); batch 2 is c 4–5, f 6, d 9–10
+    q = jobs().measure_gaps(by="batch")
+    assert hours(q, parts(q)) == [(5, 6), (6, 9)]
+    with pytest.raises(NotFoundError):
+        jobs().measure_gaps(by="nope")
+
+
+def test_measure_gaps_of_events() -> None:
+    p = two_layers().measure_gaps("checks")
+    assert parts(p) == []  # one event in each lane
+    e = {"time": T0 + np.array([0, 1, 1, 4]) * H, "k": np.array(["a"] * 4, dtype=object)}
+    q = Timeline().events(e, lane="k").measure_gaps()
+    assert hours(q, parts(q)) == [(0, 1), (1, 4)]  # two at one time: no gap
+    with pytest.raises(ValueError, match="measure_each measures intervals"):
+        Timeline().events(e, lane="k").measure_each()
+
+
+def test_a_chain_is_on_one_level_and_a_baseline_a_level_apart() -> None:
+    p = jobs().measure_chain([atl.start(0), atl.end(0), atl.start(1), atl.end(4)])
+    ms = parts(p)
+    assert hours(p, ms) == [(0, 2), (2, 3), (3, 4)]
+    assert [m["group"] for m in ms] == [0, 0, 0]
+    assert {m["lane"] for m in ms} == {0}  # the upper of all its ends' lanes
+    q = jobs().measure_from(atl.start(0), [atl.end(3), atl.end(0), atl.end(1)])
+    ms = parts(q)
+    assert hours(q, ms) == [(0, 10), (0, 2), (0, 6)]
+    assert [m["group"] for m in ms] == [2, 0, 1]  # the shortest nearest the marks
+    pinned = jobs().measure_from(atl.start(0), [atl.end(3), atl.end(0)], level=1)
+    assert [(m["level"], "group" in m) for m in parts(pinned)] == [(2, False), (1, False)]
+    pic = picture(q, 300)
+    laid = pic._layout_measures(q._notes["measures"])[0]
+    assert [d["k"] for d in laid] == [2, 0, 1]
+    with pytest.raises(ValueError, match="two ends or more"):
+        jobs().measure_chain([atl.start(0)])
+    with pytest.raises(ValueError, match="an end to measure to"):
+        jobs().measure_from(atl.start(0), [])
+
+
+def test_rules_in_measured_follow_the_data() -> None:
+    p = jobs().measure_each(limit="2.5h").measure(atl.end(0), atl.start(1))
+    t = p.measured
+    assert t["note"].tolist() == [0, 0, 0, 0, 0, 1]
+    assert t["part"].tolist() == [0, 1, 2, 3, 4, 0]
+    assert t["over"].tolist() == [False, True, False, False, True, False]
+    assert t["a_row"].tolist() == [0, 1, 2, 3, 4, 0]
+    bars = {
+        "job": np.array(["a", "b"], dtype=object),
+        "m": np.array(["x", "x"], dtype=object),
+        "start": T0 + np.array([0, 3]) * H,
+        "end": T0 + np.array([1, 4]) * H,
+        "batch": np.array([1, 1]),
+    }
+    p.update("intervals", data=bars)
+    assert p.measured["part"].tolist() == [0, 1, 0]  # worked out again
+    assert len(parts(p)) == 3
+
+
+def test_a_rule_changes_and_goes_as_a_whole_in_the_plot() -> None:
+    p = jobs().measure_each().measure_chain([atl.start(0), atl.end(0), atl.end(1)])
+    w = p.widget
+    w._on_msg(w, {"type": "note_change", "id": 0, "at": "bottom", "level": 1, "lane": 1}, [])
+    assert p.notes[0] == atl.MeasureEach(at="bottom", level=1)  # its marks' lanes
+    w._on_msg(w, {"type": "note_change", "id": 1, "lane": 1, "text": "{time}"}, [])
+    chain = (atl.start(0), atl.end(0), atl.end(1))
+    assert p.notes[1] == atl.MeasureChain(chain, lane="y", text="{time}")
+    w._on_msg(w, {"type": "note_end", "id": 0, "end": "a", "to": {"x": 0.0}}, [])
+    assert p.notes[0] == atl.MeasureEach(at="bottom", level=1)  # a rule's ends are its own
+    w._on_msg(w, {"type": "note_remove", "id": 0}, [])
+    assert len(p.notes) == 1
+    assert isinstance(p.notes[0], atl.MeasureChain)
+
+
+def test_rules_take_the_measure_defaults_they_have() -> None:
+    with atl.defaults(measure={"ends": "ticks", "lane": "y", "limit": "1h"}):
+        p = jobs().measure_each().measure_chain([atl.start(0), atl.end(0)])
+    assert p.notes == [
+        atl.MeasureEach(ends="ticks", limit="1h"),
+        atl.MeasureChain((atl.start(0), atl.end(0)), lane="y", ends="ticks", limit="1h"),
+    ]
+
+
+def test_rules_check_what_they_are_given() -> None:
+    with pytest.raises(ValueError, match="limit is a duration such as"):
+        atl.MeasureEach(limit="2 hours")
+    with pytest.raises(TypeError, match="rows are rows of a table"):
+        atl.MeasureEach(rows="a")  # ty: ignore[invalid-argument-type]
+    with pytest.raises(TypeError, match="a timedelta"):
+        jobs().measure_gaps(min=30)  # a plot of times: a number is not a duration
+    nums = Timeline().intervals({"start": [0.0, 5.0], "end": [2.0, 6.0]})
+    assert len(parts(nums.measure_gaps(min=3))) == 1  # numbers: in their own units
+    assert (
+        len(
+            parts(
+                Timeline().intervals({"start": [0.0, 5.0], "end": [2.0, 6.0]}).measure_gaps(min=4)
+            )
+        )
+        == 0
+    )
+    with pytest.raises(TypeError, match="takes a number"):
+        nums.measure_each(limit="2s")
+    assert repr(atl.MeasureGaps("jobs", by="m", min="50ms")) == (
+        "MeasureGaps(layer='jobs', by='m', min='50ms')"
+    )
+
+
+def test_a_rule_makes_at_most_so_many_measures(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(notelist, "MAX_RULE", 3)
+    with pytest.raises(ValueError, match="makes 5 measures; at most 3"):
+        jobs().measure_each()
+    p = jobs()
+    with pytest.warns(UserWarning, match="the first 3 are drawn"):
+        p.notes = [atl.MeasureEach()]  # set as a list: not checked, drawn in part
+    assert len(parts(p)) == 3
+
+
+def test_over_its_limit_a_measure_is_red_in_pictures() -> None:
+    p = jobs().measure(atl.start(1), atl.end(1), limit="1h")
+    assert parts(p)[0]["over"] is True
+    svg = p.to_svg(width=600, height=300)
+    assert image.THEMES["light"].over in svg
+    assert "over" not in parts(jobs().measure(atl.start(1), atl.end(1), limit="3h"))[0]

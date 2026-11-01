@@ -9,10 +9,13 @@ Python. ``{a.col}`` and ``{b.col}``, a column of an end's row, are filled in by 
 
 from __future__ import annotations
 
+import datetime as dt
 import math
 import re
 from collections.abc import Callable, Mapping
 from typing import Any
+
+import numpy as np
 
 from anytimeline import axis as ax
 
@@ -45,6 +48,44 @@ def check(text: str) -> None:
                 f"{m.group(0)}: a number's format is a sign, ',', digits and f, e, % or g, "
                 "such as {change:+.2f}"
             )
+
+
+DURATION = re.compile(r"^\s*([0-9]*\.?[0-9]+(?:e[+-]?\d+)?)\s*(ns|us|µs|ms|s|min|h|d)\s*$")
+
+
+def check_duration(name: str, value: Any) -> None:
+    """Raise when ``value`` is not a duration a measure takes (``limit=``, ``min=``,
+    ``max=``): text such as ``"200ms"`` or ``"1.5 h"``, a timedelta, or a number (on a plot of
+    numbers, in its units; on a plot of times, nanoseconds is not meant, so not taken)."""
+    if value is None:
+        return
+    if isinstance(value, str):
+        if not DURATION.match(value):
+            raise ValueError(
+                f"{name} is a duration such as '200ms', '1.5 h' (ns, us, ms, s, min, h, d), "
+                f"got {value!r}"
+            )
+        return
+    if isinstance(value, bool) or not isinstance(
+        value, int | float | dt.timedelta | np.timedelta64
+    ):
+        raise TypeError(f"{name} is a duration ('200ms', a timedelta) or a number, got {value!r}")
+    if isinstance(value, int | float) and (not math.isfinite(value) or value < 0):
+        raise ValueError(f"{name} is a duration of 0 or more, got {value!r}")
+
+
+def duration_ns(value: Any) -> float | None:
+    """A duration in nanoseconds: text (``"200ms"``) or a timedelta; None: a plain number."""
+    if isinstance(value, str):
+        m = DURATION.match(value)
+        if not m:
+            raise ValueError(f"not a duration: {value!r}")
+        return float(m.group(1)) * UNITS[m.group(2)][0]
+    if isinstance(value, np.timedelta64):
+        return float(value.astype("timedelta64[ns]").astype(np.int64))
+    if isinstance(value, dt.timedelta):
+        return (value.days * 86_400 + value.seconds) * 1e9 + value.microseconds * 1e3
+    return None
 
 
 def _group(whole: str) -> str:

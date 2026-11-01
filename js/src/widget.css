@@ -7,6 +7,7 @@
   --atl-panel: rgba(255, 255, 255, 0.9);
   --atl-select: #e8590c;
   --atl-accent: #1f77b4;
+  --atl-over: #e03131;
   --atl-border: #dde1e6;
   position: relative;
   width: 100%;
@@ -39,6 +40,7 @@ body.vscode-high-contrast:not(.vscode-high-contrast-light) .atl-root,
   --atl-panel: rgba(18, 23, 29, 0.9);
   --atl-select: #ff922b;
   --atl-accent: #4dabf7;
+  --atl-over: #ff6b6b;
   --atl-border: #2b3440;
 }
 @media (prefers-color-scheme: dark) {
@@ -51,6 +53,7 @@ body.vscode-high-contrast:not(.vscode-high-contrast-light) .atl-root,
     --atl-panel: rgba(18, 23, 29, 0.9);
     --atl-select: #ff922b;
     --atl-accent: #4dabf7;
+    --atl-over: #ff6b6b;
     --atl-border: #2b3440;
   }
 }

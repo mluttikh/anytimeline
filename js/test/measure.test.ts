@@ -244,6 +244,7 @@ describe("measures: moved in the plot", () => {
     });
     v.measureHits = layoutMeasures(v, ctx, [measure], plot, 40).laid;
     v.selectedMeasure = measure.id;
+    v.selectedPart = measure.part ?? null;
     return { v, d: v.measureHits[0], sent, notices };
   };
 

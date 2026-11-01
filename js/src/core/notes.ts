@@ -84,6 +84,14 @@ export interface NoteMeasure {
   extend?: MeasureExtend;
   /** Its text as written, when Python filled in `{a.col}` or `{b.col}` (to edit it). */
   raw?: string | null;
+  /** Made by a rule of measures (its note is the rule: `id`): which rule, and this one's
+   * index among its measures. */
+  rule?: "each" | "gaps" | "chain" | "from";
+  part?: number;
+  /** A chain's or a baseline's measure: its offset in levels in the rule's group. */
+  group?: number;
+  /** Longer than its limit: drawn in the theme's "over" colour. */
+  over?: boolean;
 }
 
 /** What a change of a measure in the plot sets (absent: unchanged). */
@@ -220,6 +228,10 @@ export interface MeasureGeom {
   tw: number;
   /** Where its label goes (absent: "auto"). */
   label?: MeasureLabel;
+  /** A group laid out as one (a rule's chain or baseline: its note's index), and this
+   * one's offset in levels in it (absent: none, 0). */
+  group?: number | null;
+  off?: number;
 }
 
 /** A measure as drawn: its geometry, the band or lane edge it stacks from (`place`), its
@@ -259,11 +271,14 @@ export function bandHeight(levels: number, fs: number): number {
   return levels > 0 ? 6 + fs + 4 + (levels - 1) * (fs + 8) : 0;
 }
 
+type StackItem = { lo: number; hi: number; level: number | null; i: number; cap?: number; group?: number | null; off?: number };
+
 /** Levels for measures of one place: those with a level keep it; the others, by their
  * earlier end (on the scale shown, so zooming never changes them), take the first level
- * where they overlap none (touching ends may share one). One whose first free level is
- * `cap` or more takes none (-1): it goes elsewhere. */
-function stack(items: { lo: number; hi: number; level: number | null; i: number; cap?: number }[]): Map<number, number> {
+ * where they overlap none (touching ends may share one). A group (a chain, a baseline) goes
+ * as one: each member at the first level free for all, plus its offset. One whose level
+ * would be `cap` or more takes none (-1): it goes elsewhere, with its group. */
+function stack(items: StackItem[]): Map<number, number> {
   const out = new Map<number, number>();
   const ends: number[] = [];
   const pinned: [number, number][][] = [];
@@ -272,18 +287,93 @@ function stack(items: { lo: number; hi: number; level: number | null; i: number;
     (pinned[it.level] ??= []).push([it.lo, it.hi]);
     out.set(it.i, it.level);
   }
-  const free = items.filter((it) => it.level === null).sort((p, q) => p.lo - q.lo || p.i - q.i);
-  for (const it of free) {
+  const units: { lo: number; i: number; members: StackItem[] }[] = [];
+  const grouped = new Map<number, { lo: number; i: number; members: StackItem[] }>();
+  for (const it of items) {
+    if (it.level !== null) continue;
+    const g = it.group ?? null;
+    let u = g === null ? undefined : grouped.get(g);
+    if (!u) {
+      u = { lo: it.lo, i: it.i, members: [] };
+      units.push(u);
+      if (g !== null) grouped.set(g, u);
+    }
+    u.members.push(it);
+    u.lo = Math.min(u.lo, it.lo);
+    u.i = Math.min(u.i, it.i);
+  }
+  units.sort((p, q) => p.lo - q.lo || p.i - q.i);
+  for (const u of units) {
+    const free = (k: number) =>
+      u.members.every((m) => {
+        const l = k + (m.off ?? 0);
+        return (ends[l] ?? -Infinity) <= u.lo && !(pinned[l] ?? []).some(([lo, hi]) => lo < m.hi && m.lo < hi);
+      });
     let k = 0;
-    while ((ends[k] ?? -Infinity) > it.lo || (pinned[k] ?? []).some(([lo, hi]) => lo < it.hi && it.lo < hi)) k++;
-    if (it.cap !== undefined && k >= it.cap) {
-      out.set(it.i, -1);
+    while (!free(k)) k++;
+    const top = k + Math.max(...u.members.map((m) => m.off ?? 0));
+    const cap = u.members[0].cap;
+    if (cap !== undefined && top >= cap) {
+      for (const m of u.members) out.set(m.i, -1);
       continue;
     }
-    ends[k] = Math.max(ends[k] ?? -Infinity, it.hi);
-    out.set(it.i, k);
+    for (const m of u.members) {
+      const l = k + (m.off ?? 0);
+      ends[l] = Math.max(ends[l] ?? -Infinity, m.hi);
+      out.set(m.i, l);
+    }
   }
   return out;
+}
+
+/** What takes room on a level of measures: their lines, and the labels put beside them.
+ * `free(a, b)`: whether [a, b], with 4 px either side, overlaps none (a label beside a line
+ * never overlaps its own line). Lines are sorted with the furthest right end so far, labels
+ * kept sorted; so a level of thousands of measures is quick (Python's `_LevelSpans`). */
+class LevelSpans {
+  private lineL: number[];
+  private lineR: number[];
+  private labL: number[] = [];
+  private labR: number[] = [];
+  private widest = 0;
+
+  constructor(lines: [number, number][]) {
+    lines.sort((p, q) => p[0] - q[0]);
+    this.lineL = lines.map((s) => s[0]);
+    let most = -Infinity;
+    this.lineR = lines.map((s) => (most = Math.max(most, s[1])));
+  }
+
+  free(a: number, b: number): boolean {
+    const lo = a - 4;
+    const hi = b + 4;
+    const n = firstAtLeast(this.lineL, hi); // lines with l < hi
+    if (n > 0 && this.lineR[n - 1] > lo) return false;
+    for (let j = firstAtLeast(this.labL, hi) - 1; j >= 0 && this.labL[j] >= lo - this.widest - 1; j--) {
+      if (this.labR[j] > lo) return false;
+    }
+    return true;
+  }
+
+  add(l: number, r: number): void {
+    let j = firstAtLeast(this.labL, l);
+    while (j < this.labL.length && this.labL[j] === l) j++;
+    this.labL.splice(j, 0, l);
+    this.labR.splice(j, 0, r);
+    this.widest = Math.max(this.widest, r - l);
+  }
+}
+
+/** The first index of sorted `xs` whose value is `x` or more. */
+function firstAtLeast(xs: number[], x: number): number {
+  let lo = 0;
+  let hi = xs.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (xs[mid] < x) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
 /** Where measures' lines go (Python's place_measures): per place and row, levels from
@@ -319,8 +409,9 @@ export function placeMeasures<G extends MeasureGeom>(geoms: G[], f: MeasureFrame
   const level = new Map<number, number>();
   const place = new Map<number, string>();
   const over: number[] = [];
+  const item = (i: number, level: number | null, withCap: boolean): StackItem => ({ lo: lo[i], hi: hi[i], level, i, cap: withCap && kind[i] === "auto" ? cap : undefined, group: geoms[i].group ?? null, off: geoms[i].off ?? 0 });
   for (const [k, members] of groups) {
-    const got = stack(members.map((i) => ({ lo: lo[i], hi: hi[i], level: geoms[i].level, i, cap: kind[i] === "auto" ? cap : undefined })));
+    const got = stack(members.map((i) => item(i, geoms[i].level, true)));
     for (const i of members) {
       const l = got.get(i)!;
       if (l < 0) over.push(i);
@@ -333,12 +424,13 @@ export function placeMeasures<G extends MeasureGeom>(geoms: G[], f: MeasureFrame
   const bands = { header: 0, footer: 0 };
   for (const band of ["header", "footer"] as const) {
     const own = geoms.map((_, i) => i).filter((i) => key(i) === band);
-    let got = stack(own.map((i) => ({ lo: lo[i], hi: hi[i], level: geoms[i].level, i })));
+    let got = stack(own.map((i) => item(i, geoms[i].level, false)));
     const members = [...own];
     if (band === "header" && over.length) {
       // the lanes' overflow comes after the header's own measures, around them
       members.push(...over);
-      got = stack(members.map((i) => ({ lo: lo[i], hi: hi[i], level: over.includes(i) ? null : got.get(i)!, i })));
+      const lanes = new Set(over);
+      got = stack(members.map((i) => item(i, lanes.has(i) ? null : got.get(i)!, false)));
     }
     for (const i of members) {
       level.set(i, got.get(i)!);
@@ -371,16 +463,16 @@ export function placeMeasures<G extends MeasureGeom>(geoms: G[], f: MeasureFrame
     return { ...g, place: p, k, y, lx: null, ly: y - h / 2 };
   });
   // labels, level by level: the lines first, then each label where it has room
-  const spans = new Map<string, [number, number, number][]>();
-  laid.forEach((d, i) => {
+  const spans = new Map<string, [number, number][]>();
+  laid.forEach((d) => {
     const s = `${d.place} ${d.k}`;
     if (!spans.has(s)) spans.set(s, []);
-    spans.get(s)!.push([Math.min(d.xa, d.xb), Math.max(d.xa, d.xb), i]);
+    spans.get(s)!.push([Math.min(d.xa, d.xb), Math.max(d.xa, d.xb)]);
   });
+  const levels = new Map([...spans].map(([k, lines]) => [k, new LevelSpans(lines)]));
   const right = f.plot.x + f.plot.w;
   const areaTop = f.headTop;
   const areaBottom = f.footTop + bandPx("footer");
-  const freeAt = (s: [number, number, number][], a: number, b: number, own: number) => !s.some(([l, r, j]) => j !== own && l < b + 4 && a - 4 < r);
   const centred = (l: number, r: number, tw: number) => Math.max(f.plot.x + 1, Math.min((l + r) / 2 - tw / 2, right - tw - 1));
   const byLeft = laid.map((_, i) => i).sort((p, q) => Math.min(laid[p].xa, laid[p].xb) - Math.min(laid[q].xa, laid[q].xb) || p - q);
   // labels put somewhere first (they take their room), then the automatic ones
@@ -399,18 +491,18 @@ export function placeMeasures<G extends MeasureGeom>(geoms: G[], f: MeasureFrame
       if (mode === "above") d.ly = up < areaTop && down + h <= areaBottom ? down : up;
       else if (mode === "below") d.ly = down + h > areaBottom && up >= areaTop ? up : down;
     } else d.lx = mode === "start" ? l - 6 - d.tw : r + 6;
-    if (mode !== "above" && mode !== "below" && (mode !== "on" || d.tw > r - l)) spans.get(`${d.place} ${d.k}`)!.push([d.lx, d.lx + d.tw, -1]);
+    if (mode !== "above" && mode !== "below" && (mode !== "on" || d.tw > r - l)) levels.get(`${d.place} ${d.k}`)!.add(d.lx, d.lx + d.tw);
   }
   for (const i of byLeft) {
     const d = laid[i];
     if (!d.text || (d.label ?? "auto") !== "auto") continue;
     const l = Math.min(d.xa, d.xb);
     const r = Math.max(d.xa, d.xb);
-    const s = spans.get(`${d.place} ${d.k}`)!;
+    const s = levels.get(`${d.place} ${d.k}`)!;
     if (d.tw + 2 * ARROW_LEN <= r - l) d.lx = centred(l, r, d.tw);
-    else if (r + 6 + d.tw <= right && freeAt(s, r + 6, r + 6 + d.tw, i)) d.lx = r + 6;
-    else if (l - 6 - d.tw >= f.plot.x && freeAt(s, l - 6 - d.tw, l - 6, i)) d.lx = l - 6 - d.tw;
-    if (d.lx !== null && d.tw + 2 * ARROW_LEN > r - l) s.push([d.lx, d.lx + d.tw, -1]);
+    else if (r + 6 + d.tw <= right && s.free(r + 6, r + 6 + d.tw)) d.lx = r + 6;
+    else if (l - 6 - d.tw >= f.plot.x && s.free(l - 6 - d.tw, l - 6)) d.lx = l - 6 - d.tw;
+    if (d.lx !== null && d.tw + 2 * ARROW_LEN > r - l) s.add(d.lx, d.lx + d.tw);
   }
   return { laid, head: bandPx("header"), foot: bandPx("footer") };
 }
@@ -457,7 +549,9 @@ export function measureGeoms(view: TimelineView, ctx: CanvasRenderingContext2D, 
       text,
       tw: ctx.measureText(text).width + 8,
       label: m.label ?? "auto",
-      color: m.color ?? view.theme.accent,
+      group: m.group !== undefined ? m.id : null,
+      off: m.group ?? 0,
+      color: m.over ? view.theme.over : m.color ?? view.theme.accent,
     });
   }
   return out;
@@ -663,13 +757,29 @@ function drawArrow(view: TimelineView, ctx: CanvasRenderingContext2D, n: NoteArr
 
 /** The measures to draw: Python's and the page's own (none when hidden), one end or its
  * line moved while it is dragged, and the one being made (its second end at the pointer). */
+/** Whether a measure is the one selected: its note, and of a rule, its part. */
+export function isSelected(view: TimelineView, m: NoteMeasure): boolean {
+  return m.id === view.selectedMeasure && (m.part ?? null) === view.selectedPart;
+}
+
+/** A measure as a change would make it: a rule's measures all change (a chain's and a
+ * baseline's level is the group's, each a level above by its offset; those of marks keep
+ * their lanes). */
+function previewed(m: NoteMeasure, change: MeasureChange): NoteMeasure {
+  if (!m.rule) return { ...m, ...change };
+  const c = { ...change };
+  if ((m.rule === "each" || m.rule === "gaps") && "lane" in c) delete c.lane;
+  if (m.group !== undefined && c.level !== undefined && c.level !== null) c.level += m.group;
+  return { ...m, ...c };
+}
+
 export function measuresShown(view: TimelineView): NoteMeasure[] {
   const draft = view.measureDraft;
   if (view.measuresHidden && !draft) return [];
   const all = view.measuresHidden ? [] : [...(view.notes.measures ?? []), ...view.localMeasures];
   const out = all.map((m) => {
     const line = view.lineDrag;
-    if (line?.from.m.id === m.id && line.change) return { ...m, ...line.change };
+    if (line?.from.m.id === m.id && line.change) return previewed(m, line.change);
     const h = view.handleDrag;
     if (!h || h.id !== m.id) return m;
     const moved = { ...m, [h.end]: h.to };
@@ -752,7 +862,7 @@ export function drawNotes(view: TimelineView, ctx: CanvasRenderingContext2D, plo
   ctx.clip();
   ctx.font = view.font(-1);
   ctx.textBaseline = "alphabetic";
-  for (const d of laid) drawMeasure(view, ctx, d, plot, area, laneTop, d.m.id === view.selectedMeasure);
+  for (const d of laid) drawMeasure(view, ctx, d, plot, area, laneTop, isSelected(view, d.m));
   ctx.restore();
   view.measureHits = laid.filter((d) => !Number.isNaN(d.m.id));
   view.setMeasureBands(head, foot);

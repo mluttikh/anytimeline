@@ -30,7 +30,7 @@ notebook is running.
 | Drag on the time axis | zoom to that range (with Select: select that range in all lanes) |
 | Hover | the event's details |
 | Hover a measure's time | both ends' times, and the time between exactly |
-| Click a measure's time | select it, with its menu: its place, back to automatic, its text, remove |
+| Click a measure's time | select it, with its menu: its place, back to automatic, its text, remove (a rule's measure: the rule's place and text, remove the rule) |
 | Drag a selected measure's end | to another mark's start or end |
 | Drag a selected measure's line | to another level, place or lane, or into the band above or below the lanes |
 

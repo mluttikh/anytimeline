@@ -1055,6 +1055,43 @@ test("Measure: its extension lines start at the bars it measures, in their own s
   expect(got.starts.sort((p, q) => p - q)).toEqual(got.tops.sort((p, q) => p - q).map((t) => expect.closeTo(t, 1)));
 });
 
+test("Measure: a rule's measure is selected alone; its changes, its level and Remove go to the rule", async ({ page }) => {
+  await open(page, "measure_rules");
+  const changes = () => page.evaluate(() => (window as any).__log.filter((m: any) => m.type === "note_change" || m.type === "note_remove").map(({ type, ...rest }: any) => ({ type, ...rest })));
+  await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits.length)).toBeGreaterThan(10);
+  // the baseline's longest measure (offset 2), by its label
+  const at = async (rule: string, group: number) => {
+    const d = await view(page).evaluate(
+      (root: any, [r, g]) => {
+        const h = root.__view.measureHits.find((x: any) => x.m.rule === r && (x.m.group ?? 0) === g);
+        return h ? { x: h.lx + h.tw / 2, y: h.ly + (root.__view.fs + 4) / 2, k: h.k, part: h.m.part, id: h.m.id } : null;
+      },
+      [rule, group] as const,
+    );
+    const box = await stageBox(page);
+    return { ...d!, x: box.x + d!.x, y: box.y + d!.y };
+  };
+  const longest = await at("from", 2);
+  expect(longest.k).toBe(2);
+  await page.mouse.click(longest.x, longest.y);
+  const menu = page.locator(".atl-menu");
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /Remove the rule \(3 measures\)/ })).toBeVisible();
+  // only this one is selected, and its ends do not move (they are the rule's)
+  const selected = await view(page).evaluate((root: any) => root.__view.measureHits.filter((h: any) => h.m.id === root.__view.selectedMeasure && (h.m.part ?? null) === root.__view.selectedPart).length);
+  expect(selected).toBe(1);
+  expect(await view(page).evaluate((root: any) => root.__view.selectedPart)).toBe(longest.part);
+  // a place from the menu goes to the whole rule; the measure stays selected
+  await menu.getByRole("menuitemradio", { name: "Footer" }).click();
+  expect((await changes()).at(-1)).toEqual({ type: "note_change", id: longest.id, at: "footer", level: null });
+  // a level down the footer: the rule's level is its shortest measure's, this one's less 2
+  await page.keyboard.press("ArrowDown");
+  expect((await changes()).at(-1)).toEqual({ type: "note_change", id: longest.id, at: "footer", level: 1 });
+  // Delete removes the rule
+  await page.keyboard.press("Delete");
+  expect((await changes()).at(-1)).toEqual({ type: "note_remove", id: longest.id });
+});
+
 test("Undo: Ctrl/Cmd+Z asks Python to take back a change of the selection, Shift for redo", async ({ page }) => {
   await open(page, "service_time");
   await view(page).click({ position: { x: 4, y: 4 } });

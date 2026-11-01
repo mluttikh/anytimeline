@@ -13,7 +13,7 @@
 // note; a page changes its own.
 
 import { globalIndex, type Hit } from "./common";
-import { askText, between, changeOf, changeText, laneLevels, type MeasureChange, type MeasureLaid, type MeasurePlace, type NoteEnd, type NoteMeasure, type Side } from "./notes";
+import { askText, between, changeOf, changeText, isSelected, laneLevels, type MeasureChange, type MeasureLaid, type MeasurePlace, type NoteEnd, type NoteMeasure, type Side } from "./notes";
 import { lowerBound, upperBound } from "./scene";
 import { fmtNumber } from "./time";
 import type { TimelineView } from "./view";
@@ -298,6 +298,10 @@ export async function stepEnd(view: TimelineView, forward: boolean): Promise<voi
     view.flashNotice("Make a measure first (m on one end, m on the other)");
     return;
   }
+  if (m.rule) {
+    view.flashNotice("A rule's measures follow their marks: change the rule in Python");
+    return;
+  }
   const lane = m.b.lane ?? m.a.lane;
   const at = view.xscale === "order" ? m.b.r : m.b.x;
   if (lane === null || at === null) {
@@ -322,7 +326,12 @@ export async function stepEnd(view: TimelineView, forward: boolean): Promise<voi
 
 /** Whether a measure can be changed here: the page's own, or Python's in a notebook. */
 export function editable(view: TimelineView, m: NoteMeasure): boolean {
-  return m.id < 0 || !!view.callbacks.onNoteEnd;
+  return !m.rule && (m.id < 0 || !!view.callbacks.onNoteEnd);
+}
+
+/** Whether a measure can be removed here (a rule's measure: the rule, all of them). */
+export function removable(view: TimelineView, m: NoteMeasure): boolean {
+  return m.id < 0 || !!view.callbacks.onNoteRemove;
 }
 
 /** Whether a measure's place, level and text can be changed here. */
@@ -343,7 +352,7 @@ export function remove(view: TimelineView, id: number): void {
 
 /** The selected measure as drawn (null: none selected, or not drawn). */
 export function selectedLaid(view: TimelineView): MeasureLaid | null {
-  return view.measureHits.find((h) => h.m.id === view.selectedMeasure) ?? null;
+  return view.measureHits.find((h) => isSelected(view, h.m)) ?? null;
 }
 
 /** The selected measure, when its line or label is at a point and it can be changed: to drag
@@ -408,10 +417,17 @@ export function placeAt(view: TimelineView, d: MeasureLaid, y: number): MeasureC
     const b = best as { row: number; at: MeasurePlace | "value"; level: number; y: number } | null;
     if (!b) return null;
     change = { at: b.at as MeasurePlace, level: b.level };
-    if (b.row !== d.row) change.lane = view.laneAt[b.row];
+    if (b.row !== d.row && !ownLanes(d.m)) change.lane = view.laneAt[b.row];
   }
   if (change.lane === undefined && change.at === placeOf(d) && change.level === d.k) return null;
+  // a chain's or a baseline's level is its group's: this one's less its offset
+  if (d.m.group !== undefined && change.level !== undefined && change.level !== null) change.level = Math.max(0, change.level - d.m.group);
   return change;
+}
+
+/** A rule's measures of marks (each, gaps) are in their marks' lanes: a change keeps them. */
+function ownLanes(m: NoteMeasure): boolean {
+  return m.rule === "each" || m.rule === "gaps";
 }
 
 /** Change a measure: in Python (which replaces the note), or in the page. */
@@ -436,7 +452,7 @@ export function stepLevel(view: TimelineView, up: boolean): boolean {
     view.flashNotice(up ? "This measure is as high as its place goes" : "This measure is as low as its place goes");
     return true;
   }
-  changeMeasure(view, d.m, { at: at === "value" ? d.m.at : at, level: k });
+  changeMeasure(view, d.m, { at: at === "value" ? d.m.at : at, level: Math.max(0, k - (d.m.group ?? 0)) });
   return true;
 }
 
@@ -444,13 +460,13 @@ export function stepLevel(view: TimelineView, up: boolean): boolean {
  * one is a mark's. */
 export function toAuto(view: TimelineView, m: NoteMeasure): void {
   const change: MeasureChange = { at: "auto", level: null };
-  if (m.lane !== null && (m.a.lane !== null || m.b.lane !== null)) change.lane = null;
+  if (m.lane !== null && !ownLanes(m) && (m.a.lane !== null || m.b.lane !== null)) change.lane = null;
   changeMeasure(view, m, change);
 }
 
 /** Type a measure's text over its line (empty: the time between). */
 export function editText(view: TimelineView, m: NoteMeasure): void {
-  const d = view.measureHits.find((h) => h.m.id === m.id);
+  const d = view.measureHits.find((h) => isSelected(view, h.m)) ?? view.measureHits.find((h) => h.m.id === m.id);
   const x = d ? Math.min(d.xa, d.xb) : view.plot().x;
   const y = d ? d.y - (view.fs + 4) : view.plot().y;
   askText(view, x, y, (text) => {
@@ -473,7 +489,7 @@ export function labelAt(view: TimelineView, p: { x: number; y: number }): NoteMe
 
 /** The end of the selected measure at a point, to drag (null: none). */
 export function handleAt(view: TimelineView, p: { x: number; y: number }): { m: NoteMeasure; end: "a" | "b" } | null {
-  const d = view.measureHits.find((h) => h.m.id === view.selectedMeasure);
+  const d = selectedLaid(view);
   if (!d || !editable(view, d.m)) return null;
   for (const [end, x] of [["a", d.xa], ["b", d.xb]] as const) {
     if (Math.hypot(p.x - x, p.y - d.y) <= HANDLE_PX) return { m: d.m, end };
@@ -497,7 +513,7 @@ export function describe(view: TimelineView, m: NoteMeasure): string[][] {
     const rate = axis.formatRate(m.change, m.span);
     if (rate) rows.push(["rate", rate]);
   }
-  if (m.id >= 0) rows.push(["in Python", `plot.notes[${m.id}]`]);
+  if (m.id >= 0) rows.push(["in Python", m.rule ? `plot.notes[${m.id}], its measure ${m.part ?? 0}` : `plot.notes[${m.id}]`]);
   return rows;
 }
 
