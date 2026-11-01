@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy
 import datetime as dt
+import re
 
 import numpy as np
 import pytest
@@ -551,3 +552,27 @@ def test_a_label_above_or_below_stays_in_the_picture() -> None:
     pic = picture(p, 300)
     [d] = pic._layout_measures(p._notes["measures"])[0]
     assert d["ly"] + h <= pic.f.area[1] + pic.f.area[3]
+
+
+def test_extension_lines_start_at_a_bars_own_row() -> None:
+    """Bars of one lane that overlap are stacked in rows: a measure's extension lines start
+    at the edge of the bar it measures, not at the lane's middle."""
+    bars = {
+        "start": T0 + np.array([0, 1, 2]) * H,
+        "end": T0 + np.array([6, 7, 8]) * H,
+        "lane": np.array(["x", "x", "x"], dtype=object),
+    }
+    p = Timeline().intervals(bars, lane="lane")
+    p.measure(atl.start(1), atl.start(2), at="header")
+    pic = picture(p, 300)
+    svg = pic.draw()
+    [b] = pic.drawn_bars.values()
+    tops = []
+    for i in (1, 2):
+        _, _, cy, h, _ = pic._box(b, i)
+        assert pic._mark_y({"layer": b["spec"]["name"], "index": i}) == (cy, h / 2)
+        tops.append(cy - h / 2)
+    assert tops[0] != tops[1]  # rows of their own
+    dashed = re.findall(r'<line x1="[^"]+" y1="([^"]+)" x2="[^"]+" y2="([^"]+)"[^>]*3 2', svg)
+    starts = sorted(max(float(a), float(b)) for a, b in dashed)
+    assert starts == pytest.approx(sorted(tops), abs=0.6)

@@ -212,12 +212,7 @@ export class BarLayer {
     const index = this.data.index;
     if (marks && index) {
       // some of the layer's bars: those of them selected (real bars are in the layer's order)
-      if (!this.real) {
-        const real: number[] = [];
-        for (let i = 0; i < index.length; i++) if (index[i] !== MERGED) real.push(i);
-        this.real = { local: Uint32Array.from(real), index: Uint32Array.from(real, (i) => index[i]) };
-      }
-      const { local: real, index: at } = this.real;
+      const { local: real, index: at } = this.realBars(index);
       for (const m of marks) {
         const j = lowerBound(at, m);
         if (j < at.length && at[j] === m) f[4 * real[j]] |= FLAG_SELECTED;
@@ -231,6 +226,25 @@ export class BarLayer {
     const index = this.data.index;
     if (!index) return i;
     return index[i] === MERGED ? -1 : index[i];
+  }
+
+  /** The bar Python knows as `g` among those shown (-1: none, or merged into another). */
+  localIndex(g: number): number {
+    const index = this.data.index;
+    if (!index) return g >= 0 && g < this.data.count ? g : -1;
+    const { local, index: at } = this.realBars(index);
+    const j = lowerBound(at, g);
+    return j < at.length && at[j] === g ? local[j] : -1;
+  }
+
+  /** The bars that are not merged: their indices here and Python's (in the layer's order). */
+  private realBars(index: Uint32Array): { local: Uint32Array; index: Uint32Array } {
+    if (!this.real) {
+      const real: number[] = [];
+      for (let i = 0; i < index.length; i++) if (index[i] !== MERGED) real.push(i);
+      this.real = { local: Uint32Array.from(real), index: Uint32Array.from(real, (i) => index[i]) };
+    }
+    return this.real;
   }
 
   recolor(accent: string): void {

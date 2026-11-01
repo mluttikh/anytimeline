@@ -6,6 +6,8 @@
 // Python, which keeps them; a page keeps its own measures until it is closed.
 
 import { globalIndex, type Hit } from "./common";
+import { barView } from "./drawing";
+import { lowerBound } from "./scene";
 import { changeText, fillMeasure } from "./fields";
 import type { TimelineView } from "./view";
 
@@ -475,6 +477,32 @@ function sampleY(view: TimelineView, e: NoteEnd): number | null {
   return v ? v.yAt(e.lane, e.value, view.valueView()) : null;
 }
 
+/** Where an end's mark is drawn: its middle and half its height (px). A bar in a lane of
+ * bars that overlap has a row of its own; an event that is moved aside, its own height. Null:
+ * not known (a bin, merged bars), so the middle of its lane's row. */
+export function markY(view: TimelineView, e: NoteEnd, laneTop: number, plot: Rect): [number, number] | null {
+  if (e.layer === undefined || e.index === undefined || e.index < 0) return null;
+  const b = view.bars.find((x) => x.data.spec.name === e.layer);
+  if (b) {
+    const i = b.localIndex(e.index);
+    if (i < 0) return null;
+    const { cy, h } = b.box(i, { ...barView(view, plot), laneTop });
+    return [cy, h / 2];
+  }
+  const l = view.layers.find((x) => x.data.spec.name === e.layer);
+  if (!l || (l.detail && !l.index)) return null; // the layer's bins are shown
+  let i = e.index;
+  if (l.index) {
+    const j = lowerBound(l.index, e.index);
+    if (j >= l.index.length || l.index[j] !== e.index) return null;
+    i = j;
+  }
+  if (i >= l.data.count) return null;
+  const row = view.slot[l.data.lane[i]];
+  if (row === undefined || row < 0) return null;
+  return [laneTop + (row + 0.5) * view.laneH + (l.draw.dy.data[i] ?? 0), Math.min(6, view.laneH / 4)];
+}
+
 function head(ctx: CanvasRenderingContext2D, x: number, y: number, tip: number): void {
   const base = x - tip * ARROW_LEN;
   ctx.beginPath();
@@ -499,9 +527,9 @@ function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: Measu
   ctx.fillStyle = d.color;
   ctx.lineWidth = 1;
   ctx.setLineDash([3, 2]);
-  const ends: [number, number | null, number | null][] = [[d.xa, d.rows[0], d.ys[0]], [d.xb, d.rows[1], d.ys[1]]];
+  const ends: [number, number | null, number | null, NoteEnd][] = [[d.xa, d.rows[0], d.ys[0], d.m.a], [d.xb, d.rows[1], d.ys[1], d.m.b]];
   const extend = d.m.extend ?? "mark";
-  for (const [x, row, ys] of extend === "mark" ? ends : []) {
+  for (const [x, row, ys, e] of extend === "mark" ? ends : []) {
     let y0 = y - 5;
     let y1 = y + 5;
     if (ys !== null) {
@@ -509,10 +537,11 @@ function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: Measu
       y0 = ys;
       y1 = y + away * 4;
     } else if (row !== null) {
-      const yc = laneTop + (row + 0.5) * view.laneH;
-      if (Math.abs(y - yc) < 8) continue; // through the mark's middle: no extension line
+      // from the mark's edge (its own row in a lane of bars that overlap), else the row's middle
+      const [yc, half] = markY(view, e, laneTop, plot) ?? [laneTop + (row + 0.5) * view.laneH, Math.min(6, view.laneH / 4)];
+      if (Math.abs(y - yc) < half + 2) continue; // through the mark: no extension line
       const away = y > yc ? 1 : -1;
-      y0 = yc + away * Math.min(6, view.laneH / 4);
+      y0 = yc + away * half;
       y1 = y + away * 4;
     }
     ctx.beginPath();
@@ -737,8 +766,9 @@ export function drawNotes(view: TimelineView, ctx: CanvasRenderingContext2D, plo
     const x = endX(view, snap);
     const row = rowOf(view, snap.lane);
     if (x !== null && row !== null) {
-      const yc = laneTop + (row + 0.5) * view.laneH;
-      const half = Math.max(6, view.laneH * 0.35);
+      const mark = markY(view, snap, laneTop, plot);
+      const yc = mark ? mark[0] : laneTop + (row + 0.5) * view.laneH;
+      const half = mark ? Math.max(6, mark[1] + 3) : Math.max(6, view.laneH * 0.35);
       ctx.strokeStyle = view.theme.accent;
       ctx.lineWidth = 2;
       ctx.beginPath();
