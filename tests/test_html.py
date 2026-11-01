@@ -119,3 +119,26 @@ def test_every_kind_makes_a_fragment(kind):
         pytest.skip("no layers")
     data = payload(plot.to_html(full_html=False))
     assert set(data["buffers"]) == set(plot._page_data()[1])
+
+
+def test_a_plot_without_its_code_for_a_page_with_html_script():
+    from anytimeline import html_script
+
+    plot = plot_of_log()
+    plain = plot.to_html(full_html=False, script=False)
+    assert plain.count("<script") == 1  # its data only
+    assert "<style" not in plain
+    assert "html_script()" in plain  # the note, where nothing draws it
+    assert payload(plain) == payload(plot.to_html(full_html=False))
+    head = html_script()
+    assert head.startswith("<style>")
+    assert '<script type="application/json">' not in head
+    # the same version of the code as a whole fragment's: a page with both runs it once
+    version = re.compile(r'r\["([0-9a-f]{16})"\]')
+    assert set(version.findall(head)) == set(version.findall(plot.to_html(full_html=False)))
+    assert len(head) > 100_000  # the code: once per page, not per plot
+
+
+def test_a_whole_page_needs_its_code():
+    with pytest.raises(ValueError, match="script=False needs full_html=False"):
+        plot_of_log().to_html(script=False)

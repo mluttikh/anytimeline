@@ -78,7 +78,7 @@ function button(icon: string, label: string, tip: string, onClick: () => void): 
   b.className = "atl-button atl-icon-button";
   b.innerHTML = icon;
   b.setAttribute("aria-label", label);
-  b.title = tip;
+  b.dataset.tip = tip; // shown at once by Tips (tips.ts), not the browser's slow title
   b.addEventListener("click", (e) => {
     e.stopPropagation();
     onClick();
@@ -92,7 +92,7 @@ function textButton(text: string, label: string, onClick: () => void): HTMLButto
   b.className = "atl-button atl-small-button";
   b.textContent = text;
   b.setAttribute("aria-label", label);
-  b.title = label;
+  b.dataset.tip = label;
   b.addEventListener("click", (e) => {
     e.stopPropagation();
     onClick();
@@ -261,7 +261,7 @@ export class Toolbar {
     this.dodgeBox.addEventListener("change", () => actions.dodge(this.dodgeBox.checked));
     this.dodgeRow = document.createElement("label");
     this.dodgeRow.className = "atl-popover-row atl-popover-check";
-    this.dodgeRow.title = "Spread events that would overlap over the lane's height · key d";
+    this.dodgeRow.dataset.tip = "Spread events that would overlap over the lane's height · key d";
     this.dodgeRow.append(this.dodgeBox, document.createTextNode("Spread overlapping events"));
     this.popover.append(
       row("Text size", textButton("−", "Smaller text", step(-1)), this.sizeLabel, textButton("+", "Larger text", step(1)), textButton("Reset", "Default text size", () => actions.fontSize(null))),
@@ -286,18 +286,25 @@ export class Toolbar {
     for (const xs of ["time", "order"] as XScale[]) {
       this.scaleButtons[xs].setAttribute("aria-pressed", String(s.xscale === xs));
     }
+    // a greyed button's tip says why it is greyed
     this.scaleButtons.time.disabled = !s.timeAvailable;
+    this.scaleButtons.time.dataset.tip = s.timeAvailable ? "Time: events at their time · key t" : "Time: off, the data has an order but no times";
     this.scaleButtons.order.disabled = !s.orderAvailable;
+    this.scaleButtons.order.dataset.tip = s.orderAvailable
+      ? "Order: events in the order they happened, evenly spaced · key t"
+      : "Order: off, samples (values layers) have no order of events";
     this.back.disabled = !s.canGoBack;
+    this.back.dataset.tip = s.canGoBack ? "Previous view · Backspace" : "Previous view · Backspace (none yet: zoom or pan first)";
     this.home.disabled = !s.zoomed;
+    this.home.dataset.tip = s.zoomed ? "The whole timeline · key 0, or double-click with Pan" : "The whole timeline · key 0 (shown already)";
     this.clear.hidden = s.selected === 0;
-    this.clear.title = `Clear the selection (${s.selected} selected) · Esc`;
+    this.clear.dataset.tip = `Clear the selection (${s.selected} selected) · Esc`;
     this.legend.hidden = !s.hasLegend;
     this.legend.setAttribute("aria-pressed", String(s.legend));
     this.full.hidden = !s.fullscreenAvailable;
     this.full.innerHTML = s.fullscreen ? ICONS.collapse : ICONS.expand;
     this.full.setAttribute("aria-label", s.fullscreen ? "Leave full screen" : "Full screen");
-    this.full.title = s.fullscreen ? "Leave full screen · key f or Esc" : "Full screen · key f, Esc to leave";
+    this.full.dataset.tip = s.fullscreen ? "Leave full screen · key f or Esc" : "Full screen · key f, Esc to leave";
     this.hint.textContent = HINTS[s.tool];
     this.fontSize = s.fontSize;
     this.sizeLabel.textContent = `${s.fontSize} px`;
@@ -305,6 +312,6 @@ export class Toolbar {
     this.markLabel.textContent = `×${Number(s.markScale.toFixed(2))}`;
     this.dodgeBox.checked = s.dodge;
     this.dodgeRow.hidden = !s.dodges;
-    this.textButton.title = `Display: text ${s.fontSize} px, marks ×${Number(s.markScale.toFixed(2))}${s.dodges ? `, spreading ${s.dodge ? "on" : "off"}` : ""}`;
+    this.textButton.dataset.tip = `Display: text ${s.fontSize} px, marks ×${Number(s.markScale.toFixed(2))}${s.dodges ? `, spreading ${s.dodge ? "on" : "off"}` : ""}`;
   }
 }

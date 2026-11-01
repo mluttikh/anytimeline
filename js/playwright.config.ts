@@ -16,7 +16,7 @@ const chromium = {
   },
 };
 
-const OTHER_BROWSERS = ["**/scenes.spec.ts", "**/interaction.spec.ts", "**/linked.spec.ts", "**/saved.spec.ts"];
+const OTHER_BROWSERS = ["**/scenes.spec.ts", "**/interaction.spec.ts", "**/linked.spec.ts", "**/saved.spec.ts", "**/tips.spec.ts"];
 
 export default defineConfig({
   testDir: "test/visual",

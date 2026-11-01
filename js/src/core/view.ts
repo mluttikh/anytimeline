@@ -28,6 +28,7 @@ import { decodeValues, ValueLayer, type ValueView } from "./values";
 import { BarDetail, Detail, type DetailView, ValueDetail, type WindowAsk } from "./levels";
 import { decodeEvents, type EventsData, fillSolid, lowerBound, specBufferIds, view as bufferView } from "./scene";
 import { Sequence } from "./sequence";
+import { Tips } from "./tips";
 import { fmtNumber, TimeAxis, UNIT_NS } from "./time";
 import { FONT_SIZES, type Tool, Toolbar, TOOLS } from "./toolbar";
 import type { DataSource, EventsLayerSpec, IntervalsLayerSpec, RendererKind, RendererPreference, SceneSpec, ValuesLayerSpec, XScale } from "./types";
@@ -100,6 +101,7 @@ export class TimelineView implements DetailView {
   private readonly titleEl: HTMLSpanElement;
   readonly info: HTMLSpanElement;
   private readonly toolbar: Toolbar;
+  private readonly tips: Tips;
   tool: Tool = "pan";
   private history: { left: number; span: number; scrollY: number; xscale: XScale }[] = [];
   helpEl: HTMLElement | null = null;
@@ -264,6 +266,7 @@ export class TimelineView implements DetailView {
     this.finder = new Finder(this);
     this.stage.append(this.back, this.front, this.tooltip, this.notice, this.finder.el);
     this.root.append(this.header, this.stage);
+    this.tips = new Tips(this.root, this.header);
     host.append(this.root);
     this.theme = this.readTheme();
     input.bindInput(this);
@@ -1581,6 +1584,7 @@ export class TimelineView implements DetailView {
     this.themeMedia?.removeEventListener?.("change", this.onThemeChange);
     document.removeEventListener("fullscreenchange", this.onFullscreenChange);
     this.toolbar.destroy();
+    this.tips.destroy();
     this.renderer?.destroy();
     this.root.remove();
   }

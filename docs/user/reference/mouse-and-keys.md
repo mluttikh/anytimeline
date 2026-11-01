@@ -84,3 +84,6 @@ From left to right: Pan, Zoom, Select, Measure · Time, Order · Back, Home · C
 there is one) · Legend · Display (text size, mark size, spreading) · Export (copy, download or
 save an image; see [Make images for slides](../how-to/images.md)) · Full screen ·
 Mouse and keys (?).
+
+Each button's tip (its name, key and gestures) shows when the pointer rests on it for a
+moment, or when it gets the keyboard's focus. A greyed button's tip says why it is greyed.

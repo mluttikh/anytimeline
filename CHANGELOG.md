@@ -22,6 +22,10 @@ All notable changes to anytimeline. The format follows
 - **`plot.update(name, **changes)`** calls a layer's method again with its last arguments
   and the changes (also `data=`), keeping the layer's name and place; a lazy table is not
   read again. **`plot.arguments(name)`** gives what a layer was made with.
+- **`anytimeline.html_script()`** and **`to_html(full_html=False, script=False)`**: a page
+  with many plots carries the drawing code and styles once (put `html_script()` in its
+  `<head>` or `<body>`), and each plot only its data, about 250 KB less per plot. A plot
+  put in the page later draws after `window.anytimelineEmbed.add()`.
 
 ### Changed
 
@@ -33,6 +37,9 @@ All notable changes to anytimeline. The format follows
   ipywidgets and traitlets are no longer direct dependencies (anywidget still brings them).
 - `on_select` callbacks: one that raises no longer stops the others; its traceback shows in
   the notebook, else in the `anytimeline` log.
+- The toolbar's tips show 0.15 s after the pointer comes to a button, and on keyboard
+  focus, instead of the browser's own tooltip a second later. A greyed button's tip says why
+  it is greyed (Back: no earlier view yet; Home: the whole timeline is shown).
 - Ibis tables are tested: they are read once like other lazy tables, and `selected()` gives
   a PyArrow table of the rows drawn. The docs name them with the other tables.
 

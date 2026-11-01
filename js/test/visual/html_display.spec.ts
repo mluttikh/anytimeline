@@ -116,3 +116,22 @@ test("a marimo app exported as HTML shows the plot shown as HTML (needs internet
   await expect(frame.locator(".anytimeline-embed")).toHaveAttribute("data-state", "ready", { timeout: 30_000 });
   await expect(frame.locator(".atl-title")).toContainText("Exported from marimo");
 });
+
+test("a page with html_script() once draws plots made without the code, and runs it once", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await page.setViewportSize({ width: 1000, height: 1400 });
+  await page.goto(pathToFileURL(resolve(scenes, "html_script.html")).href);
+  // the code in <head> waited for the page: two plots without it, one with it
+  await ready(page, 3);
+  expect(errors).toEqual([]);
+  await expect(page.locator(".anytimeline-note")).toHaveCount(0);
+  expect(await page.evaluate(() => Object.keys((window as any).anytimelineEmbeds).length)).toBe(1);
+  // a plot an app puts in the page later draws after anytimelineEmbed.add()
+  const later = JSON.parse(readFileSync(resolve(scenes, "html_script_later.json"), "utf-8"));
+  await page.evaluate((html) => {
+    document.body.insertAdjacentHTML("beforeend", html);
+    (window as any).anytimelineEmbed.add();
+  }, later);
+  await ready(page, 4);
+});

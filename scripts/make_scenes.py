@@ -53,6 +53,22 @@ def write(name: str, plot: Timeline, **traits: object) -> None:
     print(f"{name}: {sum(len(b) for b in plot._buffers.values()) / 1e6:.2f} MB")
 
 
+def script_once(*plots: Timeline) -> None:
+    """A page of your own (html_script.spec in html_display.spec.ts): the drawing code once in
+    its <head> (html_script), plots without it (script=False), one plot with it, and a plot
+    for the test to add later."""
+    from anytimeline import html_script
+
+    plain = [p.to_html(full_html=False, script=False) for p in plots]
+    body = "\n".join([*plain, plots[0].to_html(full_html=False)])
+    (OUT / "html_script.html").write_text(
+        "<!doctype html>\n<html><head><meta charset='utf-8'>"
+        f"{html_script()}</head><body>\n{body}\n</body></html>",
+        encoding="utf-8",
+    )
+    (OUT / "html_script_later.json").write_text(json.dumps(plain[-1]), encoding="utf-8")
+
+
 def notebook_outputs(*plots: Timeline) -> None:
     """Plots shown as HTML in a notebook (display="html"), for html_display.spec.ts: their
     outputs in a page (as an exported notebook has them, and as text for the test to put in
@@ -375,6 +391,7 @@ def main() -> None:
     top.zoom_to(np.datetime64("2026-10-12T08:20"), np.datetime64("2026-10-12T08:50"))
     bottom.zoom_to(np.datetime64("2026-10-12T08:20"), np.datetime64("2026-10-12T08:50"))
     save_html(OUT / "saved_linked.html", top, bottom)
+    script_once(top, bottom)
     notebook_outputs(top, bottom)
 
     # story timelines: boxes on stems above and below the line
