@@ -20,7 +20,7 @@ import numpy as np
 
 from anytimeline.data import NotFoundError
 from anytimeline.layers.values import places
-from anytimeline.parts import Annotation, Connection, Edge, Measure, Note
+from anytimeline.parts import Annotation, Connection, Edge, Measure, Note, ValueAt
 from anytimeline.timebase import TimeBase
 
 
@@ -33,6 +33,7 @@ class Context:
     order: np.ndarray | None  # every instant's time, in the order
     mark_at: Callable[[str, int], dict[str, Any]]  # ``Timeline._mark_at``
     layer_named: Callable[[str | None], str]  # ``Timeline._layer_named``
+    values_layers: Sequence[str] = ()  # the names of the values layers
 
 
 def place(ctx: Context, x: float) -> float | None:
@@ -137,7 +138,9 @@ def change(a: Mapping[str, Any], b: Mapping[str, Any]) -> float | None:
 
 def measure(ctx: Context, m: Measure) -> dict[str, Any]:
     """A measure: its ends, the time between (``span``, ticks, b − a), the instants between
-    (``events``; None without an order) and, between samples, the change in value."""
+    (``events``; None without an order) and, between samples, the change in value; and where
+    its line goes (``at``: a place, or ``{"value", "layer"}``), its ``level`` (None: the
+    first free) and ``nudge`` (pixels)."""
     a, b = end_of(ctx, m.a), end_of(ctx, m.b)
     return {
         "a": _browser_end(a),
@@ -148,7 +151,31 @@ def measure(ctx: Context, m: Measure) -> dict[str, Any]:
         "lane": lane_index(ctx, m.lane, "measure in"),
         "text": m.text,
         "color": m.color,
+        "at": at_of(ctx, m, a, b),
+        "level": m.level,
+        "nudge": m.nudge,
     }
+
+
+def at_of(ctx: Context, m: Measure, a: Mapping[str, Any], b: Mapping[str, Any]) -> Any:
+    """Where a measure's line goes: its place, or a value on a values layer (the layer
+    named, else that of its ends when they are samples, else the plot's one values layer)."""
+    if not isinstance(m.at, ValueAt):
+        return m.at
+    layer = m.at.layer
+    if layer is None:
+        layer = next((e["layer"] for e in (a, b) if "value" in e), None)
+    if layer is None:
+        if len(ctx.values_layers) != 1:
+            raise ValueError(
+                "atl.value(...) needs a values layer: name it (atl.value(80, layer=...)); "
+                f"values layers: {list(ctx.values_layers)}"
+            )
+        layer = ctx.values_layers[0]
+    layer = ctx.layer_named(layer)
+    if layer not in ctx.values_layers:
+        raise ValueError(f"atl.value(...) is a value on a values layer; {layer!r} is not one")
+    return {"value": m.at.value, "layer": layer}
 
 
 def payload(ctx: Context, notes: Sequence[Note]) -> dict[str, Any]:
@@ -198,7 +225,7 @@ def table(ctx: Context, notes: Sequence[Note], like: Any) -> Any:
             a, b = end_of(ctx, n.a), end_of(ctx, n.b)
         except (LookupError, ValueError, TypeError):
             continue
-        rows.append({"note": i, "text": n.text, "a": a, "b": b})
+        rows.append({"note": i, "text": n.text, "a": a, "b": b, "m": n})
     base = ctx.base
     cols: dict[str, Any] = {
         "note": np.asarray([r["note"] for r in rows], dtype=np.int64),
@@ -227,6 +254,15 @@ def table(ctx: Context, notes: Sequence[Note], like: Any) -> Any:
         cols[f"{key}_layer"] = np.asarray([r[key].get("layer") for r in rows], dtype=object)
         cols[f"{key}_row"] = np.asarray([r[key].get("row", -1) for r in rows], dtype=np.int64)
         cols[f"{key}_side"] = np.asarray([r[key]["side"] for r in rows], dtype=object)
+    cols["at"] = np.asarray(
+        [r["m"].at if isinstance(r["m"].at, str) else "value" for r in rows], dtype=object
+    )
+    cols["lane"] = np.asarray(
+        [None if r["m"].lane is None else str(r["m"].lane) for r in rows], dtype=object
+    )
+    cols["level"] = np.asarray(
+        [-1 if r["m"].level is None else r["m"].level for r in rows], dtype=np.int64
+    )
     if isinstance(like, Mapping):
         return cols
     import narwhals as nw

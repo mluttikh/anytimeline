@@ -837,6 +837,55 @@ test("Measure: between two samples of a values layer, with the change in value",
   await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits[0]?.text ?? "")).toContain("Δ");
 });
 
+test("Measure: places, bands that take room only when used, levels that hold while zooming", async ({ page }) => {
+  await open(page, "gantt_plan");
+  const setNotes = (n: unknown) =>
+    page.evaluate((notes) => {
+      (window as any).__model.state._notes = notes;
+      (window as any).__model.emit("change:_notes");
+    }, n);
+  const before = await view(page).evaluate((root: any) => ({ y: root.__view.plot().y, axis: root.__view.axisH }));
+  expect(before.y).toBe(before.axis);
+  const [s0, e0, e1] = await view(page).evaluate((root: any) => {
+    const d = root.__view.bars[0].data;
+    return [d.start[0], d.end[0], d.end[1]];
+  });
+  const end = (x: number, side = "start") => ({ x, r: null, lane: 0, side, layer: "intervals", index: 0 });
+  const m = (id: number, a: number, b: number, more: object = {}) => ({ a: end(a), b: end(b, "end"), span: b - a, events: null, lane: null, text: null, color: null, id, ...more });
+  await setNotes({
+    measures: [m(0, s0, e0), m(1, s0, e1), m(2, s0, e0, { at: "header" }), m(3, s0, e0, { at: "footer", text: "foot" }), m(4, s0, e0, { at: "middle" }), m(5, s0, e1, { level: 0 })],
+  });
+  const laid = () => view(page).evaluate((root: any) => root.__view.measureHits.map((d: any) => [d.m.id, d.place.split(" ")[0], d.k]));
+  // this plot's lanes hold one level: the "auto" ones that do not fit go to the header,
+  // after the header's own; the one given level 0 stays in the lane
+  await expect.poll(laid).toEqual([
+    [0, "header", 1],
+    [1, "header", 2],
+    [2, "header", 0],
+    [3, "footer", 0],
+    [4, "middle", 0],
+    [5, "top", 0],
+  ]);
+  // the bands take room: the lanes start lower, and end higher
+  const bands = await view(page).evaluate((root: any) => {
+    const v = root.__view;
+    const p = v.plot();
+    return { y: p.y, bottom: p.y + p.h, axis: v.axisH, height: v.height, fs: v.fs };
+  });
+  const band = (levels: number) => 6 + bands.fs + 4 + (levels - 1) * (bands.fs + 8);
+  expect(bands.y).toBe(bands.axis + band(3));
+  expect(bands.bottom).toBe(bands.height - 8 - band(1));
+  // zooming in and out changes no level
+  const levels = await laid();
+  for (const range of [[s0, s0 + (e0 - s0) / 50], [s0 - (e1 - s0) * 20, e1 + (e1 - s0) * 20]]) {
+    await view(page).evaluate((root: any, r) => root.__view.setView(r), range);
+    await expect.poll(laid).toEqual(levels);
+  }
+  // without measures the bands are gone
+  await setNotes({});
+  await expect.poll(() => view(page).evaluate((root: any) => root.__view.plot().y)).toBe(before.y);
+});
+
 test("Undo: Ctrl/Cmd+Z asks Python to take back a change of the selection, Shift for redo", async ({ page }) => {
   await open(page, "service_time");
   await view(page).click({ position: { x: 4, y: 4 } });

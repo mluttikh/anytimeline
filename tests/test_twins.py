@@ -142,3 +142,23 @@ def test_zones_before_1970() -> None:
     ms = -9_307_120_012_877  # 1675-01-25T16:53:07Z, in local mean time:
     assert axis.parts_at(ms, "America/New_York") == (1675, 1, 25, 11, 57, 5)  # -4:56:02
     assert axis.parts_at(ms, "Asia/Kolkata") == (1675, 1, 25, 22, 46, 35)  # +5:53:28
+
+
+@pytest.mark.parametrize(
+    "case", TWINS["measures"], ids=lambda c: f"{c['frame']['laneH']}-{c['geoms'][0]['xa']}"
+)
+def test_measures(case: dict) -> None:
+    f = case["frame"]
+    plot = (f["plot"]["x"], f["plot"]["y"], f["plot"]["w"], f["plot"]["h"])
+    geoms = [{**g, "value_y": g["valueY"]} for g in case["geoms"]]
+    laid, head, foot = image.place_measures(
+        geoms, f["fs"], plot, f["laneTop"], f["laneH"], f["headTop"], f["footTop"]
+    )
+    assert (head, foot) == (case["head"], case["foot"])
+    got = [[d["place"][0], d["k"], d["y"], d["lx"]] for d in laid]
+    for g, w in zip(got, case["laid"], strict=True):
+        assert g[:2] == w[:2]
+        assert g[2] == pytest.approx(w[2])
+        assert (g[3] is None) == (w[3] is None)
+        if g[3] is not None:
+            assert g[3] == pytest.approx(w[3])

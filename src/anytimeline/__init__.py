@@ -6,7 +6,18 @@ from typing import Any
 
 from anytimeline.defaults import defaults, get_defaults, reset_defaults, set_defaults
 from anytimeline.page import html_script, save_html
-from anytimeline.parts import Annotation, Connection, Edge, Measure, Route, Stem, end, start
+from anytimeline.parts import (
+    Annotation,
+    Connection,
+    Edge,
+    Measure,
+    Route,
+    Stem,
+    ValueAt,
+    end,
+    start,
+    value,
+)
 from anytimeline.plot import Timeline
 from anytimeline.presets import compare_traces, gantt, story
 from anytimeline.styling import SYMBOLS
@@ -23,6 +34,7 @@ __all__ = [
     "Route",
     "Stem",
     "Timeline",
+    "ValueAt",
     "View",
     "__version__",
     "compare_traces",
@@ -36,6 +48,7 @@ __all__ = [
     "set_defaults",
     "start",
     "story",
+    "value",
 ]
 
 _GONE = {

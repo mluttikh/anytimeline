@@ -328,12 +328,15 @@ export function remove(view: TimelineView, id: number): void {
   view.requestRender();
 }
 
-/** The measure whose label is at a point (null: none). */
+/** The measure whose label is at a point, or whose line where it has no label (null:
+ * none). */
 export function labelAt(view: TimelineView, p: { x: number; y: number }): NoteMeasure | null {
   const h = view.fs + 4;
   for (let k = view.measureHits.length - 1; k >= 0; k--) {
     const d = view.measureHits[k];
-    if (p.x >= d.lx && p.x <= d.lx + d.tw && p.y >= d.y - h / 2 && p.y <= d.y + h / 2) return d.m;
+    const [l, r] = d.lx === null ? [Math.min(d.xa, d.xb), Math.max(d.xa, d.xb)] : [d.lx, d.lx + d.tw];
+    const half = d.lx === null ? 5 : h / 2;
+    if (p.x >= l && p.x <= r && p.y >= d.y - half && p.y <= d.y + half) return d.m;
   }
   return null;
 }
@@ -397,7 +400,18 @@ export function timePython(view: TimelineView, x: number): string {
   return JSON.stringify(`${iso}${frac}`);
 }
 
-/** A measure as a line of Python that makes it again. */
+/** A measure as a line of Python that makes it again, with where it goes. */
 export function asPython(view: TimelineView, m: NoteMeasure): string {
-  return `plot.measure(${endPython(view, m.a)}, ${endPython(view, m.b)})`;
+  const args = [endPython(view, m.a), endPython(view, m.b)];
+  if (m.text !== null) args.push(JSON.stringify(m.text));
+  const names = view.spec?.lanes?.names ?? [];
+  if (m.lane !== null && names[m.lane] !== undefined) args.push(`lane=${JSON.stringify(String(names[m.lane]))}`);
+  const at = m.at ?? "auto";
+  if (typeof at === "object") {
+    const one = view.values.length === 1;
+    args.push(`at=atl.value(${at.value}${one ? "" : `, ${JSON.stringify(at.layer)}`})`);
+  } else if (at !== "auto") args.push(`at=${JSON.stringify(at)}`);
+  if (m.level !== null && m.level !== undefined) args.push(`level=${m.level}`);
+  if (m.nudge) args.push(`nudge=${m.nudge}`);
+  return `plot.measure(${args.join(", ")})`;
 }

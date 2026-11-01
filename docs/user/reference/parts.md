@@ -24,6 +24,10 @@ What [`Timeline.notes`][anytimeline.Timeline.notes] holds, and their ends.
 
 ::: anytimeline.end
 
+::: anytimeline.value
+
+::: anytimeline.ValueAt
+
 ## Symbols
 
 The names `symbol=` and `symbols=` take, in the order a category column gets them:

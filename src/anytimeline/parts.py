@@ -8,14 +8,15 @@ Stem have ``of()``, which also takes the short forms its argument accepts
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 from typing import Any, Literal, get_args
 
 import numpy as np
 
-from anytimeline.types import StemShape
+from anytimeline.types import MeasurePlace, StemShape
 
 STEM_SHAPES = get_args(StemShape)
+MEASURE_PLACES = get_args(MeasurePlace)
 
 
 @dataclass(frozen=True)
@@ -208,6 +209,45 @@ class Connection:
 
 
 @dataclass(frozen=True)
+class ValueAt:
+    """A height on a values layer's scale, where a [`Measure`][anytimeline.Measure]'s line
+    goes (``at=``); [`value`][anytimeline.value] makes one.
+
+    Args:
+        value: The value, on the layer's scale.
+        layer: The values layer; ``None``: the layer of the measure's ends when they are
+            samples, else the plot's one values layer.
+    """
+
+    value: float
+    layer: str | None = None
+
+    def __post_init__(self) -> None:
+        v = self.value
+        if (
+            isinstance(v, bool)
+            or not isinstance(v, int | float | np.number)
+            or not math.isfinite(v)
+        ):
+            raise TypeError(f"value's value is a number on the layer's scale, got {v!r}")
+        if self.layer is not None and not isinstance(self.layer, str):
+            raise TypeError(f"value's layer is a layer's name, got {self.layer!r}")
+        object.__setattr__(self, "value", float(v))
+
+
+def value(value: float, layer: str | None = None) -> ValueAt:
+    """A height on a values layer's scale, for a measure's line (``at=atl.value(80)``): the
+    measure is drawn at that value in the layer's lane, a threshold for instance.
+
+    Args:
+        value: The value, on the layer's scale.
+        layer: The values layer; ``None``: the layer of the measure's ends when they are
+            samples, else the plot's one values layer.
+    """
+    return ValueAt(value, layer)
+
+
+@dataclass(frozen=True)
 class Measure:
     """The time between two ends, drawn as a dimension line with the time at its middle
     ([`Timeline.measure`][anytimeline.Timeline.measure]). Each end is an
@@ -223,9 +263,16 @@ class Measure:
             of a values layer, the change in value). ``{time}`` in it is the time between,
             ``{events}`` the number of events between them in the order, ``{change}`` the
             change in value.
-        lane: The lane it is drawn in when neither end is an edge (a lane's name); ``None``:
-            at the top of the plot.
+        lane: The lane it is drawn in (a lane's name); ``None``: the upper of its ends'
+            lanes, or (two times) the header.
         color: Its colour; ``None``: the accent colour.
+        at: Where its line goes in the lane: ``"auto"`` (the top; levels the lane cannot
+            hold continue in the header), ``"top"``, ``"middle"``, ``"bottom"``,
+            ``"between"`` (the border under the lane), ``"header"`` or ``"footer"`` (a band
+            above or below the lanes), or a [`value`][anytimeline.value] on a values layer.
+        level: Its level, 0 nearest the edge its place stacks from; ``None``: the first
+            free one. The others are laid out around a measure with a level.
+        nudge: Pixels to move its line down (up when negative) after it is laid out.
     """
 
     a: Any
@@ -233,6 +280,10 @@ class Measure:
     text: str | None = None
     lane: Any = None
     color: str | None = None
+    _: KW_ONLY
+    at: MeasurePlace | ValueAt = "auto"
+    level: int | None = None
+    nudge: float = 0.0
 
     def __post_init__(self) -> None:
         for end in (self.a, self.b):
@@ -241,6 +292,23 @@ class Measure:
         if self.text is not None and not isinstance(self.text, str):
             raise TypeError(f"Measure's text is text or None, got {self.text!r}")
         _check_color("Measure", self.color)
+        if not isinstance(self.at, ValueAt) and self.at not in MEASURE_PLACES:
+            raise ValueError(
+                f"Measure's at must be one of {MEASURE_PLACES} or atl.value(...), got {self.at!r}"
+            )
+        level = self.level
+        if level is not None:
+            if isinstance(level, bool) or not isinstance(level, int | np.integer) or level < 0:
+                raise TypeError(f"Measure's level is a whole number from 0, or None; got {level!r}")
+            object.__setattr__(self, "level", int(level))
+        nudge = self.nudge
+        if (
+            isinstance(nudge, bool)
+            or not isinstance(nudge, int | float)
+            or not math.isfinite(nudge)
+        ):
+            raise TypeError(f"Measure's nudge is a number of pixels, got {nudge!r}")
+        object.__setattr__(self, "nudge", float(nudge))
 
 
 Note = Annotation | Connection | Measure

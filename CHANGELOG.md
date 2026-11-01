@@ -4,6 +4,25 @@ All notable changes to anytimeline. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Where a measure goes**: `plot.measure(..., at=...)` puts its line at the top, middle or
+  bottom of its lane, on the border under it (`"between"`), in a band above or below the
+  lanes (`"header"`, `"footer"`; a band takes room only when used), or at a value on a values
+  layer (`at=atl.value(80)`). `level=` keeps it on a level, and `nudge=` moves it a few
+  pixels. `lane=` places it also when its ends are marks. `plot.measured` has `at`, `lane`
+  and `level`; a measure's Copy as Python writes them.
+
+### Changed
+
+- **Breaking:** measures stack by their times, not their pixels: zooming and panning no
+  longer move one to another level. A label that has no room beside its line shows when the
+  measure is hovered or selected, instead of lifting it a level. Measures the top of a lane
+  has no room for continue in the header band, and a measure of two times goes there (it was
+  drawn over the top lane).
+
 ## [0.5.2] - 2026-11-01
 
 An Export menu: copy, download or save the plot as PNG or SVG. And defaults per method,
@@ -367,6 +386,7 @@ drawn with WebGPU, WebGL2 or Canvas 2D.
   that follow the notebook.
 - Synthetic example data (`anytimeline.synthetic`) and documentation with live examples.
 
+[Unreleased]: https://github.com/mluttikh/anytimeline/compare/v0.5.2...HEAD
 [0.5.2]: https://github.com/mluttikh/anytimeline/releases/tag/v0.5.2
 [0.5.1]: https://github.com/mluttikh/anytimeline/releases/tag/v0.5.1
 [0.5.0]: https://github.com/mluttikh/anytimeline/releases/tag/v0.5.0
