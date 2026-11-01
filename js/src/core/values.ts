@@ -110,6 +110,20 @@ export class ValueLayer {
     return this.yOf(lane, row, v)(value);
   }
 
+  /** The value drawn at height `y` in lane `lane` (null: the lane is not shown, or its
+   * values are all one). */
+  valueAtY(lane: number, y: number, v: ValueView): number | null {
+    const row = v.slot[lane];
+    if (row === undefined || row < 0 || 2 * lane + 1 >= this.data.ylim.length) return null;
+    const lo = this.data.ylim[2 * lane];
+    const hi = this.data.ylim[2 * lane + 1];
+    if (!(hi > lo)) return null;
+    const pad = Math.max(2, v.laneH * 0.14);
+    const top = v.laneTop + row * v.laneH + pad;
+    const h = Math.max(1, v.laneH - 2 * pad);
+    return lo + ((top + h - y) / h) * (hi - lo);
+  }
+
   /** The band of lane `lane` on row `row`: value → y. */
   private yOf(lane: number, row: number, v: ValueView): (value: number) => number {
     const lo = this.data.ylim[2 * lane];

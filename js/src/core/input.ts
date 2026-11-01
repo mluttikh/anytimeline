@@ -5,14 +5,15 @@ import * as folding from "./folding";
 import * as drawing from "./drawing";
 import * as picking from "./picking";
 import * as measure from "./measure";
-import { askText, markOf, type NoteMeasure } from "./notes";
-import type { TimelineView } from "./view";
+import { askText, markOf, type MeasurePlace, type NoteMeasure } from "./notes";
+import type { MenuItem, TimelineView } from "./view";
 
 export function cancelDrag(view: TimelineView): void {
   if (view.drag?.mode === "measure") view.measureDraft = null;
   view.drag = null;
   view.box = null;
   view.handleDrag = null;
+  view.lineDrag = null;
   view.stage.classList.remove("atl-panning");
   view.requestRender();
 }
@@ -78,17 +79,22 @@ export function bindInput(view: TimelineView): void {
     view.root.focus({ preventScroll: true });
     const p = local(e);
     const plot = view.plot();
-    // a measure's label selects it (and opens its menu); an end of the selected one drags
+    // a measure's label selects it (and opens its menu); an end of the selected one drags,
+    // and its line (or label) moves it to another level, place, lane or band
     const handle = measure.handleAt(view, p);
-    const label = handle ? null : measure.labelAt(view, p);
+    const line = handle ? null : measure.lineAt(view, p);
+    const label = handle || line ? null : measure.labelAt(view, p);
     if (label) {
       openMeasure(view, label, p);
       return;
     }
-    if (!handle && view.selectedMeasure !== null) view.selectMeasure(null);
+    if (!handle && !line && view.selectedMeasure !== null) view.selectMeasure(null);
     stage.setPointerCapture(e.pointerId);
     let mode: DragMode;
-    if (handle) {
+    if (line) {
+      mode = "line";
+      view.lineDrag = { from: line, change: null };
+    } else if (handle) {
       mode = "handle";
       view.handleDrag = { id: handle.m.id, end: handle.end, to: handle.m[handle.end] };
     } else if (view.annotating) mode = "note";
@@ -131,7 +137,10 @@ export function bindInput(view: TimelineView): void {
         picking.setHovered(view, null);
       }
       if (!d.moved) return;
-      if (d.mode === "measure" || d.mode === "handle") {
+      if (d.mode === "line" && view.lineDrag) {
+        view.lineDrag.change = measure.placeAt(view, view.lineDrag.from, p.y);
+        view.requestRender();
+      } else if (d.mode === "measure" || d.mode === "handle") {
         const at = measure.endAt(view, p, e.shiftKey);
         if (d.mode === "measure" && view.measureDraft) view.measureDraft.b = at;
         if (d.mode === "handle" && view.handleDrag) view.handleDrag.to = at;
@@ -203,6 +212,14 @@ export function bindInput(view: TimelineView): void {
     const wide = box && Math.abs(box.x1 - box.x0) >= MIN_BOX;
     if (d.mode === "note") {
       note(view, p, d.moved && box && wide ? box : null);
+      view.requestRender();
+      return;
+    }
+    if (d.mode === "line") {
+      const line = view.lineDrag;
+      view.lineDrag = null;
+      if (line && d.moved && line.change) measure.changeMeasure(view, line.from.m, line.change);
+      else if (line && !d.moved) openMeasure(view, line.from.m, p);
       view.requestRender();
       return;
     }
@@ -314,11 +331,21 @@ function measureClick(view: TimelineView, p: { x: number; y: number }): void {
   view.lastTap = now;
 }
 
-/** A measure's label clicked: select it, with its menu (remove; in a page, copy it as
- * Python). */
+/** A measure's label clicked: select it, with its menu (its place, back to automatic, its
+ * text, remove; in a page, copy it as Python). */
 function openMeasure(view: TimelineView, m: NoteMeasure, p: { x: number; y: number }): void {
-  const items: [string, () => void][] = [];
-  if (measure.editable(view, m)) items.push(["Remove", () => measure.remove(view, m.id)]);
+  const items: MenuItem[] = [];
+  if (measure.changeable(view, m)) {
+    const at = m.at ?? "auto";
+    const places: [string, MeasurePlace][] = [["Top", "top"], ["Middle", "middle"], ["Bottom", "bottom"], ["Between", "between"], ["Header", "header"], ["Footer", "footer"]];
+    items.push({
+      label: "Place",
+      choices: places.map(([text, place]) => [text, () => measure.changeMeasure(view, m, { at: place, level: null }), at === place]),
+    });
+    if (at !== "auto" || (m.level ?? null) !== null) items.push(["Automatic · 0", () => measure.toAuto(view, m), true]);
+    items.push(["Edit text… · Enter", () => measure.editText(view, m)]);
+  }
+  if (measure.editable(view, m)) items.push(["Remove · Delete", () => measure.remove(view, m.id)]);
   if (!view.callbacks.onMeasure) {
     items.push(["Copy as Python", () => void copy(view, measure.asPython(view, m))]);
   }
@@ -474,9 +501,18 @@ export function key(view: TimelineView, e: KeyboardEvent): void {
       folding.expandAll(view, e.key === "]");
       break;
     case "0":
-    case "Home":
-      view.resetView();
+    case "Home": {
+      const sel = e.key === "0" ? measure.selectedLaid(view) : null;
+      if (sel && measure.changeable(view, sel.m)) measure.toAuto(view, sel.m);
+      else view.resetView();
       break;
+    }
+    case "Enter": {
+      const sel = measure.selectedLaid(view);
+      if (!sel || !measure.changeable(view, sel.m) || target?.tagName === "BUTTON") return;
+      measure.editText(view, sel.m);
+      break;
+    }
     case "Backspace":
       if (view.selectedMeasure !== null) measure.remove(view, view.selectedMeasure);
       else view.previousView();
@@ -496,10 +532,9 @@ export function key(view: TimelineView, e: KeyboardEvent): void {
       view.camera.pan(-plot.w * 0.2);
       break;
     case "ArrowUp":
-      view.scrollY -= view.laneH * 3;
-      break;
     case "ArrowDown":
-      view.scrollY += view.laneH * 3;
+      if (measure.stepLevel(view, e.key === "ArrowUp")) break;
+      view.scrollY += (e.key === "ArrowUp" ? -3 : 3) * view.laneH;
       break;
     case "d":
       if (!view.layers.some((l) => l.data.spec.overlap === "dodge")) return;

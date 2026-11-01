@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { asPython, commit, describe as describeMeasure, nearestHeld, stepHeld, timePython } from "../src/core/measure";
-import { bandHeight, between, laneLevels, layoutMeasures, measureText, type NoteEnd, type NoteMeasure } from "../src/core/notes";
+import { asPython, changeMeasure, commit, describe as describeMeasure, nearestHeld, placeAt, stepHeld, stepLevel, timePython, toAuto } from "../src/core/measure";
+import { bandHeight, between, laneLevels, layoutMeasures, measureText, type MeasureChange, type NoteEnd, type NoteMeasure } from "../src/core/notes";
 import { TimeAxis } from "../src/core/time";
 import type { TimeSpec } from "../src/core/types";
 import type { TimelineView } from "../src/core/view";
@@ -37,6 +37,7 @@ function fakeView(over: Partial<Record<string, unknown>> = {}): TimelineView {
     camera: { left: 0, scale: 10 },
     slot: new Int32Array([0]),
     theme: { accent: "#1f77b4" },
+    showMeasures: () => {},
     ...over,
   } as unknown as TimelineView;
 }
@@ -184,6 +185,78 @@ describe("measures: their lines", () => {
     expect(bandHeight(3, 12)).toBe(62);
     expect(laneLevels(30, 12)).toBe(1);
     expect(laneLevels(100, 12)).toBe(4);
+  });
+});
+
+describe("measures: moved in the plot", () => {
+  const ctx = { measureText: (t: string) => ({ width: 6 * t.length }) } as unknown as CanvasRenderingContext2D;
+  const plot = { x: 0, y: 40, w: 1000, h: 300 };
+  const at = (lane: number, x: number): NoteEnd => ({ x, r: null, lane, side: "start" });
+  const m = (over: Partial<NoteMeasure> = {}): NoteMeasure => ({ a: at(0, 0), b: at(0, 30), span: 30, events: null, lane: null, text: null, color: null, id: 0, ...over });
+  /** Three lanes of 100 px from y 40, a measure laid out and selected; what it sends. */
+  const setup = (measure: NoteMeasure) => {
+    const sent: [number, MeasureChange][] = [];
+    const notices: string[] = [];
+    const v = fakeView({
+      measureBands: { head: 0, foot: 0 },
+      laneH: 100,
+      scrollY: 0,
+      laneAt: new Int32Array([0, 1, 2]),
+      slot: new Int32Array([0, 1, 2]),
+      plot: () => plot,
+      callbacks: { onNoteEnd: () => {}, onNoteChange: (id: number, c: MeasureChange) => sent.push([id, c]) },
+      flashNotice: (t: string) => notices.push(t),
+      localMeasures: [],
+      requestRender: () => {},
+    });
+    v.measureHits = layoutMeasures(v, ctx, [measure], plot, 40).laid;
+    v.selectedMeasure = measure.id;
+    return { v, d: v.measureHits[0], sent, notices };
+  };
+
+  it("go to the nearest place in the row under the pointer, at a level that holds", () => {
+    const { v, d } = setup(m());
+    // lane 0 from 40 to 140: top levels at 51, 71, ...; the middle at 90; bottom levels at
+    // 129, 109, ...; the border under it at 140
+    expect(placeAt(v, d, 52)).toBeNull(); // where it is
+    expect(placeAt(v, d, 73)).toEqual({ at: "top", level: 1 });
+    expect(placeAt(v, d, 90)).toEqual({ at: "middle", level: 0 });
+    expect(placeAt(v, d, 128)).toEqual({ at: "bottom", level: 0 });
+    expect(placeAt(v, d, 141)).toEqual({ at: "between", level: 0 }); // just under the border
+    expect(placeAt(v, d, 152)).toEqual({ at: "top", level: 0, lane: 1 }); // another lane
+  });
+
+  it("go into the header above the lanes, or the footer below them", () => {
+    const { v, d } = setup(m());
+    expect(placeAt(v, d, 10)).toEqual({ at: "header", level: 0 });
+    expect(placeAt(v, d, 352)).toEqual({ at: "footer", level: 0 });
+    expect(placeAt(v, d, 372)).toEqual({ at: "footer", level: 1 });
+  });
+
+  it("step a level with Up and Down: down from a top, up from a bottom", () => {
+    const top = setup(m({ at: "top" }));
+    expect(stepLevel(top.v, false)).toBe(true);
+    expect(top.sent).toEqual([[0, { at: "top", level: 1 }]]);
+    expect(stepLevel(top.v, true)).toBe(true); // already at level 0
+    expect(top.notices).toHaveLength(1);
+    const bottom = setup(m({ at: "bottom", level: 1 }));
+    stepLevel(bottom.v, true);
+    expect(bottom.sent).toEqual([[0, { at: "bottom", level: 2 }]]);
+    // an "auto" one goes from where it is laid
+    const auto = setup(m());
+    stepLevel(auto.v, false);
+    expect(auto.sent).toEqual([[0, { at: "top", level: 1 }]]);
+  });
+
+  it("go back to automatic, and a page changes its own", () => {
+    const { v, sent } = setup(m({ at: "bottom", level: 2, lane: 1 }));
+    toAuto(v, m({ at: "bottom", level: 2, lane: 1 }));
+    expect(sent).toEqual([[0, { at: "auto", level: null, lane: null }]]); // its ends are marks
+    const own = m({ id: -1, at: "top" });
+    v.localMeasures = [own];
+    changeMeasure(v, own, { at: "footer", level: 0, text: "x" });
+    expect(v.localMeasures[0]).toMatchObject({ at: "footer", level: 0, text: "x" });
+    expect(sent).toHaveLength(1);
   });
 });
 

@@ -28,6 +28,8 @@ export interface ToolbarActions {
   markScale(factor: number | null): void;
   /** Spread overlapping events over sub-rows (dodging), or draw them on the lane's line. */
   dodge(on: boolean): void;
+  /** Show the measures, or hide them all (and the bands they take). */
+  measures(on: boolean): void;
 }
 
 export interface ToolbarState {
@@ -51,6 +53,10 @@ export interface ToolbarState {
   dodge: boolean;
   /** Whether any layer spreads its events (the switch shows only then). */
   dodges: boolean;
+  /** Whether the measures are shown. */
+  measures: boolean;
+  /** Whether there are measures (the switch shows only then). */
+  hasMeasures: boolean;
 }
 
 export const FONT_SIZES = { min: 8, max: 24, default: 12 };
@@ -120,6 +126,8 @@ export class Toolbar {
   private readonly markLabel: HTMLSpanElement;
   private readonly dodgeBox: HTMLInputElement;
   private readonly dodgeRow: HTMLLabelElement;
+  private readonly measuresBox: HTMLInputElement;
+  private readonly measuresRow: HTMLLabelElement;
   private fontSize = FONT_SIZES.default;
   private markScale = 1;
 
@@ -229,10 +237,11 @@ export class Toolbar {
     });
     exporter.append(this.exportButton, this.exportMenu);
 
-    // Display: a button that opens text size, mark size (− value + Reset) and spreading
+    // Display: a button that opens text size, mark size (− value + Reset), spreading and
+    // measures shown
     const text = document.createElement("div");
     text.className = "atl-popover-anchor";
-    this.textButton = button(ICONS.display, "Display", "Display: text size, mark size, spreading", () => this.togglePopover());
+    this.textButton = button(ICONS.display, "Display", "Display: text size, mark size, spreading, measures", () => this.togglePopover());
     this.popover = document.createElement("div");
     this.popover.className = "atl-popover";
     this.popover.hidden = true;
@@ -263,10 +272,18 @@ export class Toolbar {
     this.dodgeRow.className = "atl-popover-row atl-popover-check";
     this.dodgeRow.dataset.tip = "Spread events that would overlap over the lane's height · key d";
     this.dodgeRow.append(this.dodgeBox, document.createTextNode("Spread overlapping events"));
+    this.measuresBox = document.createElement("input");
+    this.measuresBox.type = "checkbox";
+    this.measuresBox.addEventListener("change", () => actions.measures(this.measuresBox.checked));
+    this.measuresRow = document.createElement("label");
+    this.measuresRow.className = "atl-popover-row atl-popover-check";
+    this.measuresRow.dataset.tip = "Show the measures, or hide them all (they stay in plot.notes)";
+    this.measuresRow.append(this.measuresBox, document.createTextNode("Show measures"));
     this.popover.append(
       row("Text size", textButton("−", "Smaller text", step(-1)), this.sizeLabel, textButton("+", "Larger text", step(1)), textButton("Reset", "Default text size", () => actions.fontSize(null))),
       row("Mark size", textButton("−", "Smaller marks", markStep(-1)), this.markLabel, textButton("+", "Larger marks", markStep(1)), textButton("Reset", "Default mark size", () => actions.markScale(null))),
       this.dodgeRow,
+      this.measuresRow,
     );
     this.popover.addEventListener("pointerdown", (e) => e.stopPropagation());
     text.append(this.textButton, this.popover);
@@ -312,6 +329,8 @@ export class Toolbar {
     this.markLabel.textContent = `×${Number(s.markScale.toFixed(2))}`;
     this.dodgeBox.checked = s.dodge;
     this.dodgeRow.hidden = !s.dodges;
+    this.measuresBox.checked = s.measures;
+    this.measuresRow.hidden = !s.hasMeasures;
     this.textButton.dataset.tip = `Display: text ${s.fontSize} px, marks ×${Number(s.markScale.toFixed(2))}${s.dodges ? `, spreading ${s.dodge ? "on" : "off"}` : ""}`;
   }
 }

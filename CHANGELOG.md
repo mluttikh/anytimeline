@@ -14,6 +14,11 @@ All notable changes to anytimeline. The format follows
   layer (`at=atl.value(80)`). `level=` keeps it on a level, and `nudge=` moves it a few
   pixels. `lane=` places it also when its ends are marks. `plot.measured` has `at`, `lane`
   and `level`; a measure's Copy as Python writes them.
+- **Move a measure in the plot**: drag a selected measure's line to another level, place,
+  lane, or into the header or footer band; its menu has Place, Automatic and Edit text; with
+  a measure selected, ↑ and ↓ move it a level, 0 puts it back to automatic and Enter edits
+  its text. Each change replaces the measure in `plot.notes`. **Show measures** in the
+  Display panel hides them all.
 
 ### Changed
 

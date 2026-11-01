@@ -1773,6 +1773,38 @@ class Timeline:
         notelist.check(self._note_context(), moved)
         self.notes = [*self.notes[:i], moved, *self.notes[i + 1 :]]
 
+    def _note_change_from(self, content: Mapping[str, Any]) -> None:
+        """A measure moved or edited in the plot (``{"type": "note_change"}``): the note's
+        index and what changed: ``at`` (a place, or ``{"value", "layer"}``), ``lane`` (a lane
+        index or None), ``level`` (a level or None), ``text`` (None or empty: the time)."""
+        i = int(content["id"])
+        if not 0 <= i < len(self.notes) or not isinstance(self.notes[i], Measure):
+            return
+        change: dict[str, Any] = {}
+        if "at" in content:
+            at = content["at"]
+            if isinstance(at, Mapping):
+                layer = at.get("layer")
+                change["at"] = ValueAt(float(at["value"]), None if layer is None else str(layer))
+            else:
+                change["at"] = str(at)
+        if "lane" in content:
+            lane = content["lane"]
+            names = self._spec["lanes"]["names"]
+            ok = lane is not None and 0 <= int(lane) < len(names)
+            change["lane"] = names[int(lane)] if ok else None
+        if "level" in content:
+            level = content["level"]
+            change["level"] = None if level is None else max(0, int(level))
+        if "text" in content:
+            text = content["text"]
+            change["text"] = str(text) if text else None
+        if "nudge" in content:
+            change["nudge"] = float(content["nudge"])
+        changed = dataclasses.replace(self.notes[i], **change)
+        notelist.check(self._note_context(), changed)
+        self.notes = [*self.notes[:i], changed, *self.notes[i + 1 :]]
+
     def _note_remove_from(self, content: Mapping[str, Any]) -> None:
         """A note removed in the plot (``{"type": "note_remove"}``): its index."""
         i = int(content["id"])

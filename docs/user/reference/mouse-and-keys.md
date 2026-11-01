@@ -30,7 +30,9 @@ notebook is running.
 | Drag on the time axis | zoom to that range (with Select: select that range in all lanes) |
 | Hover | the event's details |
 | Hover a measure's time | both ends' times, and the time between exactly |
-| Click a measure's time | select it, with its menu: drag its ends, <kbd>Delete</kbd> removes it |
+| Click a measure's time | select it, with its menu: its place, back to automatic, its text, remove |
+| Drag a selected measure's end | to another mark's start or end |
+| Drag a selected measure's line | to another level, place or lane, or into the band above or below the lanes |
 
 ## Lanes in a tree
 
@@ -49,11 +51,12 @@ For spans ([`spans`](../how-to/traces.md)) and tasks with sub-tasks (`parent=`):
 | --- | --- |
 | <kbd>p</kbd> <kbd>z</kbd> <kbd>s</kbd> | Pan, Zoom, Select |
 | <kbd>t</kbd> | Time / Order |
-| <kbd>0</kbd> or <kbd>Home</kbd> | the whole timeline |
+| <kbd>0</kbd> or <kbd>Home</kbd> | the whole timeline (<kbd>0</kbd> with a measure selected: put it back where the layout would) |
 | <kbd>Backspace</kbd> | the previous view |
 | <kbd>+</kbd> <kbd>−</kbd> | zoom in, out |
 | <kbd>←</kbd> <kbd>→</kbd> | move through time |
-| <kbd>↑</kbd> <kbd>↓</kbd> | scroll the lanes |
+| <kbd>↑</kbd> <kbd>↓</kbd> | scroll the lanes (with a measure selected: move it a level up, down) |
+| <kbd>Enter</kbd> | with a measure selected: edit its text |
 | <kbd>d</kbd> | spread overlapping events, or draw them on the lane's line |
 | <kbd>l</kbd> | show or hide the legend |
 | <kbd>f</kbd> | full screen |
@@ -81,7 +84,7 @@ two pinch to zoom, until you tap outside the plot.
 ## The toolbar
 
 From left to right: Pan, Zoom, Select, Measure · Time, Order · Back, Home · Clear the selection (while
-there is one) · Legend · Display (text size, mark size, spreading) · Export (copy, download or
+there is one) · Legend · Display (text size, mark size, spreading, measures shown) · Export (copy, download or
 save an image; see [Make images for slides](../how-to/images.md)) · Full screen ·
 Mouse and keys (?).
 

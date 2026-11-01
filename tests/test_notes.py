@@ -275,6 +275,33 @@ def test_measures_made_moved_and_removed_in_the_plot() -> None:
     assert p.notes[0] == Measure(Edge(0, "end", "intervals"), Edge(2, "end", "intervals"))
 
 
+def test_measures_moved_and_edited_in_the_plot() -> None:
+    p = plot().measure(atl.end(0), atl.start(2)).annotate(T0 + H)
+    w = p.widget
+    w._on_msg(w, {"type": "note_change", "id": 0, "at": "bottom", "level": 1, "lane": 2}, [])
+    assert p.notes[0] == Measure(atl.end(0), atl.start(2), lane="c", at="bottom", level=1)
+    assert p._notes["measures"][0]["at"] == "bottom"
+    w._on_msg(w, {"type": "note_change", "id": 0, "text": "gap {time}"}, [])
+    assert p.notes[0].text == "gap {time}"
+    # back to automatic; empty text is the time again
+    back = {"type": "note_change", "id": 0, "at": "auto", "level": None, "lane": None, "text": ""}
+    w._on_msg(w, back, [])
+    assert p.notes[0] == Measure(atl.end(0), atl.start(2))
+    # a value on a values layer
+    q = with_samples().measure(atl.start(0, "cpu"), atl.end(3, "cpu"), at=atl.value(30))
+    w = q.widget
+    w._on_msg(w, {"type": "note_change", "id": 0, "at": {"value": 55.5, "layer": "cpu"}}, [])
+    assert q.notes[0] == Measure(atl.start(0, "cpu"), atl.end(3, "cpu"), at=atl.value(55.5, "cpu"))
+    # no note there: nothing changes; a place that is none is refused
+    w._on_msg(w, {"type": "note_change", "id": 1, "at": "top"}, [])
+    with pytest.raises(ValueError, match="at must be one of"):
+        w._on_msg(w, {"type": "note_change", "id": 0, "at": "left"}, [])
+    assert q.notes[0] == Measure(atl.start(0, "cpu"), atl.end(3, "cpu"), at=atl.value(55.5, "cpu"))
+    w = p.widget
+    w._on_msg(w, {"type": "note_change", "id": 1, "at": "top"}, [])  # an annotation
+    assert p.notes[1] == Annotation(T0 + H)
+
+
 def test_the_plot_asks_python_for_edges() -> None:
     p = plot()
     edge = p._snap({"lane": 1, "at": ticks(p, 4.9), "within": ticks(p, 0.5), "scale": "time"})

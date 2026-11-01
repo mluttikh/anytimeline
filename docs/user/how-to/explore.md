@@ -123,6 +123,23 @@ out in time, so zooming and panning never move a measure: a label that has no ro
 its line is shown when the measure is hovered or selected. A measure of two times, in no
 lane, goes to the header. `nudge=` moves a line a few pixels after all that, for a picture.
 
+### Move a measure in the plot
+
+Click a measure's label to select it. Then:
+
+- drag its line up or down: to another level, to the top, middle or bottom of its lane, to the
+  border under it, into another lane, or above or below the lanes into the header or footer
+  band (a measure at a value moves to the value under the pointer);
+- or pick a place in its menu (**Place**: Top, Middle, Bottom, Between, Header, Footer);
+- **↑** and **↓** move it a level, **0** (or the menu's **Automatic**) puts it back where the
+  layout would, and **Enter** (or **Edit text…**) edits its text (empty: the time);
+- drag one of its ends to another edge, and **Delete** removes it.
+
+Each change goes to Python, which replaces the measure in `plot.notes` with the same
+`at=`, `lane=`, `level=` or text you would write; a measure dragged to a place keeps its
+level there. In a page without Python the page changes its own measures. **Show measures** in
+the Display panel hides them all, and the bands they take, without removing any.
+
 Measures made in the plot come to Python, and `plot.measured` is a table of them all, of the
 type you plotted, a row per measure: its index in `plot.notes`, its text, both ends' times,
 the time between as a duration (`b - a`, so negative when `b` is earlier), the events

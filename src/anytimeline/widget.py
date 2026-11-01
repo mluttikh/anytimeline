@@ -173,6 +173,8 @@ class TimelineWidget(anywidget.AnyWidget):
             plot._measure_from(content)
         elif kind == "note_end":
             plot._note_end_from(content)
+        elif kind == "note_change":
+            plot._note_change_from(content)
         elif kind == "note_remove":
             plot._note_remove_from(content)
         elif kind == "view":

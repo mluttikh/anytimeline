@@ -74,6 +74,16 @@ export interface NoteMeasure {
   nudge?: number;
 }
 
+/** What a change of a measure in the plot sets (absent: unchanged). */
+export interface MeasureChange {
+  at?: MeasurePlace | { value: number; layer: string };
+  /** A lane's index; null: its ends' lane. */
+  lane?: number | null;
+  level?: number | null;
+  /** null: the time between. */
+  text?: string | null;
+}
+
 export interface Notes {
   bands?: NoteBand[];
   arrows?: NoteArrow[];
@@ -556,16 +566,20 @@ function drawArrow(view: TimelineView, ctx: CanvasRenderingContext2D, n: NoteArr
   }
 }
 
-/** The measures to draw: Python's and the page's own, one end moved while it is dragged,
- * and the one being made (its second end at the pointer). */
+/** The measures to draw: Python's and the page's own (none when hidden), one end or its
+ * line moved while it is dragged, and the one being made (its second end at the pointer). */
 export function measuresShown(view: TimelineView): NoteMeasure[] {
-  const out = [...(view.notes.measures ?? []), ...view.localMeasures].map((m) => {
+  const draft = view.measureDraft;
+  if (view.measuresHidden && !draft) return [];
+  const all = view.measuresHidden ? [] : [...(view.notes.measures ?? []), ...view.localMeasures];
+  const out = all.map((m) => {
+    const line = view.lineDrag;
+    if (line?.from.m.id === m.id && line.change) return { ...m, ...line.change };
     const h = view.handleDrag;
     if (!h || h.id !== m.id) return m;
     const moved = { ...m, [h.end]: h.to };
     return { ...moved, span: moved.b.x - moved.a.x, events: between(moved.a.r, moved.b.r) };
   });
-  const draft = view.measureDraft;
   if (draft?.b) out.push({ a: draft.a, b: draft.b, span: draft.b.x - draft.a.x, events: between(draft.a.r, draft.b.r), lane: draft.lane, text: null, color: null, id: Number.NaN });
   return out;
 }
@@ -706,12 +720,13 @@ export function drawNotes(view: TimelineView, ctx: CanvasRenderingContext2D, plo
 
 /** Where the text of a new note is typed: an input over the plot, at the note. Enter keeps
  * it (`done(text)`), Esc or leaving it drops it (`done(null)`). */
-export function askText(view: TimelineView, x: number, y: number, done: (text: string | null) => void): void {
+export function askText(view: TimelineView, x: number, y: number, done: (text: string | null) => void, opts: { value?: string; placeholder?: string; label?: string } = {}): void {
   const input = document.createElement("input");
   input.type = "text";
   input.className = "atl-note-input";
-  input.placeholder = "Note (Enter keeps it, Esc drops it)";
-  input.setAttribute("aria-label", "The annotation's text");
+  input.value = opts.value ?? "";
+  input.placeholder = opts.placeholder ?? "Note (Enter keeps it, Esc drops it)";
+  input.setAttribute("aria-label", opts.label ?? "The annotation's text");
   input.style.left = `${Math.max(0, x)}px`;
   input.style.top = `${Math.max(0, y)}px`;
   let finished = false;
@@ -736,4 +751,5 @@ export function askText(view: TimelineView, x: number, y: number, done: (text: s
   input.addEventListener("blur", () => finish(null));
   view.stage.append(input);
   input.focus();
+  input.select();
 }
