@@ -6,11 +6,14 @@
 // line following the pointer in between; `M` measures the mark pointed at; `>` and `<` move
 // the selected (or newest) measure's second end to the next or previous edge in its lane.
 // A measure goes to Python (onMeasure), which keeps it; a page keeps its own until closed.
-// A measure's label, clicked, selects it: its ends can be dragged, Delete removes it, and a
-// small menu offers removing it and, in a page, copying it as Python.
+// A measure's label, clicked, selects it: its ends can be dragged, its line too (to another
+// level, place, lane or band), Up and Down move it a level, Enter edits its text, 0 puts it
+// back where the layout would, Delete removes it, and a small menu offers the same and, in a
+// page, copying it as Python. Each change goes to Python (onNoteChange), which replaces the
+// note; a page changes its own.
 
 import { globalIndex, type Hit } from "./common";
-import { between, changeOf, changeText, type NoteEnd, type NoteMeasure, type Side } from "./notes";
+import { askText, bandHeight, between, changeOf, changeText, laneLevels, type MeasureChange, type MeasureLaid, type MeasurePlace, type NoteEnd, type NoteMeasure, type Side } from "./notes";
 import { lowerBound, upperBound } from "./scene";
 import { fmtNumber } from "./time";
 import type { TimelineView } from "./view";
@@ -197,12 +200,14 @@ export async function endAtExact(view: TimelineView, p: { x: number; y: number }
 /** Keep a measure: in Python, or (a page) in the page until it is closed. */
 export function commit(view: TimelineView, a: NoteEnd, b: NoteEnd, lane: number | null): void {
   if (a.x === b.x && a.r === b.r && a.layer === b.layer && a.index === b.index) return;
+  if (view.measuresHidden) view.showMeasures(true); // a new measure shows them again
   if (view.callbacks.onMeasure) {
     view.callbacks.onMeasure(refOf(a), refOf(b), lane);
     return;
   }
   const id = -1 - view.localMeasures.length;
   view.localMeasures = [...view.localMeasures, { a, b, span: b.x - a.x, events: between(a.r, b.r), change: changeOf(a, b), lane, text: null, color: null, id }];
+  view.showMeasures(true);
   view.selectMeasure(null);
 }
 
@@ -320,12 +325,137 @@ export function editable(view: TimelineView, m: NoteMeasure): boolean {
   return m.id < 0 || !!view.callbacks.onNoteEnd;
 }
 
+/** Whether a measure's place, level and text can be changed here. */
+export function changeable(view: TimelineView, m: NoteMeasure): boolean {
+  return m.id < 0 || !!view.callbacks.onNoteChange;
+}
+
 /** Remove a measure: in Python, or from the page. */
 export function remove(view: TimelineView, id: number): void {
   if (id >= 0) view.callbacks.onNoteRemove?.(id);
-  else view.localMeasures = view.localMeasures.filter((m) => m.id !== id);
+  else {
+    view.localMeasures = view.localMeasures.filter((m) => m.id !== id);
+    view.showMeasures(true);
+  }
   view.selectMeasure(null);
   view.requestRender();
+}
+
+/** The selected measure as drawn (null: none selected, or not drawn). */
+export function selectedLaid(view: TimelineView): MeasureLaid | null {
+  return view.measureHits.find((h) => h.m.id === view.selectedMeasure) ?? null;
+}
+
+/** The selected measure, when its line or label is at a point and it can be changed: to drag
+ * its line (null: not there). */
+export function lineAt(view: TimelineView, p: { x: number; y: number }): MeasureLaid | null {
+  const d = selectedLaid(view);
+  if (!d || !changeable(view, d.m)) return null;
+  const lo = Math.min(d.xa, d.xb);
+  const hi = Math.max(d.xa, d.xb);
+  if (p.x >= lo - 2 && p.x <= hi + 2 && Math.abs(p.y - d.y) <= 5) return d;
+  return labelAt(view, p)?.id === d.m.id ? d : null;
+}
+
+/** Where a measure's line goes, as the layout says: its place, without the row or value. */
+function placeOf(d: MeasureLaid): MeasurePlace | "value" {
+  return d.place.split(" ")[0] as MeasurePlace | "value";
+}
+
+/** Where the line of measure `d`, dragged to height `y`, goes: a level of the header (above
+ * the lanes) or footer (below them); in a row, the nearest of its top levels, middle,
+ * bottom levels and the borders under it (a measure at a value: the value there, rounded to
+ * about a pixel). The level is kept (pinned); the lane is the row's when that is another.
+ * Null: where it is already. */
+export function placeAt(view: TimelineView, d: MeasureLaid, y: number): MeasureChange | null {
+  const plot = view.plot();
+  const fs = view.fs;
+  const h = fs + 4;
+  const step = fs + 8;
+  const level = (from: number) => Math.max(0, Math.round((y - from) / step));
+  let change: MeasureChange;
+  if (y < plot.y) change = { at: "header", level: level(plot.y - bandHeight(view.measureBands.head, fs) + 3 + h / 2) };
+  else if (y > plot.y + plot.h) change = { at: "footer", level: level(plot.y + plot.h + 3 + h / 2) };
+  else {
+    const laneTop = plot.y - view.scrollY;
+    const rows = view.laneAt.length;
+    const row = Math.max(0, Math.min(rows - 1, Math.floor((y - laneTop) / view.laneH)));
+    const lane = view.laneAt[row];
+    if (lane === undefined || lane < 0) return null;
+    const top = laneTop + row * view.laneH;
+    const at = d.m.at;
+    const v = typeof at === "object" ? view.values.find((l) => l.data.spec.name === at.layer) : undefined;
+    const vv = v ? view.valueView() : null;
+    const value = v && vv ? v.valueAtY(lane, y, vv) : null;
+    let best: { row: number; at: MeasurePlace | "value"; level: number; y: number } | null = null;
+    const take = (r: number, place: MeasurePlace | "value", k: number, cy: number) => {
+      if (!best || Math.abs(cy - y) < Math.abs(best.y - y)) best = { row: r, at: place, level: k, y: cy };
+    };
+    if (value !== null && typeof at === "object") {
+      const per = Math.abs((v && vv ? v.valueAtY(lane, y + 1, vv) ?? value : value) - value) || 1;
+      const unit = 10 ** Math.floor(Math.log10(per));
+      const rounded = Number((Math.round(value / unit) * unit).toPrecision(12));
+      const out: MeasureChange = { at: { value: rounded, layer: at.layer }, level: null };
+      if (row !== d.row) out.lane = lane;
+      return out;
+    }
+    const cap = laneLevels(view.laneH, fs);
+    for (let k = 0; k < cap; k++) take(row, "top", k, top + 3 + h / 2 + k * step);
+    take(row, "middle", 0, top + view.laneH / 2);
+    for (let k = 0; k < cap; k++) take(row, "bottom", k, top + view.laneH - 3 - h / 2 - k * step);
+    take(row, "between", 0, top + view.laneH);
+    if (row > 0) take(row - 1, "between", 0, top);
+    const b = best as { row: number; at: MeasurePlace | "value"; level: number; y: number } | null;
+    if (!b) return null;
+    change = { at: b.at as MeasurePlace, level: b.level };
+    if (b.row !== d.row) change.lane = view.laneAt[b.row];
+  }
+  if (change.lane === undefined && change.at === placeOf(d) && change.level === d.k) return null;
+  return change;
+}
+
+/** Change a measure: in Python (which replaces the note), or in the page. */
+export function changeMeasure(view: TimelineView, m: NoteMeasure, change: MeasureChange): void {
+  if (m.id >= 0) {
+    view.callbacks.onNoteChange?.(m.id, change);
+    return;
+  }
+  view.localMeasures = view.localMeasures.map((n) => (n.id === m.id ? { ...n, ...change } : n));
+  view.requestRender();
+}
+
+/** The keys Up and Down: the selected measure a level up or down the plot (its place's
+ * levels go down from the top of a lane, a band and a value, and up from its bottom). */
+export function stepLevel(view: TimelineView, up: boolean): boolean {
+  const d = selectedLaid(view);
+  if (!d || !changeable(view, d.m)) return false;
+  const at = placeOf(d);
+  const downward = at !== "bottom" && at !== "between";
+  const k = d.k + (up === downward ? -1 : 1);
+  if (k < 0) {
+    view.flashNotice(up ? "This measure is as high as its place goes" : "This measure is as low as its place goes");
+    return true;
+  }
+  changeMeasure(view, d.m, { at: at === "value" ? d.m.at : at, level: k });
+  return true;
+}
+
+/** A measure back where the layout puts it: "auto", no level, and the lane of its ends when
+ * one is a mark's. */
+export function toAuto(view: TimelineView, m: NoteMeasure): void {
+  const change: MeasureChange = { at: "auto", level: null };
+  if (m.lane !== null && (m.a.lane !== null || m.b.lane !== null)) change.lane = null;
+  changeMeasure(view, m, change);
+}
+
+/** Type a measure's text over its line (empty: the time between). */
+export function editText(view: TimelineView, m: NoteMeasure): void {
+  const d = view.measureHits.find((h) => h.m.id === m.id);
+  const x = d ? Math.min(d.xa, d.xb) : view.plot().x;
+  const y = d ? d.y - (view.fs + 4) : view.plot().y;
+  askText(view, x, y, (text) => {
+    if (text !== null) changeMeasure(view, m, { text: text || null });
+  }, { value: m.text ?? "", placeholder: "Its text: {time}, {events}, {change} (empty: the time)", label: "The measure's text" });
 }
 
 /** The measure whose label is at a point, or whose line where it has no label (null:

@@ -191,6 +191,7 @@ function render({ model, el }: { model: AnyModel; el: HTMLElement }): () => void
     onConnect: (a, b) => send(model, { type: "connect", a, b }),
     onMeasure: (a, b, lane) => send(model, { type: "measure", a, b, lane }),
     onNoteEnd: (id, end, to) => send(model, { type: "note_end", id, end, to }),
+    onNoteChange: (id, change) => send(model, { type: "note_change", id, ...change }),
     onNoteRemove: (id) => send(model, { type: "note_remove", id }),
     onSnap: (q) => ask(model, s, { type: "snap", ...q }).then((msg) => (msg.edge ?? null) as NoteEnd | null),
     onFind: (q, scale) => ask(model, s, { type: "find", q, scale }) as Promise<Found>,

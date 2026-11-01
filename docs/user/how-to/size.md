@@ -2,7 +2,8 @@
 
 The toolbar's **Display** panel (the sliders button) sets the text size, the mark size and
 whether overlapping events spread; each is also a setting in Python, and a change in the
-panel shows in Python.
+panel shows in Python. Its **Show measures** hides the measures for a while (they stay in
+`plot.notes`).
 
 ## Text size
 

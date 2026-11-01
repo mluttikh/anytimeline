@@ -637,6 +637,32 @@ body.vscode-high-contrast:not(.vscode-high-contrast-light) .atl-root,
 .atl-menu button:focus-visible {
   background: var(--atl-grid);
 }
+.atl-menu-group {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0 3px;
+  border-top: 1px solid var(--atl-border);
+  border-bottom: 1px solid var(--atl-border);
+  margin: 2px 0;
+}
+.atl-menu-label {
+  color: var(--atl-muted);
+  padding: 1px 8px;
+}
+.atl-menu-choices {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 1px;
+  padding: 0 4px;
+}
+.atl-menu .atl-menu-choices button {
+  padding: 2px 5px;
+  text-align: center;
+}
+.atl-menu .atl-menu-choices button[aria-checked="true"] {
+  background: var(--atl-grid);
+  font-weight: 600;
+}
 .atl-note-input {
   position: absolute;
   z-index: 3;

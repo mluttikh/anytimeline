@@ -16,7 +16,7 @@ import { buildHelp } from "./help";
 import { buildLegend } from "./legend";
 import { type FindAsk, Finder, type Match, reveal, revealLane, type StepAsk, stepHeld } from "./find";
 import { buildSummary, type LayerSummary } from "./summary";
-import { bandHeight, type MarkRef, type MeasureLaid, type NewNote, type NoteEnd, type NoteMeasure, type Notes } from "./notes";
+import { bandHeight, type MarkRef, type MeasureChange, type MeasureLaid, type NewNote, type NoteEnd, type NoteMeasure, type Notes } from "./notes";
 import type { EndRef, MeasureDraft, SnapAsk } from "./measure";
 import { FLAG_SELECTED, type MarkLayerDraw, type Renderer } from "./renderers/renderer";
 import { createRenderer } from "./renderers/select";
@@ -89,11 +89,17 @@ export interface ViewCallbacks {
   onMeasure?: (a: EndRef, b: EndRef, lane: number | null) => void;
   /** An end of note `id` (its index in plot.notes) moved. */
   onNoteEnd?: (id: number, end: "a" | "b", to: EndRef) => void;
+  /** Measure `id` moved to another place, lane or level, or its text edited. */
+  onNoteChange?: (id: number, change: MeasureChange) => void;
   /** Note `id` removed. */
   onNoteRemove?: (id: number) => void;
   /** The edge nearest to a place, or next to it (Python, which holds every mark). */
   onSnap?: SnapAsk;
 }
+
+/** An item of a measure's menu: its text and action (`keep`: the measure stays selected),
+ * or a labelled row of choices (the one in effect checked). */
+export type MenuItem = [string, () => void, boolean?] | { label: string; choices: [string, () => void, boolean][] };
 
 export class TimelineView implements DetailView {
   readonly root: HTMLDivElement;
@@ -135,6 +141,10 @@ export class TimelineView implements DetailView {
   selectedMeasure: number | null = null;
   /** An end of the selected measure being dragged, and where it is now. */
   handleDrag: { id: number; end: "a" | "b"; to: NoteEnd } | null = null;
+  /** The selected measure's line being dragged, and where it would go (null: where it is). */
+  lineDrag: { from: MeasureLaid; change: MeasureChange | null } | null = null;
+  /** Whether measures are hidden (the Display panel). */
+  measuresHidden = false;
   /** The measures drawn last, where (their labels select them). */
   measureHits: MeasureLaid[] = [];
   /** The levels of measures in the bands above and below the lanes (0: no band). */
@@ -258,6 +268,7 @@ export class TimelineView implements DetailView {
         this.setDodge(on);
         this.callbacks.onDodge?.(this.dodgeOn);
       },
+      measures: (on) => this.showMeasures(on),
     });
     this.header.append(this.titleEl, this.info, this.toolbar.hint, this.toolbar.element);
     this.stage = div("atl-stage");
@@ -456,38 +467,77 @@ export class TimelineView implements DetailView {
     this.notes = notes ?? {};
     const ids = new Set([...(this.notes.measures ?? []), ...this.localMeasures].map((m) => m.id));
     if (this.selectedMeasure !== null && !ids.has(this.selectedMeasure)) this.selectMeasure(null);
+    this.updateToolbar();
     this.requestRender();
   }
 
   /** Select a measure (null: none): its ends can then be dragged, Delete removes it, and
    * `menu` (a point, CSS px) opens its menu there. */
-  selectMeasure(id: number | null, menu: { x: number; y: number } | null = null, items: [string, () => void][] = []): void {
+  selectMeasure(id: number | null, menu: { x: number; y: number } | null = null, items: MenuItem[] = []): void {
     this.selectedMeasure = id;
     this.measureMenu?.remove();
     this.measureMenu = null;
     if (id !== null && menu && items.length) {
       const el = div("atl-menu");
       el.setAttribute("role", "menu");
-      for (const [text, act] of items) {
+      // an item closes the menu; a choice keeps the measure selected (to go on moving it)
+      const item = (text: string, act: () => void, keep: boolean) => {
         const b = document.createElement("button");
         b.type = "button";
         b.textContent = text;
-        b.setAttribute("role", "menuitem");
         b.addEventListener("pointerdown", (e) => e.stopPropagation());
         b.addEventListener("click", (e) => {
           e.stopPropagation();
-          act();
-          this.selectMeasure(null);
+          // the menu closes and the plot takes the keyboard first: an action may take it on
+          // (Edit text opens a text box)
+          this.selectMeasure(keep ? id : null);
           this.root.focus({ preventScroll: true });
+          act();
         });
-        el.append(b);
+        return b;
+      };
+      for (const it of items) {
+        if (Array.isArray(it)) {
+          const b = item(it[0], it[1], !!it[2]);
+          b.setAttribute("role", "menuitem");
+          el.append(b);
+          continue;
+        }
+        const group = div("atl-menu-group");
+        group.setAttribute("role", "group");
+        group.setAttribute("aria-label", it.label);
+        const title = document.createElement("span");
+        title.className = "atl-menu-label";
+        title.textContent = it.label;
+        const choices = div("atl-menu-choices");
+        for (const [text, act, on] of it.choices) {
+          const b = item(text, act, true);
+          b.setAttribute("role", "menuitemradio");
+          b.setAttribute("aria-checked", String(on));
+          choices.append(b);
+        }
+        group.append(title, choices);
+        el.append(group);
       }
-      el.style.left = `${Math.max(0, Math.min(menu.x, this.width - 170))}px`;
-      el.style.top = `${Math.max(0, menu.y)}px`;
       this.stage.append(el);
+      this.placeInStage(el, menu.x, menu.y, menu.y - 20);
       this.measureMenu = el;
     }
     this.requestRender();
+  }
+
+  /** Put a popup (in the stage) where all of it shows: from `x`, under `below`, else over
+   * `above` (its bottom there), else as high as it fits; one taller than the stage scrolls. */
+  placeInStage(el: HTMLElement, x: number, below: number, above: number): void {
+    const w = this.stage.clientWidth || this.width;
+    const h = this.stage.clientHeight || this.height;
+    el.style.maxHeight = `${Math.max(40, h - 8)}px`;
+    el.style.overflowY = "auto";
+    const ew = el.offsetWidth;
+    const eh = el.offsetHeight;
+    const top = below + eh <= h - 4 ? below : above - eh >= 4 ? above - eh : Math.max(4, h - 4 - eh);
+    el.style.left = `${Math.max(4, Math.min(x, w - ew - 4))}px`;
+    el.style.top = `${Math.max(0, top)}px`;
   }
 
   /** What the next gesture or key does, shown over the plot (null: as usual). */
@@ -633,6 +683,7 @@ export class TimelineView implements DetailView {
     this.localMeasures = [];
     this.measureDraft = null;
     this.handleDrag = null;
+    this.lineDrag = null;
     this.selectMeasure(null);
     this.hovered = null;
     folding.initRows(this, spec);
@@ -1259,7 +1310,17 @@ export class TimelineView implements DetailView {
       markScale: this.markScale,
       dodge: this.dodgeOn,
       dodges: this.layers.some((l) => l.data.spec.overlap === "dodge" && !isStems(l)),
+      measures: !this.measuresHidden,
+      hasMeasures: !!this.notes.measures?.length || this.localMeasures.length > 0,
     });
+  }
+
+  /** Show the measures, or hide them all (and the bands they take). */
+  showMeasures(on: boolean): void {
+    this.measuresHidden = !on;
+    if (!on) this.selectMeasure(null);
+    this.updateToolbar();
+    this.requestRender();
   }
 
   /** Whether the view differs from the whole timeline (Home has something to do). */

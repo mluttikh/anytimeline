@@ -433,7 +433,7 @@ test("Display: mark size and spreading reach the plot and Python; the key d swit
   expect(await state(page, "mark_scale")).toBe(0.75);
   await expect.poll(async () => (await marks()).size).toBeCloseTo(before.size * 0.75, 5);
   // spreading off: every event on its lane's line
-  await page.locator(".atl-popover-check input").uncheck();
+  await page.getByRole("checkbox", { name: "Spread overlapping events" }).uncheck();
   expect(await state(page, "dodge")).toBe(false);
   await expect.poll(async () => (await marks()).spread).toBe(0);
   await page.locator('.atl-popover button[aria-label="Default mark size"]').click();
@@ -568,7 +568,7 @@ test("Story: long titles wrap within the box width", async ({ page }) => {
 test("Story: the Display panel has no spreading switch, the plot no column of lane names", async ({ page }) => {
   await open(page, "story_incident");
   await page.locator('.atl-toolbar button[aria-label="Display"]').click();
-  await expect(page.locator(".atl-popover-check")).toBeHidden();
+  await expect(page.getByRole("checkbox", { name: "Spread overlapping events" })).toBeHidden();
   expect(await view(page).evaluate((root: any) => root.__view.gutter)).toBe(12);
 });
 
@@ -884,6 +884,96 @@ test("Measure: places, bands that take room only when used, levels that hold whi
   // without measures the bands are gone
   await setNotes({});
   await expect.poll(() => view(page).evaluate((root: any) => root.__view.plot().y)).toBe(before.y);
+});
+
+test("Measure: moved by its line, its menu and keys; hidden from the Display panel", async ({ page }) => {
+  await open(page, "gantt_plan");
+  const [s0, e1] = await view(page).evaluate((root: any) => {
+    const d = root.__view.bars[0].data;
+    return [d.start[0], d.end[1]];
+  });
+  const end = (x: number, side = "start") => ({ x, r: null, lane: 0, side, layer: "intervals", index: 0 });
+  await page.evaluate((n) => {
+    (window as any).__model.state._notes = n;
+    (window as any).__model.emit("change:_notes");
+  }, { measures: [{ a: end(s0), b: end(e1, "end"), span: e1 - s0, events: null, lane: null, text: "wait", color: null, id: 0 }] });
+  const changes = () => page.evaluate(() => (window as any).__log.filter((m: any) => m.type === "note_change").map(({ type, ...rest }: any) => rest));
+  // where the measure is drawn (it may not be yet: wait for it with the poll below)
+  const line = async () => {
+    const d = await view(page).evaluate((root: any) => {
+      const h = root.__view.measureHits[0];
+      return h ? { x: (h.xa + h.xb) / 2, y: h.y, lx: h.lx, tw: h.tw, plotY: root.__view.plot().y } : null;
+    });
+    if (!d) throw new Error("the measure is not drawn");
+    const box = await stageBox(page);
+    return { ...d, x: box.x + d.x, y: box.y + d.y, label: box.x + d.lx + d.tw / 2, top: box.y + d.plotY };
+  };
+  await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits[0]?.lx ?? null)).not.toBeNull();
+  // its label selects it; the menu's Place moves it
+  let at = await line();
+  await page.mouse.click(at.label, at.y);
+  const menu = page.locator(".atl-menu");
+  await menu.getByRole("menuitemradio", { name: "Middle" }).click();
+  expect(await changes()).toEqual([{ id: 0, at: "middle", level: null }]);
+  await expect(menu).toBeHidden();
+  // still selected: keys move it a level, and 0 puts it back
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("0");
+  expect((await changes()).slice(1)).toEqual([{ id: 0, at: "top", level: 1 }, { id: 0, at: "auto", level: null }]);
+  // its line dragged above the lanes goes to the header
+  at = await line();
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x, at.top - 4, { steps: 5 });
+  await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits[0].place)).toBe("header");
+  await page.mouse.up();
+  expect((await changes()).slice(3)).toEqual([{ id: 0, at: "header", level: 0 }]);
+  // Enter edits its text
+  await page.keyboard.press("Enter");
+  const input = page.locator(".atl-note-input");
+  await expect(input).toHaveValue("wait");
+  await input.fill("queue {time}");
+  await input.press("Enter");
+  expect((await changes()).slice(4)).toEqual([{ id: 0, text: "queue {time}" }]);
+  // the Display panel hides them all, and the bands with them
+  await page.locator('.atl-toolbar button[aria-label="Display"]').click();
+  const show = page.getByRole("checkbox", { name: "Show measures" });
+  await expect(show).toBeChecked();
+  await show.uncheck();
+  await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits.length)).toBe(0);
+  await show.check();
+  await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits.length)).toBe(1);
+});
+
+test("Measure: its menu and its text box stay in the plot, also at the bottom", async ({ page }) => {
+  await open(page, "gantt_plan");
+  const [s0, e1] = await view(page).evaluate((root: any) => {
+    const d = root.__view.bars[0].data;
+    return [d.start[0], d.end[1]];
+  });
+  const end = (x: number, side = "start") => ({ x, r: null, lane: 0, side, layer: "intervals", index: 0 });
+  await page.evaluate((n) => {
+    (window as any).__model.state._notes = n;
+    (window as any).__model.emit("change:_notes");
+  }, { measures: [{ a: end(s0), b: end(e1, "end"), span: e1 - s0, events: null, lane: null, text: "at the bottom", color: null, id: 0, at: "footer" }] });
+  await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits[0]?.place)).toBe("footer");
+  const d = await view(page).evaluate((root: any) => {
+    const h = root.__view.measureHits[0];
+    return { x: h.lx + h.tw / 2, y: h.y };
+  });
+  const stage = await stageBox(page);
+  await page.mouse.click(stage.x + d.x, stage.y + d.y);
+  const inside = async (selector: string) => {
+    const box = (await page.locator(selector).boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(stage.y);
+    expect(box.y + box.height).toBeLessThanOrEqual(stage.y + stage.height);
+    expect(box.x + box.width).toBeLessThanOrEqual(stage.x + stage.width);
+  };
+  await expect(page.locator(".atl-menu")).toBeVisible();
+  await inside(".atl-menu");
+  await page.locator(".atl-menu").getByRole("menuitem", { name: "Edit text" }).click();
+  await expect(page.locator(".atl-note-input")).toBeFocused();
+  await inside(".atl-note-input");
 });
 
 test("Undo: Ctrl/Cmd+Z asks Python to take back a change of the selection, Shift for redo", async ({ page }) => {
