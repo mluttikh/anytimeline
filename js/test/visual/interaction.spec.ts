@@ -1009,6 +1009,52 @@ test("Measure: a label above or below stays in sight, in the top lane and in the
   }
 });
 
+test("Measure: its extension lines start at the bars it measures, in their own sub-rows", async ({ page }) => {
+  await open(page, "schedule");
+  // two bars of one lane that overlap, so in sub-rows of their own
+  const pair = await view(page).evaluate((root: any) => {
+    const d = root.__view.bars[0].data;
+    for (let i = 0; i < d.count; i++)
+      for (let j = i + 1; j < d.count && j < i + 40; j++)
+        if (d.lane[i] === d.lane[j] && d.row[i] !== d.row[j] && root.__view.slot[d.lane[i]] >= 0) return { i, j, xi: d.start[i], xj: d.start[j], lane: d.lane[i] };
+    return null;
+  });
+  expect(pair).not.toBeNull();
+  const { i, j, xi, xj, lane } = pair!;
+  const end = (x: number, index: number) => ({ x, r: null, lane, side: "start", layer: "intervals", index });
+  await view(page).evaluate((root: any, [a, b]) => root.__view.camera.fit(Math.min(a, b) - Math.abs(b - a), Math.max(a, b) + Math.abs(b - a)), [xi, xj]);
+  await page.evaluate((n) => {
+    (window as any).__model.state._notes = n;
+    (window as any).__model.emit("change:_notes");
+  }, { measures: [{ a: end(xi, i), b: end(xj, j), span: xj - xi, events: null, lane: null, text: null, color: null, id: 0, at: "header" }] });
+  await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits[0]?.place)).toBe("header");
+  // the dashed lines drawn, and the tops of the two bars
+  const got = await view(page).evaluate((root: any, [a, b]) => {
+    const v = root.__view;
+    const starts: number[] = [];
+    const proto = CanvasRenderingContext2D.prototype;
+    const moveTo = proto.moveTo;
+    proto.moveTo = function (this: CanvasRenderingContext2D, x: number, y: number) {
+      if (this.getLineDash().join() === "3,2") starts.push(y);
+      return moveTo.call(this, x, y);
+    };
+    try {
+      v.renderFrame();
+    } finally {
+      proto.moveTo = moveTo;
+    }
+    const plot = v.plot();
+    const bv = { left: v.camera.left, scale: v.camera.scale, plot, laneTop: plot.y - v.scrollY, laneH: v.laneH, maxBar: Math.max(16, Math.round(v.fs * 2.2)), sequence: false, slot: v.slot };
+    const tops = [a, b].map((k) => {
+      const box = v.bars[0].box(k, bv);
+      return box.cy - box.h / 2;
+    });
+    return { starts, tops };
+  }, [i, j]);
+  expect(got.tops[0]).not.toBeCloseTo(got.tops[1], 0);
+  expect(got.starts.sort((p, q) => p - q)).toEqual(got.tops.sort((p, q) => p - q).map((t) => expect.closeTo(t, 1)));
+});
+
 test("Undo: Ctrl/Cmd+Z asks Python to take back a change of the selection, Shift for redo", async ({ page }) => {
   await open(page, "service_time");
   await view(page).click({ position: { x: 4, y: 4 } });
