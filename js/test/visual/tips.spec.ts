@@ -35,3 +35,19 @@ test("a button's tip shows at once, also on a greyed button and on keyboard focu
   await expect(tip).toBeVisible();
   await expect(tip).toContainText("legend");
 });
+
+test("no tip over an open menu: the Export button's tip waits until its menu closes", async ({ page }) => {
+  await page.goto("/test/visual/harness.html?scene=trace_waterfall&renderer=canvas2d");
+  await page.waitForFunction(() => (window as any).__perf?.frame_ms !== undefined, null, { timeout: 15_000 });
+  const tip = page.locator(".atl-button-tip");
+  const button = page.locator('.atl-toolbar button[aria-label="Export image"]');
+  const b = (await button.boundingBox())!;
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await expect(tip).toContainText("Export");
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(page.locator(".atl-export-menu")).toBeVisible();
+  await page.mouse.move(b.x + b.width / 2 + 2, b.y + b.height / 2 + 1);
+  await page.waitForTimeout(400);
+  await expect(tip).toBeHidden();
+});
