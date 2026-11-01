@@ -27,6 +27,7 @@ from xml.sax.saxutils import escape
 import numpy as np
 
 from anytimeline import axis as ax
+from anytimeline import measuring
 from anytimeline import scene as sc
 from anytimeline import stems as st
 from anytimeline.codec import DTYPES, decode_strings
@@ -152,12 +153,6 @@ def _rgb(hex_color: str) -> tuple[int, int, int]:
         h = "".join(c + c for c in h[:3])
     v = int(h[:6], 16)
     return (v >> 16) & 255, (v >> 8) & 255, v & 255
-
-
-def change_text(change: float) -> str:
-    """A change in value, signed, to three digits (``changeText``)."""
-    sign = "+" if change > 0 else "\u2212" if change < 0 else ""
-    return sign + ax.fmt_number(abs(change), 3)
 
 
 def _hex(r: int, g: int, b: int) -> str:
@@ -2201,18 +2196,17 @@ class _Picture:
             self._note_label(n["text"], (xa + xb) / 2 - w / 2, (ya + yb) / 2 - f.fs / 2 - 2, color)
 
     def _measure_text(self, n: dict[str, Any]) -> str:
-        """A measure's label (``measureText``): its text, ``{time}``, ``{events}`` and
-        ``{change}`` filled in; without text the time, on the Order scale the events between,
-        and between samples the change in value."""
-        time = self.time_axis.format_measure(abs(n["span"]))
-        events = n.get("events")
-        count = "" if events is None else f"{ax.fmt_number(events)} event{'s' * (events != 1)}"
-        change = "" if n.get("change") is None else change_text(n["change"])
-        text = n.get("text")
-        if text is None:
-            parts = [time, count if self.f.order else "", f"Δ {change}" if change else ""]
-            return " · ".join(p for p in parts if p)
-        return text.replace("{time}", time).replace("{events}", count).replace("{change}", change)
+        """A measure's label (``measureText``): its text with its fields filled in; without
+        text the time, on the Order scale the events between, and between samples the
+        change in value."""
+        values = {
+            "span": n["span"],
+            "a": n["a"]["x"],
+            "b": n["b"]["x"],
+            "events": n.get("events"),
+            "change": n.get("change"),
+        }
+        return measuring.fill(self.time_axis, n.get("text"), values, self.f.order)
 
     def _measures(self, measures: list[dict[str, Any]]) -> None:
         """Measures as dimension lines (``drawMeasures``): from each end's mark an extension
@@ -2284,6 +2278,9 @@ class _Picture:
                     "nudge": n.get("nudge") or 0.0,
                     "text": text,
                     "tw": text_width(text, size) + 8,
+                    "label": n.get("label") or "auto",
+                    "ends": n.get("ends") or "arrows",
+                    "extend": n.get("extend") or "mark",
                     "color": n.get("color") or self.theme.accent,
                 }
             )
@@ -2321,7 +2318,8 @@ class _Picture:
         if hi < px - 1 or lo > px + pw + 1 or y < plot[1] or y > plot[1] + plot[3]:
             return
         ends = ((d["xa"], d["rows"][0], d["ys"][0]), (d["xb"], d["rows"][1], d["ys"][1]))
-        for x, row, ys in ends:
+        extend = d.get("extend") or "mark"
+        for x, row, ys in ends if extend == "mark" else ():
             if ys is not None:  # a sample: from its dot
                 y0, y1 = ys, y + (1 if y > ys else -1) * 4
             elif row is None:  # a time: a short tick through the line
@@ -2335,8 +2333,16 @@ class _Picture:
             seg = _clip_segment(x, y0, x, y1, plot)
             if seg:
                 self.svg.line(*seg, color, 1, stroke_dasharray="3 2")
+        if extend == "lanes":  # through every lane and band, as cursors
+            for x in (d["xa"], d["xb"]):
+                seg = _clip_segment(x, plot[1], x, plot[1] + plot[3], plot)
+                if seg:
+                    self.svg.line(*seg, color, 1, stroke_dasharray="3 2")
+        style = d.get("ends") or "arrows"
         inside = hi - lo >= 2 * ARROW_LEN + 2
-        reach = 0 if inside else 2 * ARROW_LEN
+        reach = (
+            (0 if inside else 2 * ARROW_LEN) if style == "arrows" else 0 if style == "none" else 4
+        )
         # a band of the background under the line and its heads: it shows over marks
         halo = _clip_segment(lo - reach, y, hi + reach, y, plot)
         if halo:
@@ -2345,7 +2351,13 @@ class _Picture:
         if seg:
             self.svg.line(*seg, color, 1.5)
         for x, way in ((lo, -1), (hi, 1)):
-            if not px <= x <= px + pw:
+            if not px <= x <= px + pw or style == "none":
+                continue
+            if style == "ticks":
+                self.svg.line(x - TICK, y + TICK, x + TICK, y - TICK, color, 1.5)
+                continue
+            if style == "dots":
+                self.svg.path(symbol_path(0, x, y, END_DOT), fill=color)
                 continue
             tip = way if inside else -way  # too short: the heads outside, pointing in
             base = x - tip * ARROW_LEN
@@ -2364,7 +2376,7 @@ class _Picture:
         if dots:
             self.svg.path("".join(dots), fill=color)
         if d["text"] and d["lx"] is not None:  # a label without room shows on hover only
-            self._note_label(d["text"], d["lx"], y - (f.fs + 4) / 2, color, f.area)
+            self._note_label(d["text"], d["lx"], d["ly"], color, f.area)
 
     # -- gaps
 
@@ -2606,6 +2618,8 @@ def _fit_range(a: float, b: float, margin: float, time: Mapping[str, Any]) -> tu
 ARROW_LEN = 7
 """The length of a measure's arrowheads, in pixels."""
 SAMPLE_DOT = 2.5
+TICK = 4  # half the length of a measure's oblique tick
+END_DOT = 3  # the radius of a measure's end dot
 """The radius of the dot on a sample a measure ends at, in pixels."""
 
 
@@ -2744,7 +2758,8 @@ def place_measures(
             y = (g["value_y"] if g["value_y"] is not None else top) + k * step
         else:
             y = top + 3 + h / 2 + k * step
-        laid.append({**g, "place": place[i], "k": k, "y": y + g["nudge"], "lx": None})
+        y += g["nudge"]
+        laid.append({**g, "place": place[i], "k": k, "y": y, "lx": None, "ly": y - h / 2})
     # labels, level by level: the lines first, then each label where it has room
     spans: dict[tuple[Any, ...], list[tuple[float, float, int]]] = {}
     for i, d in enumerate(laid):
@@ -2757,15 +2772,37 @@ def place_measures(
     def free_at(s: list[tuple[float, float, int]], a: float, b: float, own: int) -> bool:
         return not any(j != own and lft < b + 4 and a - 4 < rgt for lft, rgt, j in s)
 
-    for i in sorted(range(len(laid)), key=lambda i: (min(laid[i]["xa"], laid[i]["xb"]), i)):
+    def centred(lft: float, rgt: float, tw: float) -> float:
+        return max(px + 1, min((lft + rgt) / 2 - tw / 2, right - tw - 1))
+
+    by_left = sorted(range(len(laid)), key=lambda i: (min(laid[i]["xa"], laid[i]["xb"]), i))
+    # labels put somewhere first (they take their room), then the automatic ones
+    for i in by_left:
         d = laid[i]
-        if not d["text"]:
+        mode = d.get("label") or "auto"
+        if not d["text"] or mode in ("auto", "hover"):
+            continue
+        lft, rgt = min(d["xa"], d["xb"]), max(d["xa"], d["xb"])
+        tw = d["tw"]
+        if mode in ("on", "above", "below"):
+            d["lx"] = centred(lft, rgt, tw)
+            if mode == "above":
+                d["ly"] = d["y"] - h - 1
+            elif mode == "below":
+                d["ly"] = d["y"] + 2
+        else:
+            d["lx"] = lft - 6 - tw if mode == "start" else rgt + 6
+        if mode != "above" and mode != "below" and (mode != "on" or tw > rgt - lft):
+            spans[(*d["place"], d["k"])].append((d["lx"], d["lx"] + tw, -1))
+    for i in by_left:
+        d = laid[i]
+        if not d["text"] or (d.get("label") or "auto") != "auto":
             continue
         lft, rgt = min(d["xa"], d["xb"]), max(d["xa"], d["xb"])
         tw = d["tw"]
         s = spans[(*d["place"], d["k"])]
         if tw + 2 * ARROW_LEN <= rgt - lft:
-            d["lx"] = max(px + 1, min((lft + rgt) / 2 - tw / 2, right - tw - 1))
+            d["lx"] = centred(lft, rgt, tw)
         elif rgt + 6 + tw <= right and free_at(s, rgt + 6, rgt + 6 + tw, i):
             d["lx"] = rgt + 6
         elif lft - 6 - tw >= px and free_at(s, lft - 6 - tw, lft - 6, i):

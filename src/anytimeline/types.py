@@ -24,6 +24,9 @@ __all__ = [
     "EventOverlap",
     "Expand",
     "LaneSort",
+    "MeasureEnds",
+    "MeasureExtend",
+    "MeasureLabel",
     "MeasurePlace",
     "Renderer",
     "SelectionMode",
@@ -47,6 +50,9 @@ SelectionMode = Literal["multiple", "single"]
 Display = Literal["widget", "html"]
 """How a notebook shows a plot: as a widget, connected to Python, or as a page."""
 MeasurePlace = Literal["auto", "top", "middle", "bottom", "between", "header", "footer"]
+MeasureLabel = Literal["auto", "on", "above", "below", "start", "end", "hover"]
+MeasureEnds = Literal["arrows", "ticks", "dots", "none"]
+MeasureExtend = Literal["mark", "lanes", "none"]
 """Where a measure's line goes: ``"auto"`` (the top of its lane; levels the lane cannot hold
 continue in the header), the top, middle or bottom of its lane, on the border under it
 (``"between"``), or a band above the lanes (``"header"``) or below them (``"footer"``)."""

@@ -916,10 +916,15 @@ test("Measure: moved by its line, its menu and keys; hidden from the Display pan
   await menu.getByRole("menuitemradio", { name: "Middle" }).click();
   expect(await changes()).toEqual([{ id: 0, at: "middle", level: null }]);
   await expect(menu).toBeHidden();
+  // its label's place, from the menu
+  at = await line();
+  await page.mouse.click(at.label, at.y);
+  await menu.getByRole("menuitemradio", { name: "Above" }).click();
+  expect((await changes()).slice(1)).toEqual([{ id: 0, label: "above" }]);
   // still selected: keys move it a level, and 0 puts it back
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("0");
-  expect((await changes()).slice(1)).toEqual([{ id: 0, at: "top", level: 1 }, { id: 0, at: "auto", level: null }]);
+  expect((await changes()).slice(2)).toEqual([{ id: 0, at: "top", level: 1 }, { id: 0, at: "auto", level: null }]);
   // its line dragged above the lanes goes to the header
   at = await line();
   await page.mouse.move(at.x, at.y);
@@ -927,14 +932,14 @@ test("Measure: moved by its line, its menu and keys; hidden from the Display pan
   await page.mouse.move(at.x, at.top - 4, { steps: 5 });
   await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits[0].place)).toBe("header");
   await page.mouse.up();
-  expect((await changes()).slice(3)).toEqual([{ id: 0, at: "header", level: 0 }]);
+  expect((await changes()).slice(4)).toEqual([{ id: 0, at: "header", level: 0 }]);
   // Enter edits its text
   await page.keyboard.press("Enter");
   const input = page.locator(".atl-note-input");
   await expect(input).toHaveValue("wait");
   await input.fill("queue {time}");
   await input.press("Enter");
-  expect((await changes()).slice(4)).toEqual([{ id: 0, text: "queue {time}" }]);
+  expect((await changes()).slice(5)).toEqual([{ id: 0, text: "queue {time}" }]);
   // the Display panel hides them all, and the bands with them
   await page.locator('.atl-toolbar button[aria-label="Display"]').click();
   const show = page.getByRole("checkbox", { name: "Show measures" });

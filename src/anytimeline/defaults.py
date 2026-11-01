@@ -20,10 +20,12 @@ from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from typing import Any, Literal, TypeVar
 
-METHODS = ("plot", "events", "intervals", "states", "values", "spans")
+METHODS = ("plot", "events", "intervals", "states", "values", "spans", "measure")
 """What takes defaults: ``plot`` is the ``Timeline`` constructor; the others its methods."""
 
 NOT_DEFAULTS = frozenset({"self", "data", "name"})
+NOT_DEFAULTS_OF = {"measure": frozenset({"a", "b"})}
+"""Per method, more arguments that are given with each call (a measure's ends)."""
 
 _DEFAULTS: dict[str, dict[str, Any]] = {}
 
@@ -38,10 +40,12 @@ def set_defaults(
     states: Mapping[str, Any] | None = None,
     values: Mapping[str, Any] | None = None,
     spans: Mapping[str, Any] | None = None,
+    measure: Mapping[str, Any] | None = None,
 ) -> None:
     """Set defaults for the plots and layers made from now on: dicts of a method's
     arguments. ``plot`` is for ``Timeline(...)``; ``events``, ``intervals``, ``states``,
-    ``values`` and ``spans`` for those methods.
+    ``values``, ``spans`` and ``measure`` for those methods (a measure's look: ``label``,
+    ``ends``, ``extend``, ``at``, ``color``, ``text``; not its ends).
 
     ```python
     import anytimeline
@@ -49,6 +53,7 @@ def set_defaults(
     anytimeline.set_defaults(
         plot={"font_size": 14, "height": 420},
         events={"lane": "service", "tooltip": ["request", "status"]},
+        measure={"ends": "ticks", "label": "above"},
     )
     ```
 
@@ -68,6 +73,7 @@ def set_defaults(
         "states": states,
         "values": values,
         "spans": spans,
+        "measure": measure,
     }
     checked = {kind: _checked(kind, args) for kind, args in given.items() if args is not None}
     for kind, args in checked.items():
@@ -189,10 +195,11 @@ def _checked(kind: str, args: Mapping[str, Any]) -> dict[str, Any]:
     options = _options(fn)
     out: dict[str, Any] = {}
     for key, value in args.items():
-        if key in NOT_DEFAULTS:
+        not_defaults = NOT_DEFAULTS | NOT_DEFAULTS_OF.get(kind, frozenset())
+        if key in not_defaults:
             raise TypeError(f"{key!r} cannot have a default: give it with each call")
         if key not in params:
-            takes = [p for p in params if p not in NOT_DEFAULTS]
+            takes = [p for p in params if p not in not_defaults]
             raise TypeError(f"{_label(kind)} takes no argument {key!r}; it takes {takes}")
         words = options.get(key)
         if words is not None and isinstance(value, str) and value not in words:
@@ -233,4 +240,9 @@ def _words(hint: Any) -> list[str] | None:
         parts = [a for a in typing.get_args(hint) if a is not type(None)]
         if len(parts) == 1:
             return _words(parts[0])
+        # words or something that is not text (``at``: a place or atl.value(...))
+        literals = [p for p in parts if typing.get_origin(p) is Literal]
+        others = [p for p in parts if typing.get_origin(p) is not Literal]
+        if len(literals) == 1 and not any(p in (str, Any) for p in others):
+            return _words(literals[0])
     return None

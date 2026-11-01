@@ -179,6 +179,21 @@ describe("measures: their lines", () => {
     expect(laid[1].y).toBe(40 + 3 + 8); // the band is above the lanes (here: none yet)
   });
 
+  it("put their labels where they are told: on, above, below, before, after, or on hover", () => {
+    const one = (label: NoteMeasure["label"]) => lay([m(10, 40, 0, { text: "t", label })]).laid[0];
+    const auto = one("auto");
+    expect(auto.ly).toBe(auto.y - 8);
+    expect(one("on").lx).toBe(auto.lx);
+    expect(one("above").ly).toBe(auto.y - 16 - 1);
+    expect(one("below").ly).toBe(auto.y + 2);
+    expect(one("start").lx).toBe(auto.xa - 6 - auto.tw);
+    expect(one("end").lx).toBe(auto.xb + 6);
+    expect(one("hover").lx).toBeNull();
+    // a label put after its line takes that room: an automatic one beside it goes elsewhere
+    const { laid } = lay([m(10, 12, 0, { text: "a label", label: "end" }), m(13, 14, 1, { text: "b label" })]);
+    expect(laid[1].lx).toBeNull();
+  });
+
   it("give the bands' heights: a band takes room only when used", () => {
     expect(bandHeight(0, 12)).toBe(0);
     expect(bandHeight(1, 12)).toBe(22);
@@ -278,6 +293,12 @@ describe("measures: copy as Python", () => {
     const b: NoteEnd = { x: 9, r: 5, lane: 0, side: "end", layer: "e", index: 2 };
     expect(asPython(v, { a, b, span: 7, events: 0, lane: null, text: null, color: null, id: -1 })).toBe('plot.measure(atl.start(3, "b"), atl.end(2, "e"))');
     expect(asPython(v, { a: end(0), b, span: 9, events: 0, lane: null, text: null, color: null, id: -1 })).toBe('plot.measure("2024-01-01T00:00:00", atl.end(2, "e"))');
+  });
+
+  it("writes its look, and its text as written", () => {
+    const v = fakeView();
+    const m: NoteMeasure = { a: end(0), b: end(9), span: 9, events: 0, lane: null, text: "c waits", raw: "{b.task} waits", color: null, id: -1, label: "above", ends: "ticks", extend: "lanes" };
+    expect(asPython(v, m)).toBe('plot.measure("2024-01-01T00:00:00", "2024-01-01T00:00:09", "{b.task} waits", label="above", ends="ticks", extend="lanes")');
   });
 
   it("writes where it goes", () => {

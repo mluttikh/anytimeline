@@ -19,6 +19,12 @@ All notable changes to anytimeline. The format follows
   a measure selected, ↑ and ↓ move it a level, 0 puts it back to automatic and Enter edits
   its text. Each change replaces the measure in `plot.notes`. **Show measures** in the
   Display panel hides them all.
+- **A measure's text and look**: fields `{rate}`, `{a}`, `{b}` and a column of an end's row
+  (`{b.service}`, `{a.start:%H:%M}`), and formats (`{time:ms}`, `{time:s.2}`,
+  `{change:+.2f}`, `{events:,}`). `label=` puts the text on, above or below the line, before
+  or after it, or only on hover; `ends=` ends the line in arrows, ticks, dots or nothing;
+  `extend=` draws the extension lines from the marks, through every lane, or not. The
+  measure's menu has a Label row. `set_defaults(measure={...})` sets them for every measure.
 
 ### Changed
 

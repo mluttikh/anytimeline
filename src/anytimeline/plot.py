@@ -58,6 +58,9 @@ from anytimeline.types import (
     EventOverlap,
     Expand,
     LaneSort,
+    MeasureEnds,
+    MeasureExtend,
+    MeasureLabel,
     MeasurePlace,
     Renderer,
     SelectionMode,
@@ -1023,6 +1026,7 @@ class Timeline:
         ]
         return self._add_note(Connection(ends[0], ends[1], text, color))
 
+    @takes_defaults("measure")
     def measure(
         self,
         a: Any,
@@ -1034,6 +1038,9 @@ class Timeline:
         at: MeasurePlace | ValueAt = "auto",
         level: int | None = None,
         nudge: float = 0.0,
+        label: MeasureLabel = "auto",
+        ends: MeasureEnds = "arrows",
+        extend: MeasureExtend = "mark",
     ) -> Self:
         """Add a [`Measure`][anytimeline.Measure] to [`notes`][anytimeline.Timeline.notes]:
         the time from ``a`` to ``b``, drawn as a dimension line with the time at its middle.
@@ -1055,6 +1062,8 @@ class Timeline:
         plot.measure(atl.end(12), atl.start(40), at="middle")  # through the lane's middle
         plot.measure(t0, t1, "freeze", at="header")  # in a band above the lanes
         plot.measure(atl.end(3), atl.start(9), level=0)  # always nearest the marks
+        plot.measure(a, b, "{b.service} waited {time:ms}")  # a column of b's row, in ms
+        plot.measure(a, b, label="above", ends="ticks", extend="lanes")
         ```
 
         Measures that overlap in time stack in levels. The levels are laid out in time, so
@@ -1066,9 +1075,15 @@ class Timeline:
                 duration or number). A plain number is a time, never a row.
             b: Where it ends: an edge or a time.
             text: Written at its middle; ``None``: the time between (and the change in
-                value between two samples). ``{time}`` in it is the time between,
+                value between two samples). Fields in it: ``{time}`` the time between,
                 ``{events}`` the number of events between in the order, ``{change}`` the
-                change in value.
+                change in value, ``{rate}`` that change per unit of time, ``{a}`` and
+                ``{b}`` the ends' times, and ``{a.col}``, ``{b.col}`` a column of the row of
+                an end that is a mark. A field takes a format after a colon: ``{time:ms}``
+                a unit (``ns``, ``us``, ``ms``, ``s``, ``min``, ``h``, ``d``), ``{time:.2}``
+                the digits (3 by default), ``{change:+.2f}`` a number's format as in Python
+                (a sign, ``,``, digits, ``f``, ``e``, ``%`` or ``g``); a column takes
+                Python's own (``{a.start:%H:%M}``).
             lane: The lane it is drawn in (a lane's name); ``None``: the upper of its ends'
                 lanes, or (two times) the header.
             color: Its colour (default: the accent colour).
@@ -1082,8 +1097,25 @@ class Timeline:
                 Measures without a level are laid out around those with one.
             nudge: Pixels to move its line down (up when negative) after the layout, to
                 fine-tune a picture.
+            label: Where its text goes: ``"auto"`` (on the line where it fits, else beside
+                it where there is room, else only when hovered), ``"on"`` (on the line
+                always), ``"above"``, ``"below"``, ``"start"`` (before its earlier end),
+                ``"end"`` (after its later end), ``"hover"`` (only when hovered or selected).
+            ends: What its line ends in: ``"arrows"``, ``"ticks"`` (oblique strokes, as in
+                a drawing), ``"dots"`` or ``"none"``.
+            extend: Its extension lines: ``"mark"`` (from each end's mark up or down to the
+                line), ``"lanes"`` (through every lane, like an oscilloscope's cursors) or
+                ``"none"``.
+
+        Defaults for these (all but ``a`` and ``b``) can be set once with
+        [`set_defaults`][anytimeline.set_defaults]``(measure={...})``.
         """
-        return self._add_note(Measure(a, b, text, lane, color, at=at, level=level, nudge=nudge))
+        return self._add_note(
+            Measure(
+                a, b, text, lane, color, at=at, level=level, nudge=nudge,
+                label=label, ends=ends, extend=extend,
+            )
+        )  # fmt: skip
 
     def _add_note(self, note: Note) -> Self:
         if self._layers:
@@ -1654,7 +1686,12 @@ class Timeline:
             self._mark_at,
             self._layer_named,
             [n for n, r in self._layers.items() if isinstance(r, vl.ValuesRecord)],
+            self._row_text,
         )
+
+    def _row_text(self, layer: str, row: int, template: str) -> str:
+        """A template of a layer's columns filled in with a row of its table."""
+        return common.texts(self._tables[layer], template, np.asarray([row]))[0]
 
     def _mark_at(self, layer: str, row: int) -> dict[str, Any]:
         """Where the mark of table row ``row`` is: its index in the browser, its start and
@@ -1776,7 +1813,8 @@ class Timeline:
     def _note_change_from(self, content: Mapping[str, Any]) -> None:
         """A measure moved or edited in the plot (``{"type": "note_change"}``): the note's
         index and what changed: ``at`` (a place, or ``{"value", "layer"}``), ``lane`` (a lane
-        index or None), ``level`` (a level or None), ``text`` (None or empty: the time)."""
+        index or None), ``level`` (a level or None), ``text`` (None or empty: the time),
+        ``label``, ``ends``, ``extend``."""
         i = int(content["id"])
         if not 0 <= i < len(self.notes) or not isinstance(self.notes[i], Measure):
             return
@@ -1801,6 +1839,9 @@ class Timeline:
             change["text"] = str(text) if text else None
         if "nudge" in content:
             change["nudge"] = float(content["nudge"])
+        for key in ("label", "ends", "extend"):
+            if key in content:
+                change[key] = str(content[key])
         changed = dataclasses.replace(self.notes[i], **change)
         notelist.check(self._note_context(), changed)
         self.notes = [*self.notes[:i], changed, *self.notes[i + 1 :]]

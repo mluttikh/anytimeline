@@ -455,7 +455,7 @@ export function editText(view: TimelineView, m: NoteMeasure): void {
   const y = d ? d.y - (view.fs + 4) : view.plot().y;
   askText(view, x, y, (text) => {
     if (text !== null) changeMeasure(view, m, { text: text || null });
-  }, { value: m.text ?? "", placeholder: "Its text: {time}, {events}, {change} (empty: the time)", label: "The measure's text" });
+  }, { value: (m.raw !== undefined ? m.raw : m.text) ?? "", placeholder: "Its text: {time}, {events}, {change}, {rate}, {a}, {b} (empty: the time)", label: "The measure's text" });
 }
 
 /** The measure whose label is at a point, or whose line where it has no label (null:
@@ -465,8 +465,8 @@ export function labelAt(view: TimelineView, p: { x: number; y: number }): NoteMe
   for (let k = view.measureHits.length - 1; k >= 0; k--) {
     const d = view.measureHits[k];
     const [l, r] = d.lx === null ? [Math.min(d.xa, d.xb), Math.max(d.xa, d.xb)] : [d.lx, d.lx + d.tw];
-    const half = d.lx === null ? 5 : h / 2;
-    if (p.x >= l && p.x <= r && p.y >= d.y - half && p.y <= d.y + half) return d.m;
+    const [top, bottom] = d.lx === null ? [d.y - 5, d.y + 5] : [d.ly, d.ly + h];
+    if (p.x >= l && p.x <= r && p.y >= top && p.y <= bottom) return d.m;
   }
   return null;
 }
@@ -533,7 +533,8 @@ export function timePython(view: TimelineView, x: number): string {
 /** A measure as a line of Python that makes it again, with where it goes. */
 export function asPython(view: TimelineView, m: NoteMeasure): string {
   const args = [endPython(view, m.a), endPython(view, m.b)];
-  if (m.text !== null) args.push(JSON.stringify(m.text));
+  const text = m.raw !== undefined ? m.raw : m.text;
+  if (text !== null) args.push(JSON.stringify(text));
   const names = view.spec?.lanes?.names ?? [];
   if (m.lane !== null && names[m.lane] !== undefined) args.push(`lane=${JSON.stringify(String(names[m.lane]))}`);
   const at = m.at ?? "auto";
@@ -543,5 +544,8 @@ export function asPython(view: TimelineView, m: NoteMeasure): string {
   } else if (at !== "auto") args.push(`at=${JSON.stringify(at)}`);
   if (m.level !== null && m.level !== undefined) args.push(`level=${m.level}`);
   if (m.nudge) args.push(`nudge=${m.nudge}`);
+  if (m.label && m.label !== "auto") args.push(`label=${JSON.stringify(m.label)}`);
+  if (m.ends && m.ends !== "arrows") args.push(`ends=${JSON.stringify(m.ends)}`);
+  if (m.extend && m.extend !== "mark") args.push(`extend=${JSON.stringify(m.extend)}`);
   return `plot.measure(${args.join(", ")})`;
 }
