@@ -16,7 +16,7 @@ import { buildHelp } from "./help";
 import { buildLegend } from "./legend";
 import { type FindAsk, Finder, type Match, reveal, revealLane, type StepAsk, stepHeld } from "./find";
 import { buildSummary, type LayerSummary } from "./summary";
-import { bandHeight, type MarkRef, type MeasureChange, type MeasureLaid, type NewNote, type NoteEnd, type NoteMeasure, type Notes } from "./notes";
+import { type MarkRef, type MeasureChange, type MeasureLaid, type NewNote, type NoteEnd, type NoteMeasure, type Notes } from "./notes";
 import type { EndRef, MeasureDraft, SnapAsk } from "./measure";
 import { FLAG_SELECTED, type MarkLayerDraw, type Renderer } from "./renderers/renderer";
 import { createRenderer } from "./renderers/select";
@@ -147,7 +147,7 @@ export class TimelineView implements DetailView {
   measuresHidden = false;
   /** The measures drawn last, where (their labels select them). */
   measureHits: MeasureLaid[] = [];
-  /** The levels of measures in the bands above and below the lanes (0: no band). */
+  /** The heights of the bands of measures above and below the lanes (px; 0: no band). */
   measureBands = { head: 0, foot: 0 };
   /** The edge an end would take (measuring): a tick on it, or null. */
   snapEdge: NoteEnd | null = null;
@@ -958,7 +958,7 @@ export class TimelineView implements DetailView {
     const width = Math.max(120, Math.round(this.root.clientWidth || this.host.clientWidth || 600));
     const lanes = this.laneAt.length || 1;
     const headerH = this.header.offsetHeight || 30;
-    const bands = bandHeight(this.measureBands.head, this.fs) + bandHeight(this.measureBands.foot, this.fs);
+    const bands = this.measureBands.head + this.measureBands.foot;
     const auto = this.axisH + bands + PAD_BOTTOM + Math.min(560, Math.max(80, this.autoRows * AUTO_LANE));
     const full = this.isFullscreen();
     const stageH = full
@@ -1172,13 +1172,12 @@ export class TimelineView implements DetailView {
   rowKey = "";
 
   plot(): { x: number; y: number; w: number; h: number } {
-    const head = bandHeight(this.measureBands.head, this.fs);
-    const foot = bandHeight(this.measureBands.foot, this.fs);
+    const { head, foot } = this.measureBands;
     return { x: this.gutter, y: this.axisH + head, w: Math.max(10, this.width - this.gutter - this.padRight), h: Math.max(10, this.height - this.axisH - head - foot - PAD_BOTTOM) };
   }
 
-  /** The measures laid out use these levels of the bands: when they change, the lanes make
-   * room (a band takes room only when used). */
+  /** The measures laid out use bands this high (px): when they change, the lanes make room
+   * (a band takes room only when used). */
   setMeasureBands(head: number, foot: number): void {
     if (head === this.measureBands.head && foot === this.measureBands.foot) return;
     this.measureBands = { head, foot };

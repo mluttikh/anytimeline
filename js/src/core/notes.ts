@@ -288,7 +288,8 @@ function stack(items: { lo: number; hi: number; level: number | null; i: number;
  * `stack`; "auto" ones the lane cannot hold continue in the header; a measure with no row
  * shown goes to the header. Then labels: on the line where they fit, else beside it where
  * that is free on its level, else none (shown when hovered or selected). `head` and `foot`:
- * the levels the bands use. */
+ * the heights of the bands (px; 0: none), with room for a label above a band's first level
+ * or below its last. */
 export function placeMeasures<G extends MeasureGeom>(geoms: G[], f: MeasureFrame): { laid: Laid<G>[]; head: number; foot: number } {
   const h = f.fs + 4;
   const step = f.fs + 8;
@@ -343,14 +344,22 @@ export function placeMeasures<G extends MeasureGeom>(geoms: G[], f: MeasureFrame
       bands[band] = Math.max(bands[band], got.get(i)! + 1);
     }
   }
+  // a band makes room for a label above its first level and below its last
+  const room = { header: [0, 0], footer: [0, 0] };
+  for (const [i, p] of place) {
+    if ((p !== "header" && p !== "footer") || !geoms[i].text) continue;
+    if (geoms[i].label === "above" && level.get(i) === 0) room[p][0] = Math.ceil(h / 2);
+    if (geoms[i].label === "below" && level.get(i) === bands[p] - 1) room[p][1] = Math.ceil(h / 2);
+  }
+  const bandPx = (b: "header" | "footer") => (bands[b] ? bandHeight(bands[b], f.fs) + room[b][0] + room[b][1] : 0);
   const laid: Laid<G>[] = geoms.map((g, i) => {
     const k = level.get(i)!;
     const p = place.get(i)!;
     const at = p.split(" ")[0];
     const top = g.row === null ? 0 : f.laneTop + g.row * f.laneH;
     let y: number;
-    if (at === "header") y = f.headTop + 3 + h / 2 + k * step;
-    else if (at === "footer") y = f.footTop + 3 + h / 2 + k * step;
+    if (at === "header") y = f.headTop + room.header[0] + 3 + h / 2 + k * step;
+    else if (at === "footer") y = f.footTop + room.footer[0] + 3 + h / 2 + k * step;
     else if (at === "bottom") y = top + f.laneH - 3 - h / 2 - k * step;
     else if (at === "middle") y = top + f.laneH / 2 + k * step;
     else if (at === "between") y = top + f.laneH - k * step;
@@ -367,6 +376,8 @@ export function placeMeasures<G extends MeasureGeom>(geoms: G[], f: MeasureFrame
     spans.get(s)!.push([Math.min(d.xa, d.xb), Math.max(d.xa, d.xb), i]);
   });
   const right = f.plot.x + f.plot.w;
+  const areaTop = f.headTop;
+  const areaBottom = f.footTop + bandPx("footer");
   const freeAt = (s: [number, number, number][], a: number, b: number, own: number) => !s.some(([l, r, j]) => j !== own && l < b + 4 && a - 4 < r);
   const centred = (l: number, r: number, tw: number) => Math.max(f.plot.x + 1, Math.min((l + r) / 2 - tw / 2, right - tw - 1));
   const byLeft = laid.map((_, i) => i).sort((p, q) => Math.min(laid[p].xa, laid[p].xb) - Math.min(laid[q].xa, laid[q].xb) || p - q);
@@ -379,8 +390,12 @@ export function placeMeasures<G extends MeasureGeom>(geoms: G[], f: MeasureFrame
     const r = Math.max(d.xa, d.xb);
     if (mode === "on" || mode === "above" || mode === "below") {
       d.lx = centred(l, r, d.tw);
-      if (mode === "above") d.ly = d.y - h - 1;
-      else if (mode === "below") d.ly = d.y + 2;
+      // above or below its line; in a lane at the edge of the plot, where that would be
+      // cut off, on the other side
+      const up = d.y - h - 1;
+      const down = d.y + 2;
+      if (mode === "above") d.ly = up < areaTop && down + h <= areaBottom ? down : up;
+      else if (mode === "below") d.ly = down + h > areaBottom && up >= areaTop ? up : down;
     } else d.lx = mode === "start" ? l - 6 - d.tw : r + 6;
     if (mode !== "above" && mode !== "below" && (mode !== "on" || d.tw > r - l)) spans.get(`${d.place} ${d.k}`)!.push([d.lx, d.lx + d.tw, -1]);
   }
@@ -395,7 +410,7 @@ export function placeMeasures<G extends MeasureGeom>(geoms: G[], f: MeasureFrame
     else if (l - 6 - d.tw >= f.plot.x && freeAt(s, l - 6 - d.tw, l - 6, i)) d.lx = l - 6 - d.tw;
     if (d.lx !== null && d.tw + 2 * ARROW_LEN > r - l) s.push([d.lx, d.lx + d.tw, -1]);
   }
-  return { laid, head: bands.header, foot: bands.footer };
+  return { laid, head: bandPx("header"), foot: bandPx("footer") };
 }
 
 /** Each measure's geometry, as the view shows it now. */
@@ -449,7 +464,7 @@ export function measureGeoms(view: TimelineView, ctx: CanvasRenderingContext2D, 
 /** Where measures' lines and labels go, with the levels the header and footer bands use. */
 export function layoutMeasures(view: TimelineView, ctx: CanvasRenderingContext2D, measures: NoteMeasure[], plot: Rect, laneTop: number): { laid: MeasureLaid[]; head: number; foot: number } {
   const geoms = measureGeoms(view, ctx, measures, plot);
-  const headTop = plot.y - bandHeight(view.measureBands.head, view.fs);
+  const headTop = plot.y - view.measureBands.head;
   return placeMeasures(geoms, { fs: view.fs, plot, laneTop, laneH: view.laneH, headTop, footTop: plot.y + plot.h });
 }
 
@@ -696,8 +711,8 @@ export function drawNotes(view: TimelineView, ctx: CanvasRenderingContext2D, plo
   ctx.restore();
   // measures: in the lanes, and in the header and footer bands around them
   const { laid, head, foot } = layoutMeasures(view, ctx, measures, plot, laneTop);
-  const headH = bandHeight(view.measureBands.head, view.fs);
-  const footH = bandHeight(view.measureBands.foot, view.fs);
+  const headH = view.measureBands.head;
+  const footH = view.measureBands.foot;
   const area = { x: plot.x, y: plot.y - headH, w: plot.w, h: plot.h + headH + footH };
   ctx.save();
   ctx.fillStyle = view.theme.band;

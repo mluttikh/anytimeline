@@ -115,6 +115,10 @@ measure is made.
 | `ends=` | `"arrows"`, `"ticks"` (oblique strokes, as in a drawing), `"dots"`, `"none"` |
 | `extend=` | `"mark"` (from each end's mark to the line), `"lanes"` (through every lane, like cursors), `"none"` |
 
+A label above or below its line stays in sight: the header and footer bands make room for
+it, and in the top or bottom lane, where it would be cut off at the plot's edge, it goes on
+the other side of its line.
+
 ```python
 plot.measure(atl.end(3), atl.start(4), label="above", ends="ticks", extend="lanes")
 atl.set_defaults(measure={"ends": "ticks", "label": "above"})  # every measure from now on

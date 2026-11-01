@@ -1099,8 +1099,9 @@ class Timeline:
                 fine-tune a picture.
             label: Where its text goes: ``"auto"`` (on the line where it fits, else beside
                 it where there is room, else only when hovered), ``"on"`` (on the line
-                always), ``"above"``, ``"below"``, ``"start"`` (before its earlier end),
-                ``"end"`` (after its later end), ``"hover"`` (only when hovered or selected).
+                always), ``"above"``, ``"below"`` (on the other side where it would be cut
+                off at the plot's edge), ``"start"`` (before its earlier end), ``"end"`` (after
+                its later end), ``"hover"`` (only when hovered or selected).
             ends: What its line ends in: ``"arrows"``, ``"ticks"`` (oblique strokes, as in
                 a drawing), ``"dots"`` or ``"none"``.
             extend: Its extension lines: ``"mark"`` (from each end's mark up or down to the

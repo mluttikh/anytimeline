@@ -13,7 +13,7 @@
 // note; a page changes its own.
 
 import { globalIndex, type Hit } from "./common";
-import { askText, bandHeight, between, changeOf, changeText, laneLevels, type MeasureChange, type MeasureLaid, type MeasurePlace, type NoteEnd, type NoteMeasure, type Side } from "./notes";
+import { askText, between, changeOf, changeText, laneLevels, type MeasureChange, type MeasureLaid, type MeasurePlace, type NoteEnd, type NoteMeasure, type Side } from "./notes";
 import { lowerBound, upperBound } from "./scene";
 import { fmtNumber } from "./time";
 import type { TimelineView } from "./view";
@@ -374,7 +374,7 @@ export function placeAt(view: TimelineView, d: MeasureLaid, y: number): MeasureC
   const step = fs + 8;
   const level = (from: number) => Math.max(0, Math.round((y - from) / step));
   let change: MeasureChange;
-  if (y < plot.y) change = { at: "header", level: level(plot.y - bandHeight(view.measureBands.head, fs) + 3 + h / 2) };
+  if (y < plot.y) change = { at: "header", level: level(plot.y - view.measureBands.head + 3 + h / 2) };
   else if (y > plot.y + plot.h) change = { at: "footer", level: level(plot.y + plot.h + 3 + h / 2) };
   else {
     const laneTop = plot.y - view.scrollY;

@@ -981,6 +981,34 @@ test("Measure: its menu and its text box stay in the plot, also at the bottom", 
   await inside(".atl-note-input");
 });
 
+test("Measure: a label above or below stays in sight, in the top lane and in the bands", async ({ page }) => {
+  await open(page, "gantt_plan");
+  const [s0, e0] = await view(page).evaluate((root: any) => {
+    const d = root.__view.bars[0].data;
+    return [d.start[0], d.end[0]];
+  });
+  const end = (x: number, side = "start") => ({ x, r: null, lane: 0, side, layer: "intervals", index: 0 });
+  const m = (id: number, more: object) => ({ a: end(s0), b: end(e0, "end"), span: e0 - s0, events: null, lane: null, text: "label", color: null, id, ...more });
+  for (const measures of [[m(0, { label: "above" })], [m(0, { label: "above", at: "header" })], [m(0, { label: "below", at: "footer" })]]) {
+    await page.evaluate((n) => {
+      (window as any).__model.state._notes = n;
+      (window as any).__model.emit("change:_notes");
+    }, { measures });
+    await expect
+      .poll(() =>
+        view(page).evaluate((root: any) => {
+          const v = root.__view;
+          const d = v.measureHits[0];
+          const p = v.plot();
+          const top = p.y - v.measureBands.head;
+          const bottom = p.y + p.h + v.measureBands.foot;
+          return !!d && d.ly >= top && d.ly + v.fs + 4 <= bottom;
+        }),
+      )
+      .toBe(true);
+  }
+});
+
 test("Undo: Ctrl/Cmd+Z asks Python to take back a change of the selection, Shift for redo", async ({ page }) => {
   await open(page, "service_time");
   await view(page).click({ position: { x: 4, y: 4 } });

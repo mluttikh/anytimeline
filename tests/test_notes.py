@@ -504,13 +504,13 @@ def test_a_measures_text_has_fields_with_formats_and_its_ends_columns() -> None:
 
 
 def test_a_measures_label_ends_and_extension_lines() -> None:
-    p = plot().measure(atl.end(0), atl.start(2), label="above", ends="ticks", extend="lanes")
+    p = plot().measure(atl.end(1), atl.start(2), label="above", ends="ticks", extend="lanes")
     m = p._notes["measures"][0]
     assert (m["label"], m["ends"], m["extend"]) == ("above", "ticks", "lanes")
     for key, bad in (("label", "left"), ("ends", "arrow"), ("extend", "all")):
         with pytest.raises(ValueError, match=f"Measure's {key} must be one of"):
             Measure(T0, T0 + H, **{key: bad})  # ty: ignore[invalid-argument-type]
-    # in a picture: the label above its line, ticks for heads, lines through every lane
+    # in a picture (lane b, the second): the label above its line
     pic = picture(p, 300)
     [d] = pic._layout_measures(p._notes["measures"])[0]
     assert d["ly"] == pytest.approx(d["y"] - (p.font_size + 4) - 1)
@@ -535,3 +535,19 @@ def test_measures_take_defaults() -> None:
     with pytest.raises(ValueError, match="at must be one of"):
         atl.set_defaults(measure={"at": "side"})
     assert atl.get_defaults() == {}
+
+
+def test_a_label_above_or_below_stays_in_the_picture() -> None:
+    """A label above a measure in the top lane, or in the header band, is not cut off."""
+    h = Timeline().font_size + 4
+    for at in ("auto", "header"):
+        p = plot().measure(atl.end(0), atl.start(1), "{time}", at=at, label="above")
+        pic = picture(p, 300)
+        [d] = pic._layout_measures(p._notes["measures"])[0]
+        area_top = pic.f.area[1]
+        assert d["ly"] >= area_top, at
+        assert d["ly"] + h <= pic.f.area[1] + pic.f.area[3], at
+    p = plot().measure(atl.end(0), atl.start(1), at="footer", label="below")
+    pic = picture(p, 300)
+    [d] = pic._layout_measures(p._notes["measures"])[0]
+    assert d["ly"] + h <= pic.f.area[1] + pic.f.area[3]

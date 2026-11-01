@@ -175,12 +175,13 @@ describe("measures: their lines", () => {
     const { laid, head, foot } = lay([m(0, 30, 0), m(10, 40, 1), m(20, 50, 2, { at: "top" }), m(5, 6, 3, { a: end(5), b: end(6) })], { laneH: 30 });
     expect(laid.map((d) => d.place.split(" ")[0])).toEqual(["top", "header", "top", "header"]);
     expect(laid[2].k).toBe(1); // put at the top: it stays, over the lane's edge
-    expect([head, foot]).toEqual([1, 0]); // the two in the header do not overlap
+    expect([head, foot]).toEqual([bandHeight(1, 12), 0]); // the two in the header do not overlap
     expect(laid[1].y).toBe(40 + 3 + 8); // the band is above the lanes (here: none yet)
   });
 
   it("put their labels where they are told: on, above, below, before, after, or on hover", () => {
-    const one = (label: NoteMeasure["label"]) => lay([m(10, 40, 0, { text: "t", label })]).laid[0];
+    // in the second lane: above has room over it
+    const one = (label: NoteMeasure["label"]) => lay([m(10, 40, 0, { text: "t", label, lane: 1 })], { slot: new Int32Array([0, 1]) }).laid[0];
     const auto = one("auto");
     expect(auto.ly).toBe(auto.y - 8);
     expect(one("on").lx).toBe(auto.lx);
@@ -192,6 +193,23 @@ describe("measures: their lines", () => {
     // a label put after its line takes that room: an automatic one beside it goes elsewhere
     const { laid } = lay([m(10, 12, 0, { text: "a label", label: "end" }), m(13, 14, 1, { text: "b label" })]);
     expect(laid[1].lx).toBeNull();
+  });
+
+  it("keep a label above or below in sight: a band makes room, a lane at the edge flips it", () => {
+    // in the header: the band grows by half a label, and the line moves down with it
+    const head = lay([m(0, 30, 0, { text: "t", at: "header", label: "above" })]);
+    expect(head.head).toBe(bandHeight(1, 12) + 8);
+    const d = head.laid[0];
+    expect(d.ly).toBeGreaterThanOrEqual(40 - head.head + 0); // headTop is 40 here: no band yet
+    expect(lay([m(0, 30, 0, { text: "t", at: "footer", label: "below" })]).foot).toBe(bandHeight(1, 12) + 8);
+    expect(lay([m(0, 30, 0, { text: "t", at: "header", label: "below" })]).head).toBe(bandHeight(1, 12) + 8);
+    expect(lay([m(0, 30, 0, { text: "t", at: "header", label: "on" })]).head).toBe(bandHeight(1, 12));
+    // the top lane with no band above it: a label above would be cut off, so it goes below
+    const [top] = lay([m(0, 30, 0, { text: "t", label: "above" })]).laid;
+    expect(top.ly).toBe(top.y + 2);
+    // a lower lane: above, over the lane before it
+    const [second] = lay([m(0, 30, 0, { text: "t", label: "above", lane: 1 })], { slot: new Int32Array([0, 1]) }).laid;
+    expect(second.ly).toBe(second.y - 16 - 1);
   });
 
   it("give the bands' heights: a band takes room only when used", () => {

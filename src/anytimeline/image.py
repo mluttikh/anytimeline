@@ -631,8 +631,7 @@ class _Picture:
         """Stems layers whose text is in boxes on stems (else beside the marks)."""
         # measures' bands take room when used; what they hold depends on the lanes' height
         for _ in range(8):
-            head, foot = self._measure_bands()
-            sizes = (band_height(head, fs), band_height(foot, fs))
+            sizes = self._measure_bands()
             if sizes == (self.f.head_h, self.f.foot_h):
                 break
             self.f = frame(*sizes)
@@ -2235,7 +2234,8 @@ class _Picture:
         )  # fmt: skip
 
     def _measure_bands(self) -> tuple[int, int]:
-        """The levels of measures in the header and footer bands, with the frame as it is."""
+        """The heights of the header and footer bands of measures (px), with the frame as it
+        is."""
         measures = (self.plot._notes or {}).get("measures") or []
         if not measures:
             return 0, 0
@@ -2674,8 +2674,9 @@ def place_measures(
     ``_stack`` on the scale shown (zooming never changes them); ``"auto"`` ones the lane
     cannot hold continue in the header, and a measure in no lane shown goes there. Then
     labels: on the line where they fit, else beside it where that is free on its level, else
-    none (``lx`` None). Each measure gets ``place``, ``k``, ``y`` and ``lx``; with the levels
-    the header and footer use."""
+    none (``lx`` None). Each measure gets ``place``, ``k``, ``y``, ``lx`` and ``ly``; with the
+    heights of the header and footer bands (px), which make room for a label above a band's
+    first level or below its last."""
     h, step = fs + 4, fs + 8
     cap = lane_levels(lane_h, fs)
     kind = []
@@ -2740,14 +2741,27 @@ def place_measures(
         for i in members:
             level[i], place[i] = got[i], (band,)
             bands[band] = max(bands[band], got[i] + 1)
+    # a band makes room for a label above its first level and below its last
+    room = {"header": [0, 0], "footer": [0, 0]}
+    for i, p in place.items():
+        if p[0] not in room or not geoms[i]["text"]:
+            continue
+        if geoms[i].get("label") == "above" and level[i] == 0:
+            room[p[0]][0] = math.ceil(h / 2)
+        if geoms[i].get("label") == "below" and level[i] == bands[p[0]] - 1:
+            room[p[0]][1] = math.ceil(h / 2)
+
+    def band_px(b: str) -> int:
+        return band_height(bands[b], int(fs)) + sum(room[b]) if bands[b] else 0
+
     laid: list[dict[str, Any]] = []
     for i, g in enumerate(geoms):
         k, at = level[i], place[i][0]
         top = 0 if g["row"] is None else lane_top + g["row"] * lane_h
         if at == "header":
-            y = head_top + 3 + h / 2 + k * step
+            y = head_top + room["header"][0] + 3 + h / 2 + k * step
         elif at == "footer":
-            y = foot_top + 3 + h / 2 + k * step
+            y = foot_top + room["footer"][0] + 3 + h / 2 + k * step
         elif at == "bottom":
             y = top + lane_h - 3 - h / 2 - k * step
         elif at == "middle":
@@ -2768,6 +2782,7 @@ def place_measures(
         )
     px, _, pw, _ = plot
     right = px + pw
+    area_top, area_bottom = head_top, foot_top + band_px("footer")
 
     def free_at(s: list[tuple[float, float, int]], a: float, b: float, own: int) -> bool:
         return not any(j != own and lft < b + 4 and a - 4 < rgt for lft, rgt, j in s)
@@ -2786,10 +2801,13 @@ def place_measures(
         tw = d["tw"]
         if mode in ("on", "above", "below"):
             d["lx"] = centred(lft, rgt, tw)
+            # above or below its line; in a lane at the edge of the plot, where that would
+            # be cut off, on the other side
+            up, down = d["y"] - h - 1, d["y"] + 2
             if mode == "above":
-                d["ly"] = d["y"] - h - 1
+                d["ly"] = down if up < area_top and down + h <= area_bottom else up
             elif mode == "below":
-                d["ly"] = d["y"] + 2
+                d["ly"] = up if down + h > area_bottom and up >= area_top else down
         else:
             d["lx"] = lft - 6 - tw if mode == "start" else rgt + 6
         if mode != "above" and mode != "below" and (mode != "on" or tw > rgt - lft):
@@ -2809,7 +2827,7 @@ def place_measures(
             d["lx"] = lft - 6 - tw
         if d["lx"] is not None and tw + 2 * ARROW_LEN > rgt - lft:
             s.append((d["lx"], d["lx"] + tw, -1))
-    return laid, bands["header"], bands["footer"]
+    return laid, band_px("header"), band_px("footer")
 
 
 def _clip_segment(
