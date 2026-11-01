@@ -14,12 +14,25 @@ All notable changes to anytimeline. The format follows
   overwrites one). The PNG is the plot as on screen; the SVG is drawn by Python for the same
   view, size, folded lanes and theme. A saved page (`save_html`, `display="html"`) offers the
   PNG entries. See the new how-to "Make images for slides".
+- **Defaults per method**: `anytimeline.set_defaults(plot={...}, events={...}, ...)` sets
+  arguments for every `Timeline(...)` and `events`, `intervals`, `states`, `values` and
+  `spans` call made afterwards; the call's own arguments win. They are checked when set.
+  `anytimeline.defaults(...)` sets them inside a `with` block only; `get_defaults()` and
+  `reset_defaults()` list and remove them. New how-to "Set defaults, and change a layer".
+- **`plot.update(name, **changes)`** calls a layer's method again with its last arguments
+  and the changes (also `data=`), keeping the layer's name and place; a lazy table is not
+  read again. **`plot.arguments(name)`** gives what a layer was made with.
 
 ### Changed
 
 - Pictures from Python (`save_image`, `to_svg`) fold lanes as the plot shows them, once it
   was shown; before, as the plot starts.
-
+- `import anytimeline` no longer loads anywidget, ipywidgets or traitlets: pictures, pages,
+  the selection and `on_select` work without them (`pip install --no-deps anytimeline numpy
+  narwhals` on a server). Showing the widget without anywidget says what to install.
+  ipywidgets and traitlets are no longer direct dependencies (anywidget still brings them).
+- `on_select` callbacks: one that raises no longer stops the others; its traceback shows in
+  the notebook, else in the `anytimeline` log.
 - Ibis tables are tested: they are read once like other lazy tables, and `selected()` gives
   a PyArrow table of the rows drawn. The docs name them with the other tables.
 

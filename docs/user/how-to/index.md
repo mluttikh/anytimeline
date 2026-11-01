@@ -26,6 +26,8 @@ Recipes for a task. They assume you know the basics from the
 - [Make images for slides](images.md): copy, download or save what you see; images from
   Python, one per view, straight into PowerPoint
 - [Several layers in one plot](layers.md)
+- [Set defaults, and change a layer](defaults.md): arguments set once for every plot;
+  `plot.update` and `plot.arguments`
 
 **In the plot**
 

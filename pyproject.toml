@@ -29,9 +29,9 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.24",
+    # the widget (only widget.py imports it, and the ipywidgets and traitlets it brings):
+    # pictures, pages and the selection work without it
     "anywidget>=0.9.13",
-    "ipywidgets>=8",
-    "traitlets>=5.9",
     "narwhals>=1.30",
     # the IANA time zones for zoneinfo (pictures' time axis), which Windows lacks
     "tzdata; sys_platform == 'win32'",
