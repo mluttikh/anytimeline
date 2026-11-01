@@ -898,15 +898,17 @@ test("Measure: moved by its line, its menu and keys; hidden from the Display pan
     (window as any).__model.emit("change:_notes");
   }, { measures: [{ a: end(s0), b: end(e1, "end"), span: e1 - s0, events: null, lane: null, text: "wait", color: null, id: 0 }] });
   const changes = () => page.evaluate(() => (window as any).__log.filter((m: any) => m.type === "note_change").map(({ type, ...rest }: any) => rest));
+  // where the measure is drawn (it may not be yet: wait for it with the poll below)
   const line = async () => {
     const d = await view(page).evaluate((root: any) => {
       const h = root.__view.measureHits[0];
-      return h && { x: (h.xa + h.xb) / 2, y: h.y, lx: h.lx, tw: h.tw, plotY: root.__view.plot().y };
+      return h ? { x: (h.xa + h.xb) / 2, y: h.y, lx: h.lx, tw: h.tw, plotY: root.__view.plot().y } : null;
     });
+    if (!d) throw new Error("the measure is not drawn");
     const box = await stageBox(page);
     return { ...d, x: box.x + d.x, y: box.y + d.y, label: box.x + d.lx + d.tw / 2, top: box.y + d.plotY };
   };
-  await expect.poll(async () => (await line()).lx).not.toBeNull();
+  await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits[0]?.lx ?? null)).not.toBeNull();
   // its label selects it; the menu's Place moves it
   let at = await line();
   await page.mouse.click(at.label, at.y);
