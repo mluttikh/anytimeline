@@ -39,6 +39,12 @@ change while zooming.
   has no room for continue in the header band, and a measure of two times goes there (it was
   drawn over the top lane).
 
+### Fixed
+
+- A measure's extension lines start at the mark it measures: at a bar's own sub-row when bars
+  of a lane overlap, and at an event moved aside by `overlap="dodge"`. They started at the
+  lane's middle. The tick on the edge a measure would take is on the bar too.
+
 ## [0.5.2] - 2026-11-01
 
 An Export menu: copy, download or save the plot as PNG or SVG. And defaults per method,

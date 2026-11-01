@@ -628,6 +628,10 @@ class _Picture:
         self.values_ylim: dict[str, np.ndarray] = {}  # per values layer: its lanes' bands
         """Per values layer drawn: its runs' lanes and its lanes' bands (the scales)."""
         self.stems_fit: set[str] = set()
+        self.drawn_bars: dict[str, dict[str, Any]] = {}
+        """Per intervals layer drawn: its bars as drawn (where a measure's end is)."""
+        self.drawn_events: dict[str, tuple[dict[str, Any], np.ndarray | None, np.ndarray]] = {}
+        """Per events layer drawn mark by mark: its events, their indices, their offsets."""
         """Stems layers whose text is in boxes on stems (else beside the marks)."""
         # measures' bands take room when used; what they hold depends on the lanes' height
         for _ in range(8):
@@ -693,6 +697,7 @@ class _Picture:
         for spec in self._layers("values"):
             self._values(spec, l0, l1)
         bars = [self._bars_of(spec) for spec in self._layers("intervals")]
+        self.drawn_bars = {b["spec"]["name"]: b for b in bars if b is not None}
         for b in bars:
             if b is not None:
                 self._draw_bars(b, l0, l1)
@@ -904,7 +909,8 @@ class _Picture:
             data = self._decode_events(spec)
             index = None
         selected = self._selected(name, data["count"], index)
-        self._draw_events(spec, data, selected, l0, l1)
+        dy = self._draw_events(spec, data, selected, l0, l1)
+        self.drawn_events[name] = (data, index, dy)
 
     def _event_window(
         self, spec: dict[str, Any], levels: dict[str, Any], l0: int, l1: int
@@ -1015,7 +1021,8 @@ class _Picture:
 
     def _draw_events(
         self, spec: dict[str, Any], data: dict[str, Any], selected: np.ndarray, l0: int, l1: int
-    ) -> None:
+    ) -> np.ndarray:
+        """The marks in view; each one's offset (dodged)."""
         f, t = self.f, self.theme
         px, py, pw, ph = f.plot
         x, size = data["x"], data["size"]
@@ -1074,6 +1081,7 @@ class _Picture:
                 },
             )
         )
+        return dy
 
     def _dodge(self, data: dict[str, Any], l0: int, l1: int) -> np.ndarray:
         """Each mark's vertical offset: those that would overlap spread over sub-rows
@@ -1584,6 +1592,7 @@ class _Picture:
             ),
             "start": d.arr(spec["start"]).astype(np.float64),
             "end": d.arr(spec["end"]).astype(np.float64),
+            "index": index,
         }
 
     def _bar_cull(self, b: dict[str, Any], l0: int, l1: int) -> np.ndarray:
@@ -2271,6 +2280,7 @@ class _Picture:
                     "ub": xs[1],
                     "rows": rows,
                     "ys": [self._sample_y(n[k]) for k in ("a", "b")],
+                    "marks": [self._mark_y(n[k]) for k in ("a", "b")],
                     "row": row,
                     "at": "value" if isinstance(at, dict) else at,
                     "value_y": value_y,
@@ -2308,6 +2318,33 @@ class _Picture:
             return None
         return self._y_of(float(ylim[2 * lane]), float(ylim[2 * lane + 1]), row)(value)
 
+    def _mark_y(self, end: dict[str, Any]) -> tuple[float, float] | None:
+        """Where an end's mark is drawn: its middle and half its height (``markY``). A bar in
+        a lane of bars that overlap has a row of its own; an event moved aside its own height.
+        None: not known (a bin, merged bars)."""
+        f = self.f
+        layer, g = end.get("layer"), end.get("index")
+        if layer is None or g is None or g < 0:
+            return None
+        b = self.drawn_bars.get(layer)
+        if b is not None:
+            i = _local_index(b["index"], g, b["count"])
+            if i is None:
+                return None
+            _, _, cy, h, _ = self._box(b, i)
+            return cy, h / 2
+        got = self.drawn_events.get(layer)
+        if got is None:
+            return None
+        data, index, dy = got
+        i = _local_index(index, g, data["count"])
+        if i is None:
+            return None
+        row = int(f.slot[data["lane"][i]])
+        if row < 0:
+            return None
+        return f.lane_top + (row + 0.5) * f.lane_h + float(dy[i]), min(6, f.lane_h / 4)
+
     def _dimension(self, d: dict[str, Any]) -> None:
         f = self.f
         px, py, pw, ph = f.plot
@@ -2317,19 +2354,25 @@ class _Picture:
         lo, hi = min(d["xa"], d["xb"]), max(d["xa"], d["xb"])
         if hi < px - 1 or lo > px + pw + 1 or y < plot[1] or y > plot[1] + plot[3]:
             return
-        ends = ((d["xa"], d["rows"][0], d["ys"][0]), (d["xb"], d["rows"][1], d["ys"][1]))
+        marks = d.get("marks") or (None, None)
+        ends = (
+            (d["xa"], d["rows"][0], d["ys"][0], marks[0]),
+            (d["xb"], d["rows"][1], d["ys"][1], marks[1]),
+        )
         extend = d.get("extend") or "mark"
-        for x, row, ys in ends if extend == "mark" else ():
+        for x, row, ys, mark in ends if extend == "mark" else ():
             if ys is not None:  # a sample: from its dot
                 y0, y1 = ys, y + (1 if y > ys else -1) * 4
             elif row is None:  # a time: a short tick through the line
                 y0, y1 = y - 5, y + 5
             else:
-                yc = f.lane_top + (row + 0.5) * f.lane_h
-                if abs(y - yc) < 8:  # through the mark's middle: no extension line
+                # from the mark's edge (its own row among bars that overlap), else the row's
+                # middle
+                yc, half = mark or (f.lane_top + (row + 0.5) * f.lane_h, min(6, f.lane_h / 4))
+                if abs(y - yc) < half + 2:  # through the mark: no extension line
                     continue
                 away = 1 if y > yc else -1
-                y0, y1 = yc + away * min(6, f.lane_h / 4), y + away * 4
+                y0, y1 = yc + away * half, y + away * 4
             seg = _clip_segment(x, y0, x, y1, plot)
             if seg:
                 self.svg.line(*seg, color, 1, stroke_dasharray="3 2")
@@ -2370,7 +2413,7 @@ class _Picture:
             self.svg.path(_path(head, close=True), fill=color)
         dots = [
             symbol_path(0, x, ys, SAMPLE_DOT)
-            for x, _, ys in ends
+            for x, _, ys, _ in ends
             if ys is not None and px <= x <= px + pw and py <= ys <= py + ph
         ]
         if dots:
@@ -2915,3 +2958,13 @@ def save(plot: Timeline, path: Any, **options: Any) -> None:
 
 
 __all__ = ["THEMES", "Theme", "png", "save", "svg", "text_width"]
+
+
+def _local_index(index: np.ndarray | None, g: int, count: int) -> int | None:
+    """Where the mark Python knows as ``g`` is among those drawn (None: not drawn; merged)."""
+    if index is None:
+        return g if 0 <= g < count else None
+    real = np.nonzero(index != MERGED)[0]  # merged bars are left out; the rest are in order
+    at = index[real]
+    j = int(np.searchsorted(at, g))
+    return int(real[j]) if j < len(at) and int(at[j]) == g else None
