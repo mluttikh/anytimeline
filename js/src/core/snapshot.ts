@@ -1,4 +1,4 @@
-// A picture of the plot (Save as PNG): the title, the three canvases and the legend, drawn
+// A picture of the plot (the Export menu's PNG): the title, the three canvases and the legend, drawn
 // into one canvas. The legend is HTML, so it is painted from its elements as laid out: text
 // where each piece of text is, each swatch (an SVG) as an image where it is.
 
@@ -85,23 +85,4 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
   else ctx.rect(x, y, w, h);
-}
-
-/** Offer a blob as a download named `name`. */
-export function download(blob: Blob, name: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.style.display = "none";
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
-
-/** A file name from a plot's title: letters, digits and dashes. */
-export function fileName(title: string, ext: string): string {
-  const base = title.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "");
-  return `${base || "timeline"}.${ext}`;
 }

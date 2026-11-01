@@ -1,7 +1,7 @@
 # Groups and linked plots
 
 To compare hosts, regions, days or runs, put them in **one plot as groups**: one time axis,
-one toolbar, one legend; full screen, Save as PNG and the HTML page take all of them, and a
+one toolbar, one legend; full screen, the Export menu and the HTML page take all of them, and a
 selection box can span them. For plots that live apart (in different cells of a notebook,
 side by side in a dashboard), **link** them so they zoom together.
 

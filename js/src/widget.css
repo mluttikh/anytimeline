@@ -208,6 +208,30 @@ body.vscode-high-contrast:not(.vscode-high-contrast-light) .atl-root,
   margin: 0;
   accent-color: var(--atl-accent);
 }
+/* the Export menu: one entry per row, its name and what it gives */
+.atl-export-menu {
+  gap: 2px;
+  padding: 4px;
+}
+.atl-export-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  height: auto;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-color: transparent;
+  text-align: left;
+}
+.atl-export-item:hover,
+.atl-export-item:focus-visible {
+  background: var(--atl-band);
+}
+.atl-export-note {
+  color: var(--atl-muted);
+  font-size: 11px;
+}
 .atl-small-button {
   min-width: 24px;
   padding: 0 6px;

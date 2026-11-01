@@ -42,6 +42,7 @@ nav = [
     { "Summarise, find and annotate" = "how-to/explore.md" },
     { "Groups and linked plots" = "how-to/groups.md" },
     { "Share a plot" = "how-to/share.md" },
+    { "Make images for slides" = "how-to/images.md" },
     { "Text and mark size, height and full screen" = "how-to/size.md" },
     { "Plot many events" = "how-to/large.md" },
     { "Use anytimeline in marimo" = "how-to/marimo.md" },

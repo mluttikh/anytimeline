@@ -33,7 +33,7 @@ export const ICONS = {
   expand: svg('<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/>'),
   /** Leave full screen: four corners pointing in. */
   collapse: svg('<path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"/>'),
-  /** Save as PNG: an arrow down into a tray. */
+  /** Export (an image): an arrow down into a tray. */
   image: svg('<path d="M8 2v8M4.75 6.75 8 10l3.25-3.25"/><path d="M2.5 10.5v2.75h11V10.5"/>'),
   /** Mouse and keys: a question mark in a circle. */
   help: svg('<circle cx="8" cy="8" r="6"/><path d="M6.25 6.25a1.8 1.8 0 1 1 2.55 1.65c-.5.25-.8.6-.8 1.1v.4"/><path d="M8 11.6v.05" stroke-width="2"/>'),

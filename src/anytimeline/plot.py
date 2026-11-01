@@ -314,6 +314,8 @@ class Timeline:
         """The view set last (``plot.view``)."""
         self._view_shown: dict[str, Any] | None = None
         """What the browser reported it shows: ``{"range": (t0, t1), "lanes": [...]}``."""
+        self._folds_shown: list[bool] | None = None
+        """Per lane of the tree, whether the browser shows it open (pictures fold as shown)."""
         self._perf: dict[str, Any] = {}
         self._tooltip_cache: dict[tuple[str, int], list[list[str]]] = {}
         self._findable: list[find.Marks] | None = None
@@ -414,6 +416,7 @@ class Timeline:
         state = {k: v for k, v in self.__dict__.items() if k not in _NOT_COPIED}
         state["_settings"] = {**self._settings, "_link": {}, "_pick": {}}
         state["_view_shown"] = None
+        state["_folds_shown"] = None
         state["_window_buffers"], state["_windows"], state["_page"] = {}, [], None
         return state
 
@@ -1167,6 +1170,9 @@ class Timeline:
             "range": (float(r[0]), float(r[1])),
             "lanes": [str(n) for n in lanes] if isinstance(lanes, list) else None,
         }
+        folds = content.get("open")
+        if isinstance(folds, list):
+            self._folds_shown = [bool(o) for o in folds]
 
     @property
     def dev(self) -> Dev:
@@ -1428,8 +1434,8 @@ class Timeline:
 
         The picture is drawn in the browser, so the plot must be on screen, and the file is
         written when the browser sends it: in Jupyter right after the cell has run, not
-        during it. The toolbar's Save as PNG button does the same as a download; use this
-        where downloads are blocked (VS Code) or from code.
+        during it. The toolbar's Export menu (key ``e``) copies, downloads or saves the same
+        picture.
 
         Args:
             path: The file to write (``.png``).
@@ -1439,6 +1445,44 @@ class Timeline:
         self._snapshots += 1
         self._snapshot_paths[str(self._snapshots)] = Path(path)
         self._send({"type": "snapshot", "request": str(self._snapshots)})
+
+    def _figure(self, content: Mapping[str, Any]) -> str:
+        """The SVG of what a view of the plot shows (``{"type": "figure"}``, the Export menu):
+        its size, time range, lanes in sight, folded lanes and theme."""
+        r = content.get("range")
+        view = None
+        if isinstance(r, list) and len(r) == 2:
+            t0, t1 = float(r[0]), float(r[1])
+            if self._base is not None:
+                t0, t1 = self._base.to_value(t0), self._base.to_value(t1)
+            lanes = content.get("lanes")
+            view = View(t0, t1, tuple(str(n) for n in lanes) if lanes else None)
+        folds = content.get("open")
+        theme = "dark" if content.get("theme") == "dark" else "light"
+        return image.svg(
+            self,
+            width=max(120, int(content.get("width") or 960)),
+            height=max(0, int(content.get("height") or 0)) or None,
+            view=view,
+            theme=theme,
+            folds=[bool(o) for o in folds] if isinstance(folds, list) else None,
+        )
+
+    def _save_export(self, content: Mapping[str, Any], buffers: Any) -> Path:
+        """Write a picture from the Export menu next to the notebook (``{"type":
+        "save-image"}``): the PNG sent, or the SVG drawn here. Never overwrites."""
+        name = Path(str(content.get("name") or "timeline.png")).name or "timeline.png"
+        path = Path(name)
+        if path.suffix.lower() not in (".png", ".svg"):
+            path = path.with_suffix(".png")
+        if path.suffix.lower() == ".svg":
+            data = self._figure(content).encode("utf-8")
+        elif buffers:
+            first = buffers[0]
+            data = bytes(first.tobytes() if hasattr(first, "tobytes") else first)
+        else:
+            raise ValueError("no image data")
+        return _write_new(path, data)
 
     def _receive_image(self, content: Mapping[str, Any], buffers: Any) -> None:
         path = self._snapshot_paths.pop(str(content.get("request")), None)
@@ -1966,6 +2010,20 @@ def _expand(value: Any) -> Any:
     if value == "auto" or (isinstance(value, int) and not isinstance(value, bool)):
         return value
     raise ValueError(f"expand must be a number of levels, 'auto' or 'all', got {value!r}")
+
+
+def _write_new(path: Path, data: bytes) -> Path:
+    """Write ``data`` as ``path`` in the working folder (the notebook's, usually), without
+    overwriting: ``trace.png``, then ``trace-2.png``, ``trace-3.png``, ..."""
+    target, n = path, 1
+    while True:
+        try:
+            with target.open("xb") as f:  # fails when it exists: no race with another write
+                f.write(data)
+            return target.resolve()
+        except FileExistsError:
+            n += 1
+            target = path.with_name(f"{path.stem}-{n}{path.suffix}")
 
 
 def _arguments(arguments: Mapping[str, Any]) -> list[Any]:

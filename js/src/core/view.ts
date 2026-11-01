@@ -21,7 +21,8 @@ import type { EndRef, MeasureDraft, SnapAsk } from "./measure";
 import { FLAG_SELECTED, type MarkLayerDraw, type Renderer } from "./renderers/renderer";
 import { createRenderer } from "./renderers/select";
 import { type Align, compatible, convert, frameOf, join, leave, type LinkFrame, type LinkPeer, type LinkSpec, others } from "./link";
-import { download, fileName, legendPainter } from "./snapshot";
+import { legendPainter } from "./snapshot";
+import { canCopyImages, canCopySvg, copyPng, copySvg, download, type ExportHow, exportEntries, type FigureRequest, fileName, isDark, svgCopiedMessage, svgToPng } from "./export";
 import type { StemPlaced } from "./stems";
 import { decodeValues, ValueLayer, type ValueView } from "./values";
 import { BarDetail, Detail, type DetailView, ValueDetail, type WindowAsk } from "./levels";
@@ -43,8 +44,14 @@ export type { Tool } from "./toolbar";
 
 export interface ViewCallbacks {
   onGesture?: (g: Gesture) => void;
-  /** The time range in sight and the names of the lanes in sight, top to bottom. */
-  onView?: (range: [number, number], lanes: string[]) => void;
+  /** The time range in sight, the names of the lanes in sight (top to bottom), and per lane
+   * of the tree whether it is open (1) or folded (0). */
+  onView?: (range: [number, number], lanes: string[], open: number[]) => void;
+  /** Python draws an SVG of what the plot shows (the Export menu); without, PNG only. */
+  onFigure?: (request: FigureRequest) => Promise<string>;
+  /** Python writes a picture next to the notebook: the PNG given, or an SVG it draws for
+   * the request; it answers with the path written. */
+  onSaveImage?: (name: string, request: FigureRequest, png: Blob | null) => Promise<string>;
   onXScale?: (xscale: XScale) => void;
   /** Tooltip columns of one event: [name, value] rows. */
   onTooltip?: (layer: string, index: number) => Promise<string[][]>;
@@ -226,7 +233,14 @@ export class TimelineView implements DetailView {
       clear: () => this.callbacks.onGesture?.({ kind: "clear" }),
       legend: () => this.toggleLegend(),
       fullscreen: () => this.toggleFullscreen(),
-      image: () => void this.savePNG(),
+      exportEntries: () =>
+        exportEntries({
+          copyImages: canCopyImages(),
+          copySvg: canCopySvg(),
+          svg: !!this.callbacks.onFigure,
+          save: !!this.callbacks.onSaveImage,
+        }),
+      exportImage: (how) => this.exportImage(how),
       help: () => this.toggleHelp(),
       fontSize: (px) => {
         this.setFontSize(px ?? FONT_SIZES.default);
@@ -851,14 +865,20 @@ export class TimelineView implements DetailView {
   reportView(): void {
     clearTimeout(this.viewTimer);
     this.viewTimer = setTimeout(() => {
-      let [a, b] = [this.camera.left, this.camera.right];
-      if (this.xscale === "order" && this.seq?.count) {
-        const n = this.seq.count;
-        a = this.seq.time(Math.max(0, Math.min(n - 1, Math.ceil(a))));
-        b = this.seq.time(Math.max(0, Math.min(n - 1, Math.floor(b))));
-      }
-      this.callbacks.onView?.([a, b], folding.lanesInSight(this));
+      this.callbacks.onView?.(this.rangeInSight(), folding.lanesInSight(this), Array.from(this.open));
     }, 250);
+  }
+
+  /** The time range in sight in the spec's ticks: with the Order scale, the times of the
+   * first and last event in sight. */
+  rangeInSight(): [number, number] {
+    let [a, b] = [this.camera.left, this.camera.right];
+    if (this.xscale === "order" && this.seq?.count) {
+      const n = this.seq.count;
+      a = this.seq.time(Math.max(0, Math.min(n - 1, Math.ceil(a))));
+      b = this.seq.time(Math.max(0, Math.min(n - 1, Math.floor(b))));
+    }
+    return [a, b];
   }
 
   /** Show a view set in Python (plot.view): a time range (null: the whole timeline), and
@@ -1369,13 +1389,58 @@ export class TimelineView implements DetailView {
     return new Promise((resolve, reject) => out.toBlob((b) => (b ? resolve(b) : reject(new Error("no image"))), "image/png"));
   }
 
-  /** Save the plot as a PNG (the toolbar's button): a download named after the title. */
-  async savePNG(): Promise<void> {
-    try {
-      download(await this.snapshot(), fileName(this.titleEl.textContent ?? "", "png"));
-    } catch (err) {
-      this.flashNotice(`Could not save the image: ${String(err)}`);
-    }
+  /** What the plot shows, for Python to draw as SVG: the size, view, folds and theme. */
+  figureRequest(): FigureRequest {
+    const title = this.titleEl.textContent ?? "";
+    return {
+      width: Math.round(this.width),
+      height: Math.round(this.height + (title ? Math.round(this.fs * 2.4) : 0)),
+      range: this.rangeInSight(),
+      lanes: folding.lanesInSight(this),
+      open: Array.from(this.open),
+      theme: isDark(this.theme.bg) ? "dark" : "light",
+    };
+  }
+
+  /** Open or close the Export menu (its button, key e). */
+  toggleExport(open?: boolean): void {
+    this.toolbar.toggleExport(open);
+  }
+
+  /** Whether the Export menu is open. */
+  get exportOpen(): boolean {
+    return this.toolbar.exportOpen;
+  }
+
+  /**
+   * Export a picture: on the clipboard, as a download, or as a file Python writes. The PNG
+   * is the snapshot (the screen); the SVG is Python's, of the same view. The clipboard is
+   * claimed here, during the click, with the pictures as promises.
+   */
+  exportImage(how: ExportHow): void {
+    const name = (ext: string) => fileName(this.titleEl.textContent ?? "", ext);
+    const request = this.figureRequest();
+    const figure = this.callbacks.onFigure;
+    const save = this.callbacks.onSaveImage;
+    let done: Promise<string>;
+    if (how === "copy") done = copyPng(this.snapshot()).then(() => "Copied: paste it into your slides");
+    else if (how === "png") done = this.snapshot().then((png) => (download(png, name("png")), `Downloaded ${name("png")}`));
+    else if (how === "save-png" && save) done = this.snapshot().then((png) => save(name("png"), request, png)).then((path) => `Saved as ${path}`);
+    else if (how === "save-svg" && save) done = save(name("svg"), request, null).then((path) => `Saved as ${path}`);
+    else if (figure && (how === "svg" || how === "copy-svg")) {
+      const svg = figure(request);
+      if (how === "svg") done = svg.then((text) => (download(new Blob([text], { type: "image/svg+xml" }), name("svg")), `Downloaded ${name("svg")}`));
+      else done = copySvg(svg, svg.then((text) => svgToPng(text))).then(() => svg.then((text) => svgCopiedMessage(new Blob([text]).size)));
+    } else return;
+    this.flashNotice("Drawing the image…", 60_000);
+    done.then(
+      (message) => this.flashNotice(message, 5000),
+      (err) => {
+        console.warn("[anytimeline] export failed:", err);
+        const copying = how === "copy" || how === "copy-svg";
+        this.flashNotice(copying && err?.name === "NotAllowedError" ? "Copying is not allowed here: use Download or Save" : `Export failed: ${err instanceof Error ? err.message : String(err)}`, 6000);
+      },
+    );
   }
 
   /** Zoom time to everything on a lane and the lanes under it (a span and its children), and
@@ -1445,14 +1510,15 @@ export class TimelineView implements DetailView {
 
   private noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
-  flashNotice(text: string): void {
+  /** A short message over the plot, for `ms` milliseconds. */
+  flashNotice(text: string, ms = 1600): void {
     if (this.status) return;
     this.notice.textContent = text;
     this.notice.classList.add("atl-show");
     clearTimeout(this.noticeTimer);
     this.noticeTimer = setTimeout(() => {
       if (!this.status) this.notice.classList.remove("atl-show");
-    }, 1600);
+    }, ms);
   }
 
   /** Where event `index` of layer `layer` is drawn (CSS px in the stage), or null. */

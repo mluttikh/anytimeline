@@ -67,6 +67,7 @@ For spans ([`spans`](../how-to/traces.md)) and tasks with sub-tasks (`parent=`):
 | <kbd>&gt;</kbd> <kbd>&lt;</kbd> | move the selected (else the newest) measure's second end to the next, the previous edge in its lane |
 | <kbd>Delete</kbd> | remove the selected measure |
 | <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Z</kbd> | undo a change of the selection (with <kbd>Shift</kbd>: redo) |
+| <kbd>e</kbd> | the Export menu: copy, download or save an image (<kbd>↑</kbd> <kbd>↓</kbd> move through it, <kbd>Esc</kbd> closes it) |
 | <kbd>?</kbd> | this list |
 | <kbd>Esc</kbd> | cancel a box being drawn or a measure being made, unselect a measure, close the search box, drop the mark found, else clear the selection; in full screen, leave it |
 
@@ -80,5 +81,6 @@ two pinch to zoom, until you tap outside the plot.
 ## The toolbar
 
 From left to right: Pan, Zoom, Select, Measure · Time, Order · Back, Home · Clear the selection (while
-there is one) · Legend · Display (text size, mark size, spreading) · Save as PNG · Full screen ·
+there is one) · Legend · Display (text size, mark size, spreading) · Export (copy, download or
+save an image; see [Make images for slides](../how-to/images.md)) · Full screen ·
 Mouse and keys (?).

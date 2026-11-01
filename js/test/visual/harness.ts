@@ -40,8 +40,8 @@ async function main(): Promise<void> {
     off: (e?: string, cb?: Handler) => {
       if (e && cb) handlers.get(e)?.delete(cb);
     },
-    send: (content: any) => {
-      log.push(content);
+    send: (content: any, _callbacks?: unknown, sent?: ArrayBuffer[]) => {
+      log.push(sent?.length ? { ...content, bytes: sent[0].byteLength } : content);
       if (content.type === "need") {
         setTimeout(() => {
           for (const id of content.ids as string[]) {
@@ -55,6 +55,13 @@ async function main(): Promise<void> {
       } else if (content.type === "find" || content.type === "step") {
         // no Python here: the view searches the marks it holds
         setTimeout(() => handlers.get("msg:custom")?.forEach((h) => h({ type: "answer", request: content.request, error: "no Python in the harness" }), []), 1);
+      } else if (content.type === "figure" || content.type === "save-image") {
+        // the Export menu: a small SVG of the size asked for, or the path a file was saved as
+        const answer =
+          content.type === "figure"
+            ? { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${content.width}" height="${content.height}"><rect width="100%" height="100%" fill="#9467bd"/></svg>` }
+            : { path: `/notebooks/${content.name}` };
+        setTimeout(() => handlers.get("msg:custom")?.forEach((h) => h({ type: "answer", request: content.request, ...answer }), []), 1);
       } else if (content.type === "perf") {
         (window as any).__perf = content.update;
       }

@@ -500,8 +500,10 @@ def svg(
     height: int | None = None,
     view: View | None = None,
     theme: str = "light",
+    folds: Sequence[bool] | None = None,
 ) -> str:
-    """The plot as an SVG document (``Timeline.to_svg``)."""
+    """The plot as an SVG document (``Timeline.to_svg``). ``folds``: per lane of the tree,
+    whether it is open; None: as the plot shows them (or as it starts)."""
     if theme not in THEMES:
         raise ValueError(f"theme must be one of {list(THEMES)}, got {theme!r}")
     if not isinstance(width, int) or isinstance(width, bool) or width < 120:
@@ -513,9 +515,10 @@ def svg(
     made = plot._scene
     if made is None or not made.spec.get("layers"):
         raise ValueError("the plot has no layers to draw")
-    return _Picture(
-        plot, made, width, plot.height if height is None else height, view, THEMES[theme]
-    ).draw()
+    height = plot.height if height is None else height
+    if folds is None:
+        folds = plot._folds_shown
+    return _Picture(plot, made, width, height, view, THEMES[theme], folds).draw()
 
 
 class _Picture:
@@ -527,6 +530,7 @@ class _Picture:
         height: int,
         view: View | None,
         theme: Theme,
+        folds: Sequence[bool] | None = None,
     ) -> None:
         self.plot = plot
         self.scene = made
@@ -553,6 +557,8 @@ class _Picture:
         tree = spec["lanes"].get("tree")
         self.tree = tree
         is_open = list(tree["open"]) if tree else []
+        if tree and folds is not None and len(folds) == len(is_open):
+            is_open = [bool(o) for o in folds]
         if view is None:
             view = plot.view
         top_lane = view.lanes[0] if view.lanes else None
