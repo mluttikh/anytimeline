@@ -1092,6 +1092,44 @@ test("Measure: a rule's measure is selected alone; its changes, its level and Re
   expect((await changes()).at(-1)).toEqual({ type: "note_remove", id: longest.id });
 });
 
+test("Measure: a change between samples is selected by its label; it has no place, level or ends to move", async ({ page }) => {
+  await open(page, "measure_values");
+  const changes = () => page.evaluate(() => (window as any).__log.filter((m: any) => m.type === "note_change" || m.type === "note_remove" || m.type === "note_end").map(({ type, ...rest }: any) => ({ type, ...rest })));
+  await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits.length)).toBe(3);
+  const label = () =>
+    view(page).evaluate((root: any) => {
+      const h = root.__view.measureHits.find((x: any) => x.m.kind === "value");
+      return { x: h.lx + h.tw / 2, y: h.ly + (root.__view.fs + 4) / 2, id: h.m.id, xv: h.shape.xv, ya: h.shape.ya, yb: h.shape.yb };
+    });
+  const d = await label();
+  const box = await stageBox(page);
+  await page.mouse.click(box.x + d.x, box.y + d.y);
+  const menu = page.locator(".atl-menu");
+  await expect(menu).toBeVisible();
+  expect(await view(page).evaluate((root: any) => root.__view.selectedMeasure)).toBe(d.id);
+  // its look, but no place: it is drawn at its values
+  await expect(menu.getByRole("menuitemradio", { name: "Above" })).toBeVisible();
+  await expect(menu.getByRole("menuitemradio", { name: "Footer" })).toHaveCount(0);
+  await menu.getByRole("menuitemradio", { name: "Above" }).click();
+  expect((await changes()).at(-1)).toEqual({ type: "note_change", id: d.id, label: "above" });
+  // no level to step to, and its line is not dragged
+  const before = (await changes()).length;
+  await page.keyboard.press("ArrowUp");
+  const mid = { x: box.x + d.xv, y: box.y + (d.ya + d.yb) / 2 };
+  await page.mouse.move(mid.x, mid.y);
+  await page.mouse.down();
+  await page.mouse.move(mid.x + 40, mid.y + 20, { steps: 4 });
+  await page.mouse.up();
+  expect((await changes()).length).toBe(before);
+  // Delete removes it (the drag panned the plot 40 px: its label is there once drawn)
+  await expect.poll(async () => (await label()).x).toBeCloseTo(d.x + 40, 0);
+  const now = await label();
+  await page.mouse.click(box.x + now.x, box.y + now.y);
+  expect(await view(page).evaluate((root: any) => root.__view.selectedMeasure)).toBe(d.id);
+  await page.keyboard.press("Delete");
+  expect((await changes()).at(-1)).toEqual({ type: "note_remove", id: d.id });
+});
+
 test("Undo: Ctrl/Cmd+Z asks Python to take back a change of the selection, Shift for redo", async ({ page }) => {
   await open(page, "service_time");
   await view(page).click({ position: { x: 4, y: 4 } });

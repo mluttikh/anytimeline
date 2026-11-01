@@ -53,6 +53,7 @@ export interface NoteArrow {
 export type MeasurePlace = "auto" | "top" | "middle" | "bottom" | "between" | "header" | "footer";
 export type MeasureLabel = "auto" | "on" | "above" | "below" | "start" | "end" | "hover";
 export type MeasureEnds = "arrows" | "ticks" | "dots" | "none";
+export type MeasureKind = "time" | "value" | "both";
 export type MeasureExtend = "mark" | "lanes" | "none";
 
 export interface NoteMeasure {
@@ -92,6 +93,8 @@ export interface NoteMeasure {
   group?: number;
   /** Longer than its limit: drawn in the theme's "over" colour. */
   over?: boolean;
+  /** Between two samples: the time (absent), the change ("value"), or both (an L). */
+  kind?: MeasureKind;
 }
 
 /** What a change of a measure in the plot sets (absent: unchanged). */
@@ -715,6 +718,208 @@ function drawMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: Measu
   if (d.text && shown !== null) label(view, ctx, d.text, shown, top, d.color, plot);
 }
 
+/** The step to the right of each level of a measure of a change (kind "value"), px. */
+const VALUE_STEP = 12;
+
+/** A measure of the change between two samples (kind "value" or "both"), as drawn (Python's
+ * `_value_shape`): its ends' points on the later sample's lane's scale (`xa`, `ya`, `xb`,
+ * `yb`), its vertical line's x (`xv`), its horizontal line's height (`yh`, "both"), and its
+ * labels: the text (`lx`, `ly`) and, for "both", the change beside the vertical (`cx`,
+ * `cy`). Null: not drawn here (an end or its value not shown). */
+export interface ValueShape {
+  kind: "value" | "both";
+  xa: number;
+  ya: number;
+  xb: number;
+  yb: number;
+  xv: number;
+  yh: number;
+  change: string;
+  cw: number;
+  cx: number;
+  cy: number;
+}
+
+export function valueShape(view: TimelineView, ctx: CanvasRenderingContext2D, m: NoteMeasure, plot: Rect): (MeasureLaid & { shape: ValueShape }) | null {
+  const kind = m.kind;
+  if (kind !== "value" && kind !== "both") return null;
+  const ua = endX(view, m.a);
+  const ub = endX(view, m.b);
+  const v = view.values.find((l) => l.data.spec.name === m.a.layer);
+  if (ua === null || ub === null || !v || m.a.value == null || m.b.value == null) return null;
+  const c = view.camera;
+  const px = (u: number) => plot.x + (u - c.left) * c.scale;
+  const late = ub >= ua ? m.b : m.a;
+  if (late.lane === null) return null;
+  const vv = view.valueView();
+  const ya = v.yAt(late.lane, m.a.value, vv);
+  const yb = v.yAt(late.lane, m.b.value, vv);
+  if (ya === null || yb === null || !Number.isFinite(ya) || !Number.isFinite(yb)) return null;
+  const xa = px(ua);
+  const xb = px(ub);
+  const xl = Math.max(xa, xb);
+  const xe = Math.min(xa, xb);
+  const h = view.fs + 4;
+  const right = plot.x + plot.w;
+  const change = `Δ ${changeText(m.change ?? 0)}`;
+  const cw = ctx.measureText(change).width + 8;
+  const text = m.text === null ? (kind === "value" ? change : measureText(view, { ...m, text: "{time}" })) : measureText(view, m);
+  const tw = ctx.measureText(text).width + 8;
+  const yh = ub >= ua ? ya : yb; // "both": the time along at the earlier sample's value
+  const mode = m.label ?? "auto";
+  const beside = (x: number, w: number) => (x + 6 + w <= right ? x + 6 : x - 6 - w);
+  let lx: number | null;
+  let ly: number;
+  let xv = xl;
+  let cx = 0;
+  let cy = 0;
+  if (kind === "value") {
+    xv = xl + 10 + (m.level ?? 0) * VALUE_STEP;
+    lx = beside(xv, tw);
+    ly = (ya + yb) / 2 - h / 2;
+  } else {
+    lx = Math.max(plot.x + 1, Math.min((xe + xl) / 2 - tw / 2, right - tw - 1));
+    ly = mode === "below" ? yh + 2 : yh - h - 1;
+    cx = beside(xl, cw);
+    cy = (ya + yb) / 2 - h / 2;
+  }
+  if (mode === "hover") lx = null;
+  const y = kind === "value" ? (ya + yb) / 2 : yh;
+  return {
+    m,
+    color: m.over ? view.theme.over : m.color ?? view.theme.accent,
+    xa: kind === "value" ? xv - 3 : xe,
+    xb: kind === "value" ? xv + 3 : xl,
+    ua,
+    ub,
+    rows: [null, null],
+    ys: [ya, yb],
+    row: null,
+    at: "value",
+    valueY: y,
+    level: m.level ?? null,
+    nudge: 0,
+    text,
+    tw,
+    label: mode,
+    place: "value",
+    k: 0,
+    y,
+    lx,
+    ly,
+    shape: { kind, xa, ya, xb, yb, xv, yh, change, cw, cx, cy },
+  };
+}
+
+/** An arrowhead with its tip at (x, y), pointing along (dx, dy) (a unit vector). */
+function headAlong(ctx: CanvasRenderingContext2D, x: number, y: number, dx: number, dy: number): void {
+  const bx = x - dx * ARROW_LEN;
+  const by = y - dy * ARROW_LEN;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(bx - dy * 3.5, by + dx * 3.5);
+  ctx.lineTo(bx + dy * 3.5, by - dx * 3.5);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/** A dimension line from (x0, y0) to (x1, y1), across or up: on the background, with its
+ * ends (arrows inside, or outside pointing in when it is short; ticks; dots; none). */
+function dimension(view: TimelineView, ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, style: MeasureEnds, color: string, selected: boolean): void {
+  const len = Math.hypot(x1 - x0, y1 - y0);
+  const ux = len ? (x1 - x0) / len : 1;
+  const uy = len ? (y1 - y0) / len : 0;
+  const inside = len >= 2 * ARROW_LEN + 2;
+  ctx.globalAlpha = 0.85;
+  ctx.strokeStyle = view.theme.bg;
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = selected ? 2.5 : 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+  for (const [x, y, way] of [[x0, y0, -1], [x1, y1, 1]] as const) {
+    if (style === "ticks") {
+      ctx.beginPath();
+      ctx.moveTo(x - TICK, y + TICK);
+      ctx.lineTo(x + TICK, y - TICK);
+      ctx.stroke();
+    } else if (style === "dots") {
+      ctx.beginPath();
+      ctx.arc(x, y, END_DOT, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (style === "arrows") {
+      if (inside) headAlong(ctx, x, y, way * ux, way * uy);
+      else {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + way * ux * 2 * ARROW_LEN, y + way * uy * 2 * ARROW_LEN);
+        ctx.stroke();
+        headAlong(ctx, x, y, -way * ux, -way * uy);
+      }
+    }
+  }
+}
+
+/** A measure of a change: "value", a vertical dimension line beside the later sample, with
+ * an extension line from each sample (or across the plot, as cursors, for "lanes"); "both",
+ * an L from the earlier sample: the time along, the change up. A dot on each sample; the
+ * labels on the background. */
+function drawValueMeasure(view: TimelineView, ctx: CanvasRenderingContext2D, d: MeasureLaid & { shape: ValueShape }, plot: Rect, selected: boolean): void {
+  const s = d.shape;
+  const style = d.m.ends ?? "arrows";
+  const extend = d.m.extend ?? "mark";
+  ctx.strokeStyle = d.color;
+  ctx.fillStyle = d.color;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 2]);
+  if (s.kind === "value" && extend !== "none") {
+    for (const [x, y] of [[s.xa, s.ya], [s.xb, s.yb]]) {
+      ctx.beginPath();
+      ctx.moveTo(extend === "lanes" ? plot.x : x, Math.round(y) + 0.5);
+      ctx.lineTo(extend === "lanes" ? plot.x + plot.w : s.xv + 4, Math.round(y) + 0.5);
+      ctx.stroke();
+    }
+  }
+  if (s.kind === "both" && extend === "lanes") {
+    for (const y of [s.ya, s.yb]) {
+      ctx.beginPath();
+      ctx.moveTo(plot.x, Math.round(y) + 0.5);
+      ctx.lineTo(plot.x + plot.w, Math.round(y) + 0.5);
+      ctx.stroke();
+    }
+  }
+  ctx.setLineDash([]);
+  const late = Math.max(s.xa, s.xb);
+  const early = Math.min(s.xa, s.xb);
+  const yLate = s.xb >= s.xa ? s.yb : s.ya;
+  if (s.kind === "value") dimension(view, ctx, s.xv, s.ya, s.xv, s.yb, style, d.color, selected);
+  else {
+    dimension(view, ctx, early, s.yh, late, s.yh, style, d.color, selected);
+    dimension(view, ctx, late, s.yh, late, yLate, style, d.color, selected);
+  }
+  ctx.fillStyle = d.color;
+  for (const [x, y] of [[s.xa, s.ya], [s.xb, s.yb]]) {
+    ctx.beginPath();
+    ctx.arc(x, y, SAMPLE_DOT, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const shown = selected || view.tooltipKey === `m${d.m.id}`;
+  const h = view.fs + 4;
+  if (d.lx !== null || shown) {
+    const lx = d.lx ?? (s.kind === "value" ? s.xv + 6 : Math.min(s.xa, s.xb));
+    label(view, ctx, d.text, lx, d.lx === null && s.kind === "value" ? (s.ya + s.yb) / 2 - h / 2 : d.ly, d.color, plot);
+    if (s.kind === "both") label(view, ctx, s.change, s.cx, s.cy, d.color, plot);
+  }
+}
+
 /** An arrow from one edge to another: it leaves a start leftwards and an end rightwards, and
  * comes into a start from the left and into an end from the right. */
 function drawArrow(view: TimelineView, ctx: CanvasRenderingContext2D, n: NoteArrow, plot: Rect, laneTop: number): void {
@@ -848,8 +1053,10 @@ export function drawNotes(view: TimelineView, ctx: CanvasRenderingContext2D, plo
   }
   for (const n of notes.arrows ?? []) drawArrow(view, ctx, n, plot, laneTop);
   ctx.restore();
-  // measures: in the lanes, and in the header and footer bands around them
-  const { laid, head, foot } = layoutMeasures(view, ctx, measures, plot, laneTop);
+  // measures: in the lanes, and in the header and footer bands around them; those of a
+  // change between samples at their values
+  const timed = measures.filter((m) => (m.kind ?? "time") === "time");
+  const { laid, head, foot } = layoutMeasures(view, ctx, timed, plot, laneTop);
   const headH = view.measureBands.head;
   const footH = view.measureBands.foot;
   const area = { x: plot.x, y: plot.y - headH, w: plot.w, h: plot.h + headH + footH };
@@ -864,7 +1071,22 @@ export function drawNotes(view: TimelineView, ctx: CanvasRenderingContext2D, plo
   ctx.textBaseline = "alphabetic";
   for (const d of laid) drawMeasure(view, ctx, d, plot, area, laneTop, isSelected(view, d.m));
   ctx.restore();
-  view.measureHits = laid.filter((d) => !Number.isNaN(d.m.id));
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.x, plot.y, plot.w, plot.h);
+  ctx.clip();
+  ctx.font = view.font(-1);
+  ctx.textBaseline = "alphabetic";
+  const values: MeasureLaid[] = [];
+  for (const m of measures) {
+    if ((m.kind ?? "time") === "time") continue;
+    const d = valueShape(view, ctx, m, plot);
+    if (!d) continue;
+    drawValueMeasure(view, ctx, d, plot, isSelected(view, m));
+    values.push(d);
+  }
+  ctx.restore();
+  view.measureHits = [...laid, ...values].filter((d) => !Number.isNaN(d.m.id));
   view.setMeasureBands(head, foot);
   ctx.save();
   ctx.beginPath();

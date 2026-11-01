@@ -15,13 +15,21 @@ from typing import Any, Literal, get_args
 import numpy as np
 
 from anytimeline import measuring
-from anytimeline.types import MeasureEnds, MeasureExtend, MeasureLabel, MeasurePlace, StemShape
+from anytimeline.types import (
+    MeasureEnds,
+    MeasureExtend,
+    MeasureKind,
+    MeasureLabel,
+    MeasurePlace,
+    StemShape,
+)
 
 STEM_SHAPES = get_args(StemShape)
 MEASURE_PLACES = get_args(MeasurePlace)
 MEASURE_LABELS = get_args(MeasureLabel)
 MEASURE_ENDS = get_args(MeasureEnds)
 MEASURE_EXTENDS = get_args(MeasureExtend)
+MEASURE_KINDS = get_args(MeasureKind)
 
 
 @dataclass(frozen=True)
@@ -292,6 +300,10 @@ class Measure:
         limit: A budget: a measure longer than it is drawn in the plot's "over" colour,
             and [`measured`][anytimeline.Timeline.measured] says so (``over``). A duration
             (``"200ms"``, ``"1.5 h"``, a timedelta); on a plot of numbers, a number.
+        kind: What it draws between two samples of a values layer: ``"time"`` (the time,
+            with the change in its text), ``"value"`` (the change, as a vertical dimension
+            line beside the later sample) or ``"both"`` (an L: the time along, the change
+            up). ``"value"`` and ``"both"`` need two samples of one layer.
     """
 
     a: Any
@@ -307,6 +319,7 @@ class Measure:
     ends: MeasureEnds = "arrows"
     extend: MeasureExtend = "mark"
     limit: Any = None
+    kind: MeasureKind = "time"
 
     def __post_init__(self) -> None:
         for end in (self.a, self.b):
@@ -342,6 +355,7 @@ def _check_look(part: str, m: Any) -> None:
         ("label", MEASURE_LABELS),
         ("ends", MEASURE_ENDS),
         ("extend", MEASURE_EXTENDS),
+        ("kind", MEASURE_KINDS),
     ):
         if getattr(m, key) not in words:
             raise ValueError(f"{part}'s {key} must be one of {words}, got {getattr(m, key)!r}")
@@ -373,6 +387,7 @@ class MeasureRule:
     ends: MeasureEnds = "arrows"
     extend: MeasureExtend = "mark"
     limit: Any = None
+    kind: MeasureKind = "time"
 
     def __post_init__(self) -> None:
         _check_look(type(self).__name__, self)

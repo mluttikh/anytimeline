@@ -24,7 +24,7 @@ METHODS = ("plot", "events", "intervals", "states", "values", "spans", "measure"
 """What takes defaults: ``plot`` is the ``Timeline`` constructor; the others its methods."""
 
 NOT_DEFAULTS = frozenset({"self", "data", "name"})
-NOT_DEFAULTS_OF = {"measure": frozenset({"a", "b"})}
+NOT_DEFAULTS_OF = {"measure": frozenset({"a", "b", "kind"})}
 """Per method, more arguments that are given with each call (a measure's ends)."""
 
 _DEFAULTS: dict[str, dict[str, Any]] = {}

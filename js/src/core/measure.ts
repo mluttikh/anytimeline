@@ -326,7 +326,13 @@ export async function stepEnd(view: TimelineView, forward: boolean): Promise<voi
 
 /** Whether a measure can be changed here: the page's own, or Python's in a notebook. */
 export function editable(view: TimelineView, m: NoteMeasure): boolean {
-  return !m.rule && (m.id < 0 || !!view.callbacks.onNoteEnd);
+  return !m.rule && !ofChange(m) && (m.id < 0 || !!view.callbacks.onNoteEnd);
+}
+
+/** A measure of a change between samples ("value", "both"): drawn at its values, so it
+ * has no place, level of a lane or line to drag. */
+export function ofChange(m: NoteMeasure): boolean {
+  return m.kind === "value" || m.kind === "both";
 }
 
 /** Whether a measure can be removed here (a rule's measure: the rule, all of them). */
@@ -359,7 +365,7 @@ export function selectedLaid(view: TimelineView): MeasureLaid | null {
  * its line (null: not there). */
 export function lineAt(view: TimelineView, p: { x: number; y: number }): MeasureLaid | null {
   const d = selectedLaid(view);
-  if (!d || !changeable(view, d.m)) return null;
+  if (!d || !changeable(view, d.m) || ofChange(d.m)) return null;
   const lo = Math.min(d.xa, d.xb);
   const hi = Math.max(d.xa, d.xb);
   if (p.x >= lo - 2 && p.x <= hi + 2 && Math.abs(p.y - d.y) <= 5) return d;
@@ -444,7 +450,7 @@ export function changeMeasure(view: TimelineView, m: NoteMeasure, change: Measur
  * levels go down from the top of a lane, a band and a value, and up from its bottom). */
 export function stepLevel(view: TimelineView, up: boolean): boolean {
   const d = selectedLaid(view);
-  if (!d || !changeable(view, d.m)) return false;
+  if (!d || !changeable(view, d.m) || ofChange(d.m)) return false;
   const at = placeOf(d);
   const downward = at !== "bottom" && at !== "between";
   const k = d.k + (up === downward ? -1 : 1);
@@ -563,5 +569,6 @@ export function asPython(view: TimelineView, m: NoteMeasure): string {
   if (m.label && m.label !== "auto") args.push(`label=${JSON.stringify(m.label)}`);
   if (m.ends && m.ends !== "arrows") args.push(`ends=${JSON.stringify(m.ends)}`);
   if (m.extend && m.extend !== "mark") args.push(`extend=${JSON.stringify(m.extend)}`);
+  if (m.kind && m.kind !== "time") args.push(`kind=${JSON.stringify(m.kind)}`);
   return `plot.measure(${args.join(", ")})`;
 }

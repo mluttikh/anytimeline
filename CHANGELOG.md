@@ -17,6 +17,12 @@ All notable changes to anytimeline. The format follows
   change, move and are removed as the rule. They take the `measure` defaults.
 - **`limit=`** on a measure and a rule: a measure longer than it is drawn red (the theme's
   new `--atl-over` colour), and `plot.measured` has `over`.
+- **`kind=`** on a measure between two samples of one values layer, and on
+  `measure_chain`/`measure_from`: `"value"` draws the change as a vertical dimension line
+  beside the later sample (`level=` steps it right), `"both"` an L from the earlier sample
+  (the time along, the change up), each at its values on the later sample's lane's scale.
+  `"time"` (the default) is as before. In the plot such a measure is selected by its label
+  and has no Place; `plot.measured` has `kind`. `kind` cannot have a default.
 
 ## [0.6.0] - 2026-11-01
 

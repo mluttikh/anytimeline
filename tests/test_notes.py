@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import datetime as dt
 import re
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -755,3 +756,80 @@ def test_over_its_limit_a_measure_is_red_in_pictures() -> None:
     svg = p.to_svg(width=600, height=300)
     assert image.THEMES["light"].over in svg
     assert "over" not in parts(jobs().measure(atl.start(1), atl.end(1), limit="3h"))[0]
+
+
+# ---------------------------------------------------------------------- measures of a change
+
+
+def test_a_measure_of_a_change_has_its_kind() -> None:
+    p = with_samples().measure(atl.start(1, "cpu"), atl.start(3, "cpu"), kind="value")
+    p.measure(atl.start(0, "cpu"), atl.start(1, "cpu"), kind="both")
+    p.measure(atl.start(0, "cpu"), atl.start(1, "cpu"))
+    assert [m.get("kind") for m in parts(p)] == ["value", "both", "time"]
+    assert p.measured["kind"].tolist() == ["value", "both", "time"]
+    chain = [atl.start(0, "cpu"), atl.start(1, "cpu"), atl.start(3, "cpu")]
+    p = with_samples().measure_chain(chain, kind="value").measure_chain(chain)
+    assert [(m.get("kind"), m["change"]) for m in parts(p)] == [
+        ("value", 30.0),
+        ("value", -15.0),
+        (None, 30.0),  # a rule's part: the default is left out
+        (None, -15.0),
+    ]
+    assert p.notes[0] == atl.MeasureChain(tuple(chain), kind="value")
+    # each measure's own: as a default it would be wrong for every measure of bars
+    with pytest.raises(TypeError, match="'kind' cannot have a default"):
+        atl.set_defaults(measure={"kind": "both"})
+
+
+def test_a_change_is_of_two_samples_of_one_layer() -> None:
+    with pytest.raises(ValueError, match="kind must be one of"):
+        Measure(atl.start(0), atl.end(0), kind="up")  # ty: ignore[invalid-argument-type]
+    with pytest.raises(ValueError, match="kind='value' measures the change between two"):
+        with_samples().measure(atl.end(0, "intervals"), atl.start(1, "cpu"), kind="value")
+    with pytest.raises(ValueError, match="kind='both' measures the change"):
+        with_samples().measure(atl.start(0, "cpu"), atl.start(2, "cpu"), kind="both")  # a gap
+    with pytest.raises(ValueError, match="kind='value' measures the change"):
+        jobs().measure_chain([atl.start(0), atl.end(0)], kind="value")
+    p = with_samples()
+    p.notes = [Measure(atl.end(0, "intervals"), atl.start(1, "cpu"), kind="value")]
+    assert parts(p) == []  # set as a list: not checked, left out
+
+
+def test_a_change_is_drawn_beside_the_later_sample_or_as_an_l() -> None:
+    p = with_samples().measure(atl.start(1, "cpu"), atl.start(3, "cpu"), kind="value")
+    p.measure(atl.start(1, "cpu"), atl.start(3, "cpu"), "{change:+.0f} %", kind="value", level=2)
+    p.measure(atl.start(3, "cpu"), atl.start(0, "cpu"), kind="both", label="below")
+    p.measure(atl.start(0, "cpu"), atl.start(1, "cpu"), kind="value", label="hover")
+    pic = picture(p, 300)
+    pic.draw()
+    shapes = [pic._value_shape(n) for n in parts(p)]
+    assert None not in shapes
+    first, second, both, hover = cast("list[dict[str, Any]]", shapes)
+    x3, x4 = pic.f.px(ticks(p, 3)), pic.f.px(ticks(p, 4))
+    assert (first["xa"], first["xb"]) == pytest.approx((x3, x4))
+    assert first["ya"] < first["yb"]  # 40 above 25
+    assert first["xv"] == pytest.approx(x4 + 10)  # beside the later sample
+    assert second["xv"] == pytest.approx(x4 + 10 + 2 * image.VALUE_STEP)  # a level: a step on
+    assert first["lx"] == pytest.approx(first["xv"] + 6)  # its label beside it, between
+    assert first["ly"] < first["yb"]
+    assert first["ly"] + Timeline().font_size + 4 > first["ya"]
+    assert (first["text"], second["text"]) == ("\u0394 \u221215", "\u221215 %")
+    # an L from the earlier sample (b): the time along at its height, the change up
+    assert both["yh"] == pytest.approx(both["yb"])
+    assert (both["text"], both["change"]) == ("2 h", "\u0394 \u221215")
+    assert both["ly"] > both["yh"]  # below
+    assert both["cx"] == pytest.approx(x4 + 6)
+    assert hover["lx"] is None
+    svg = p.to_svg(width=600, height=300)
+    assert "\u221215 %" in svg
+    assert "2 h" in svg
+
+
+def test_a_change_keeps_its_kind_in_the_plot() -> None:
+    p = with_samples().measure(atl.start(1, "cpu"), atl.start(3, "cpu"), kind="value")
+    w = p.widget
+    w._on_msg(w, {"type": "note_change", "id": 0, "label": "above", "text": "{change}"}, [])
+    assert p.notes[0] == Measure(
+        atl.start(1, "cpu"), atl.start(3, "cpu"), "{change}", label="above", kind="value"
+    )
+    assert copy.deepcopy(p).notes == p.notes
