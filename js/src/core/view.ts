@@ -488,9 +488,11 @@ export class TimelineView implements DetailView {
         b.addEventListener("pointerdown", (e) => e.stopPropagation());
         b.addEventListener("click", (e) => {
           e.stopPropagation();
-          act();
+          // the menu closes and the plot takes the keyboard first: an action may take it on
+          // (Edit text opens a text box)
           this.selectMeasure(keep ? id : null);
           this.root.focus({ preventScroll: true });
+          act();
         });
         return b;
       };
@@ -517,12 +519,25 @@ export class TimelineView implements DetailView {
         group.append(title, choices);
         el.append(group);
       }
-      el.style.left = `${Math.max(0, Math.min(menu.x, this.width - 170))}px`;
-      el.style.top = `${Math.max(0, menu.y)}px`;
       this.stage.append(el);
+      this.placeInStage(el, menu.x, menu.y, menu.y - 20);
       this.measureMenu = el;
     }
     this.requestRender();
+  }
+
+  /** Put a popup (in the stage) where all of it shows: from `x`, under `below`, else over
+   * `above` (its bottom there), else as high as it fits; one taller than the stage scrolls. */
+  placeInStage(el: HTMLElement, x: number, below: number, above: number): void {
+    const w = this.stage.clientWidth || this.width;
+    const h = this.stage.clientHeight || this.height;
+    el.style.maxHeight = `${Math.max(40, h - 8)}px`;
+    el.style.overflowY = "auto";
+    const ew = el.offsetWidth;
+    const eh = el.offsetHeight;
+    const top = below + eh <= h - 4 ? below : above - eh >= 4 ? above - eh : Math.max(4, h - 4 - eh);
+    el.style.left = `${Math.max(4, Math.min(x, w - ew - 4))}px`;
+    el.style.top = `${Math.max(0, top)}px`;
   }
 
   /** What the next gesture or key does, shown over the plot (null: as usual). */

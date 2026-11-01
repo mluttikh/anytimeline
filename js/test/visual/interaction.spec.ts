@@ -943,6 +943,37 @@ test("Measure: moved by its line, its menu and keys; hidden from the Display pan
   await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits.length)).toBe(1);
 });
 
+test("Measure: its menu and its text box stay in the plot, also at the bottom", async ({ page }) => {
+  await open(page, "gantt_plan");
+  const [s0, e1] = await view(page).evaluate((root: any) => {
+    const d = root.__view.bars[0].data;
+    return [d.start[0], d.end[1]];
+  });
+  const end = (x: number, side = "start") => ({ x, r: null, lane: 0, side, layer: "intervals", index: 0 });
+  await page.evaluate((n) => {
+    (window as any).__model.state._notes = n;
+    (window as any).__model.emit("change:_notes");
+  }, { measures: [{ a: end(s0), b: end(e1, "end"), span: e1 - s0, events: null, lane: null, text: "at the bottom", color: null, id: 0, at: "footer" }] });
+  await expect.poll(() => view(page).evaluate((root: any) => root.__view.measureHits[0]?.place)).toBe("footer");
+  const d = await view(page).evaluate((root: any) => {
+    const h = root.__view.measureHits[0];
+    return { x: h.lx + h.tw / 2, y: h.y };
+  });
+  const stage = await stageBox(page);
+  await page.mouse.click(stage.x + d.x, stage.y + d.y);
+  const inside = async (selector: string) => {
+    const box = (await page.locator(selector).boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(stage.y);
+    expect(box.y + box.height).toBeLessThanOrEqual(stage.y + stage.height);
+    expect(box.x + box.width).toBeLessThanOrEqual(stage.x + stage.width);
+  };
+  await expect(page.locator(".atl-menu")).toBeVisible();
+  await inside(".atl-menu");
+  await page.locator(".atl-menu").getByRole("menuitem", { name: "Edit text" }).click();
+  await expect(page.locator(".atl-note-input")).toBeFocused();
+  await inside(".atl-note-input");
+});
+
 test("Undo: Ctrl/Cmd+Z asks Python to take back a change of the selection, Shift for redo", async ({ page }) => {
   await open(page, "service_time");
   await view(page).click({ position: { x: 4, y: 4 } });

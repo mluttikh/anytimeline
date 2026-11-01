@@ -727,8 +727,7 @@ export function askText(view: TimelineView, x: number, y: number, done: (text: s
   input.value = opts.value ?? "";
   input.placeholder = opts.placeholder ?? "Note (Enter keeps it, Esc drops it)";
   input.setAttribute("aria-label", opts.label ?? "The annotation's text");
-  input.style.left = `${Math.max(0, x)}px`;
-  input.style.top = `${Math.max(0, y)}px`;
+
   let finished = false;
   const finish = (text: string | null) => {
     if (finished) return;
@@ -750,6 +749,7 @@ export function askText(view: TimelineView, x: number, y: number, done: (text: s
   });
   input.addEventListener("blur", () => finish(null));
   view.stage.append(input);
+  view.placeInStage(input, x, y, y - 4);
   input.focus();
   input.select();
 }
