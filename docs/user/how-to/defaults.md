@@ -27,8 +27,8 @@ those of them they have too). Every plot and layer made afterwards takes them, a
 - **The call wins**: `Timeline(font_size=18)` is 18 whatever the default.
 - **Checked when set**: an argument the method does not take, or a word that is not one of
   its options (`events={"overlap": "spread"}`), raises at `set_defaults`, and nothing of
-  that call is kept. A layer's table and its `name`, and a measure's ends, cannot have
-  defaults.
+  that call is kept. A layer's table and its `name`, and a measure's ends and `kind`,
+  cannot have defaults.
 - Setting a method's defaults again adds to those set before.
   [`get_defaults`][anytimeline.get_defaults] shows what is set (to copy into your team's
   module), and [`reset_defaults`][anytimeline.reset_defaults] removes them, of one method

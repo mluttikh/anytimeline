@@ -26,6 +26,7 @@ __all__ = [
     "LaneSort",
     "MeasureEnds",
     "MeasureExtend",
+    "MeasureKind",
     "MeasureLabel",
     "MeasurePlace",
     "Renderer",
@@ -53,6 +54,7 @@ MeasurePlace = Literal["auto", "top", "middle", "bottom", "between", "header", "
 MeasureLabel = Literal["auto", "on", "above", "below", "start", "end", "hover"]
 MeasureEnds = Literal["arrows", "ticks", "dots", "none"]
 MeasureExtend = Literal["mark", "lanes", "none"]
+MeasureKind = Literal["time", "value", "both"]
 """Where a measure's line goes: ``"auto"`` (the top of its lane; levels the lane cannot hold
 continue in the header), the top, middle or bottom of its lane, on the border under it
 (``"between"``), or a band above the lanes (``"header"``) or below them (``"footer"``)."""

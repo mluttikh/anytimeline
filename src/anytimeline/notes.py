@@ -204,7 +204,12 @@ def _shown(
         "text": text,
         "color": m.color,
     }
+    if m.kind != "time" and out["change"] is None:
+        raise ValueError(
+            f"kind={m.kind!r} measures the change between two samples of one values layer"
+        )
     look = {
+        "kind": m.kind,
         "at": at_of(ctx, m, a, b),
         "level": m.level,
         "nudge": m.nudge,
@@ -212,7 +217,14 @@ def _shown(
         "ends": m.ends,
         "extend": m.extend,
     }
-    defaults = {"at": "auto", "level": None, "nudge": 0.0, "label": "auto", "ends": "arrows"}
+    defaults = {
+        "kind": "time",
+        "at": "auto",
+        "level": None,
+        "nudge": 0.0,
+        "label": "auto",
+        "ends": "arrows",
+    }
     out |= {k: v for k, v in look.items() if full or v != defaults.get(k, "mark")}
     if text != m.text:
         out["raw"] = m.text
@@ -463,13 +475,18 @@ def check(ctx: Context, note: Note) -> None:
     elif isinstance(note, Connection):
         arrow(ctx, note)
     elif isinstance(note, MeasureRule):
-        a, _, _ = rule_parts(ctx, note)
+        a, b, _ = rule_parts(ctx, note)
         if len(a) > MAX_RULE:
             raise ValueError(
                 f"{type(note).__name__} makes {len(a):,} measures; at most {MAX_RULE:,} are "
                 "drawn: narrow it (rows=, min=, by=)"
             )
         limit_ticks(ctx, note.limit)
+        if note.kind != "time" and any(change(ea, eb) is None for ea, eb in zip(a, b, strict=True)):
+            raise ValueError(
+                f"kind={note.kind!r} measures the change between two samples of one values "
+                "layer: each of a rule's measures"
+            )
         if note.text is not None and a:
             rule(ctx, note)  # its columns exist
     else:
@@ -545,6 +562,7 @@ def table(ctx: Context, notes: Sequence[Note], like: Any) -> Any:
         cols[f"{key}_layer"] = np.asarray([r[key].get("layer") for r in rows], dtype=object)
         cols[f"{key}_row"] = np.asarray([r[key].get("row", -1) for r in rows], dtype=np.int64)
         cols[f"{key}_side"] = np.asarray([r[key]["side"] for r in rows], dtype=object)
+    cols["kind"] = np.asarray([r["m"].kind for r in rows], dtype=object)
     cols["at"] = np.asarray(
         [r["m"].at if isinstance(r["m"].at, str) else "value" for r in rows], dtype=object
     )

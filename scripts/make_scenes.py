@@ -284,6 +284,20 @@ def main() -> None:
     rules.measure_from(start(6), [end(6), end(7), end(8)], at="footer", text="{time:min}")
     write("measure_rules", rules, _notes=rules._notes)
 
+    # measures of a change between samples: the time with ΔY, the change, and both (an L)
+    hours = np.arange(13)
+    temp = {
+        "time": np.datetime64("2026-10-12T06:00", "m") + (hours * 60).astype("timedelta64[m]"),
+        "room": ["lab"] * 13,
+        "celsius": [18.0, 18.4, 19.5, 21.0, 22.6, 23.4, 23.8, 23.1, 22.0, 20.4, 19.6, 19.0, 18.7],
+    }
+    changes = Timeline(title="Measures of a change", height=360)
+    changes.values(temp, value="celsius", lane="room", kind="line", name="temp")
+    changes.measure(start(0, "temp"), start(3, "temp"), at="header")  # the time, with ΔY
+    changes.measure(start(3, "temp"), start(6, "temp"), kind="value", text="{change:+.1f} °C")
+    changes.measure(start(7, "temp"), start(10, "temp"), kind="both", ends="ticks")
+    write("measure_values", changes, _notes=changes._notes)
+
     # a machine schedule: jobs that overlap on a machine are packed into sub-rows
     rng = np.random.default_rng(5)
     n = 160

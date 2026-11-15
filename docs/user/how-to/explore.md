@@ -186,7 +186,7 @@ Measures made in the plot come to Python, and `plot.measured` is a table of them
 type you plotted, a row per measure: its index in `plot.notes`, its text, both ends' times,
 the time between as a duration (`b - a`, so negative when `b` is earlier), the events
 between, the values of ends that are samples and the change between them, and the mark and
-side of each end. In a page without Python (`save_html`), measures
+side of each end, its kind, and where it goes. In a page without Python (`save_html`), measures
 made in it are gone when the page is closed; each one's menu has **Copy as Python**, the line
 that makes it again.
 
@@ -237,7 +237,7 @@ print(plot._embed_html())
 | [`measure_from`][anytimeline.Timeline.measure_from] | from one origin to each end, a level apart, the shortest nearest the marks (baseline dimensions) |
 
 Each takes `text=`, `at=`, `level=`, `label=`, `ends=`, `extend=`, `color=` and `limit=` as
-`measure` does, for each of its measures, and the defaults set for `measure`. A chain's and a
+`measure` does (a chain and a baseline `kind=` too, below), for each of its measures, and the defaults set for `measure`. A chain's and a
 baseline's measures share a row (`lane=`, else the upper of their ends' lanes) and move as
 one; a rule of marks' measures stay in their marks' lanes. A rule makes at most 20,000
 measures: narrow it with `rows=`, `min=` or `by=`.
@@ -249,6 +249,50 @@ measures: narrow it with `rows=`, `min=` or `by=`.
 In the plot, a click selects one of a rule's measures; its menu changes the place, label or
 text of them all, **↑** and **↓** move them all a level, and **Remove the rule** (or
 **Delete**) removes the rule. Their ends follow the marks, so they are not dragged.
+
+### Measure the change in value
+
+Between two samples of one values layer, a measure measures the time, with the change in its
+text. `kind=` draws the change itself, as a stock chart's x, y and xy measures do:
+
+```python
+plot.measure(atl.start(3, "temp"), atl.start(6, "temp"), kind="value")  # the change, up
+plot.measure(atl.start(7, "temp"), atl.start(10, "temp"), kind="both")  # an L: time, change
+plot.measure_chain([atl.start(i, "temp") for i in (0, 4, 8, 12)], kind="value")  # each step
+```
+
+```python exec="on" source="above" session="explore-change" html="true"
+import numpy as np
+import anytimeline as atl
+from anytimeline import Timeline
+
+t0 = np.datetime64("2026-10-12T06:00", "m")
+temp = {
+    "time": t0 + (np.arange(13) * 60).astype("timedelta64[m]"),
+    "room": ["lab"] * 13,
+    "celsius": [18.0, 18.4, 19.5, 21.0, 22.6, 23.4, 23.8, 23.1, 22.0, 20.4, 19.6, 19.2, 18.9],
+}
+plot = Timeline(title="Measures of a change", height=360)
+plot.values(temp, lane="room", value="celsius", name="temp")
+plot.measure(atl.start(0, "temp"), atl.start(3, "temp"), at="header")
+plot.measure(atl.start(3, "temp"), atl.start(6, "temp"), "{change:+.1f} °C", kind="value")
+plot.measure(atl.start(7, "temp"), atl.start(10, "temp"), kind="both", ends="ticks")
+print(plot._embed_html())
+```
+
+| `kind=` | Draws |
+| --- | --- |
+| `"time"` | the time along a level, as any measure; `{change}` and the label have the change (the default) |
+| `"value"` | the change: a vertical dimension line just right of the later sample, with an extension line from each sample; its text is "Δ" and the change |
+| `"both"` | an L from the earlier sample: the time along at its height, then the change up or down to the later one, each with its own label |
+
+A change is drawn at its values, on the later sample's lane's scale, so `at=` and `nudge=` are
+for `"time"`; `level=` moves a `"value"` line a step further right, to keep two apart.
+`label=`, `ends=`, `extend=` (`"lanes"`: across the plot, as cursors), `color=` and `limit=`
+work as for any measure, and `plot.measured` has the kind of each. Both ends must be samples
+of one layer with a value: anything else is an error. In the plot such a measure is selected
+by its label, and its menu changes its label and text and removes it; it has no place to
+move to, so it has no **Place**, and its line and ends are not dragged.
 
 ## Annotate
 
